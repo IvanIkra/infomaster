@@ -31,6 +31,7 @@ import aiohttp
 import icalendar
 
 from .. import clock
+from ..i18n import Phrase
 from ..processing.subjects import clean
 from ..store import Store
 
@@ -127,7 +128,7 @@ class Ruz:
     def __init__(self, url: str, store: Store, now: Callable[[], dt.datetime] = clock.now_utc):
         self.url, self.store, self.db, self.now = url, store, store.db, now
         self.on_poll: Callable[[Diff], Awaitable[None]] | None = None  # after every good poll, also a 304
-        self.notify: Callable[[str], None] | None = None               # a line for the System topic
+        self.notify: Callable[[Phrase], None] | None = None            # a line for the System topic
         self.ok_at: str | None = None
         self.error: str | None = None if url else "RUZ_ICAL_URL is not set"
         self._failing_since: dt.datetime | None = None
@@ -222,12 +223,14 @@ class Ruz:
             self._told = True
             if self.notify is not None:
                 since = self._failing_since.astimezone(clock.TZ)
-                self.notify(f"РУЗ недоступен с {since:%d.%m %H:%M}: {error}.\n"
-                            "В ленте и в Tablo — последнее полученное расписание.")
+                self.notify(Phrase(f"RUZ is unavailable since {since:%d.%m %H:%M}: {error}.\nThe feed and Tablo "
+                                   "have the last timetable received.",
+                                   f"РУЗ недоступен с {since:%d.%m %H:%M}: {error}.\n"
+                                   "В ленте и в Tablo — последнее полученное расписание."))
 
     def _recovered(self) -> None:
         if self._told and self.notify is not None:
-            self.notify("РУЗ снова доступен.")
+            self.notify(Phrase("RUZ is available again.", "РУЗ снова доступен."))
         self.ok_at, self.error = clock.local_iso(self.now()), None
         self._failing_since, self._told = None, False
 

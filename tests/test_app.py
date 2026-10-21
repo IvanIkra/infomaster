@@ -169,8 +169,8 @@ async def test_hseapp_wiring(tmp_path):
         service.hseapp._tell_login()
         await asyncio.gather(*tasks)
         [(topic, text, [button])] = posts
-        assert topic == "system" and text.startswith("Нужен вход в HSE App X")
-        assert button.type.url == "https://t.me/example_bot?start=hseapp" and button.text == "Войти в HSE App X"
+        assert topic == "system" and text.ru.startswith("Нужен вход в HSE App X")  # a Phrase: post() picks one
+        assert button.type.url == "https://t.me/example_bot?start=hseapp" and button.text == "Log in to HSE App X"
         assert forum_module.start_screen("/start hseapp") == "hseapp" and forum_module.start_screen("/start") is None
         assert forum_module.start_screen("/start other") is None
         assert service.forum.screen_url("hseapp") == "https://x.ts.net/app/?screen=hseapp"

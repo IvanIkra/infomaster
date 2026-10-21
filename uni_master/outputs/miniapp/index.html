@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -194,25 +194,14 @@
 <body>
   <div id="home">
     <h2 id="title">uni-master</h2>
-    <p id="state" class="hint">Загрузка…</p>
+    <p id="state" class="hint">…</p>
     <div id="llm" class="card" hidden></div>
-    <nav id="tabs" class="tabs" hidden>
-      <button data-tab="chats" class="on">Чаты</button>
-      <button data-tab="schedule">Расписание</button>
-      <button data-tab="deadlines">Дедлайны</button>
-      <button data-tab="sheets">Листочки</button>
-      <button data-tab="grades">Оценки</button>
-      <button data-tab="summaries">Сводки</button>
-      <button data-tab="subjects">Словарь</button>
-      <button data-tab="hseapp">HSE App X</button>
-      <button data-tab="llm">Расход LLM</button>
-      <button data-tab="general">Общие</button>
-    </nav>
+    <nav id="tabs" class="tabs" hidden></nav>
     <section id="tab-chats">
-      <p class="hint">Чаты твинка и их настройки. Новый чат появляется выключенным.</p>
+      <p id="chats-hint" class="hint"></p>
       <div id="twin" class="card" hidden></div>
       <div id="mail" class="card" hidden></div>
-      <input id="search" type="search" placeholder="Найти чат" hidden>
+      <input id="search" type="search" hidden>
       <div id="chats"></div>
       <div id="images"></div>
     </section>
@@ -222,11 +211,10 @@
     <section id="tab-grades" hidden></section>
     <section id="tab-summaries" hidden></section>
     <section id="tab-subjects" hidden>
-      <p class="hint">Как курсы называются в расписании, ленте и дедлайнах. Ручные записи Haiku не меняет;
-        удалённую запись Haiku назовёт заново.</p>
+      <p id="subjects-hint" class="hint"></p>
       <div id="subjects-error" class="card warn" hidden></div>
-      <input id="subject-search" type="search" placeholder="Найти курс">
-      <div class="actions"><button id="subject-add">Добавить запись</button></div>
+      <input id="subject-search" type="search">
+      <div class="actions"><button id="subject-add"></button></div>
       <div id="subjects"></div>
     </section>
     <section id="tab-hseapp" hidden></section>
@@ -241,20 +229,34 @@
     const tg = window.Telegram.WebApp;
     tg.ready();
     const $ = (id) => document.getElementById(id);
-    const KINDS = {user: "личный", bot: "бот", group: "группа", supergroup: "супергруппа", forum: "форум",
-                   channel: "канал"};
+    // The Mini App's language (р. 41): English until /api/me tells the setting; every text is L(english, russian).
+    let lang = "en";
+    const L = (en, ru) => lang === "ru" ? ru : en;
+    const LANGUAGE_NAMES = {en: "English", ru: "Русский"};  // each in its own language
+    const TABS = [["chats", "Chats", "Чаты"], ["schedule", "Timetable", "Расписание"], ["deadlines", "Deadlines", "Дедлайны"],
+                  ["sheets", "Sheets", "Листочки"], ["grades", "Grades", "Оценки"], ["summaries", "Summaries", "Сводки"],
+                  ["subjects", "Dictionary", "Словарь"], ["hseapp", "HSE App X", "HSE App X"],
+                  ["llm", "LLM spending", "Расход LLM"], ["general", "General", "Общие"]];
+    const KINDS = () => L({user: "private", bot: "bot", group: "group", supergroup: "supergroup", forum: "forum",
+                           channel: "channel"},
+                          {user: "личный", bot: "бот", group: "группа", supergroup: "супергруппа", forum: "форум",
+                           channel: "канал"});
     // The settings of a chat (§5.1), in the order of the screen.
-    const FLAGS = [
-      ["study", "Учебный", "ранг новостей, дедлайны"],
-      ["urgent", "Срочно", "закреп, PDF или сообщение важного человека — разбор сразу"],
-      ["summary", "Сводка", "включать в ежедневную сводку"],
-      ["images", "Картинки", "фото и скриншоты читает Haiku, в пределах числа картинок в день"],
-      ["pdf_content", "PDF целиком", "листочки: краткое содержание, дедлайны со всех страниц, что изменилось"],
+    const FLAGS = () => [
+      ["study", L("Study", "Учебный"), L("news rank, deadlines", "ранг новостей, дедлайны")],
+      ["urgent", L("Urgent", "Срочно"), L("a pin, a PDF or a message of an important person: parsed at once",
+                                          "закреп, PDF или сообщение важного человека — разбор сразу")],
+      ["summary", L("Summary", "Сводка"), L("in the daily summary", "включать в ежедневную сводку")],
+      ["images", L("Images", "Картинки"), L("Haiku reads photos and screenshots, within the images a day",
+                                            "фото и скриншоты читает Haiku, в пределах числа картинок в день")],
+      ["pdf_content", L("Whole PDF", "PDF целиком"),
+       L("sheets: a summary, deadlines from every page, what changed",
+         "листочки: краткое содержание, дедлайны со всех страниц, что изменилось")],
     ];
     const BATCH_HOURS = [1, 2, 3, 4, 6, 8, 12, 24];
-    const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
-    const TYPES = {Lecture: "лекция", Seminar: "семинар", Consultation: "консультация", Event: "событие",
-                   "Interim assessment": "рубежный контроль", Exam: "экзамен", Lab: "лабораторная", Class: "занятие"};
+    const WEEKDAYS = () => L(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], ["вс", "пн", "вт", "ср", "чт", "пт", "сб"]);
+    const TYPES_RU = {Lecture: "лекция", Seminar: "семинар", Consultation: "консультация", Event: "событие",
+                      "Interim assessment": "рубежный контроль", Exam: "экзамен", Lab: "лабораторная", Class: "занятие"};
     let chats = [];
     let dictionary = {subjects: [], error: null, title_chars: 13, abbr_chars: 6};
     let opened = null;  // the detail view the back button closes
@@ -262,9 +264,9 @@
     async function call(path, options = {}) {
       const response = await fetch(path, {...options, headers: {...options.headers,
         Authorization: "tma " + tg.initData}});
-      if (response.status === 401) throw new Error("Откройте приложение из бота.");
-      if (response.status === 403) throw new Error("Нет доступа.");
-      if (!response.ok) throw new Error(await response.text() || "Ошибка " + response.status);
+      if (response.status === 401) throw new Error(L("Open the app from the bot.", "Откройте приложение из бота."));
+      if (response.status === 403) throw new Error(L("No access.", "Нет доступа."));
+      if (!response.ok) throw new Error(await response.text() || L("Error ", "Ошибка ") + response.status);
       return response.json();
     }
 
@@ -299,6 +301,26 @@
         control);
     }
 
+    // The texts of the page itself: the tabs, the hints and fields of the screens that are not drawn by a render.
+    function applyLanguage() {
+      document.documentElement.lang = lang;
+      $("tabs").replaceChildren(...TABS.map(([name, en, ru]) => {
+        const button = el("button", {}, L(en, ru));
+        button.dataset.tab = name;
+        button.onclick = () => showTab(name);
+        return button;
+      }));
+      $("chats-hint").textContent = L("The twin's chats and their settings. A new chat comes switched off.",
+        "Чаты твинка и их настройки. Новый чат появляется выключенным.");
+      $("search").placeholder = L("Find a chat", "Найти чат");
+      $("subjects-hint").textContent = L("How the courses are named in the timetable, the feed and the deadlines. "
+        + "Haiku never changes a manual entry; a deleted entry Haiku names again.",
+        "Как курсы называются в расписании, ленте и дедлайнах. Ручные записи Haiku не меняет; удалённую запись Haiku "
+        + "назовёт заново.");
+      $("subject-search").placeholder = L("Find a course", "Найти курс");
+      $("subject-add").textContent = L("Add an entry", "Добавить запись");
+    }
+
     // --- the list -------------------------------------------------------------
 
     function renderList() {
@@ -306,20 +328,21 @@
       const shown = chats.filter((chat) => chat.title.toLowerCase().includes(query));
       const box = $("chats");
       box.replaceChildren();
-      for (const [title, enabled] of [["Включены", true], ["Выключены", false]]) {
+      for (const [title, enabled] of [[L("On", "Включены"), true], [L("Off", "Выключены"), false]]) {
         const part = shown.filter((chat) => chat.settings.enabled === enabled);
         if (!part.length) continue;
         box.append(el("h3", {}, `${title} · ${part.length}`), el("div", {className: "list"}, ...part.map(chatRow)));
       }
-      if (!shown.length) box.append(el("p", {className: "hint"}, chats.length ? "Ничего не нашлось." :
-        "Чатов пока нет: они появятся, когда твинк войдёт в Telegram."));
+      if (!shown.length) box.append(el("p", {className: "hint"}, chats.length ? L("Nothing found.", "Ничего не нашлось.") :
+        L("No chats yet: they come when the twin logs in to Telegram.",
+          "Чатов пока нет: они появятся, когда твинк войдёт в Telegram.")));
     }
 
     function chatRow(chat) {
-      const facts = [KINDS[chat.kind] || chat.kind];
-      if (chat.settings.study) facts.push("учебный");
-      if (chat.settings.filter === "important") facts.push("только важное");
-      if (chat.messages) facts.push(`сообщений: ${chat.messages}`);
+      const facts = [KINDS()[chat.kind] || chat.kind];
+      if (chat.settings.study) facts.push(L("study", "учебный"));
+      if (chat.settings.filter === "important") facts.push(L("important only", "только важное"));
+      if (chat.messages) facts.push(L("messages: ", "сообщений: ") + chat.messages);
       const main = el("div", {className: "main"}, el("div", {className: "title"}, chat.title),
         el("div", {className: "hint"}, facts.join(" · ")));
       main.onclick = () => openChat(chat);
@@ -327,7 +350,7 @@
         toggle(chat.settings.enabled, async (on) => { await save(chat, {enabled: on}); renderList(); }));
     }
 
-    // The daily number of images read in chats with «Картинки» (р. 12), under the list.
+    // The daily number of images read in chats with «Images» (р. 12), under the list.
     function renderImages(state) {
       if (!state || state.daily === undefined) return;
       const input = el("input", {type: "number", value: state.daily, min: 0, max: 500, step: 1, inputMode: "numeric"});
@@ -341,11 +364,17 @@
           input.value = state.daily;
         }
       };
-      const parts = [el("h3", {}, "Картинки"),
-        el("p", {className: "hint"}, "В чатах с «Картинки» фото и скриншоты читает Haiku, прежде чем их разберут. "
-          + "Выше 80 % лимита LLM и сверх числа в день картинки не читаются."),
-        el("div", {className: "list"}, settingRow("В день", `сегодня прочитано: ${state.today}`, input))];
-      if (state.error) parts.splice(2, 0, el("div", {className: "card warn"}, "Чтение картинок не удалось: " + state.error));
+      const parts = [el("h3", {}, L("Images", "Картинки")),
+        el("p", {className: "hint"}, L("In chats with «Images» Haiku reads photos and screenshots before they are "
+          + "parsed. Above 80 % of the LLM limit and past the number a day images are not read.",
+          "В чатах с «Картинки» фото и скриншоты читает Haiku, прежде чем их разберут. "
+          + "Выше 80 % лимита LLM и сверх числа в день картинки не читаются.")),
+        el("div", {className: "list"}, settingRow(L("A day", "В день"),
+          L("read today: ", "сегодня прочитано: ") + state.today, input))];
+      if (state.error) {
+        parts.splice(2, 0, el("div", {className: "card warn"},
+          L("Reading images failed: ", "Чтение картинок не удалось: ") + state.error));
+      }
       $("images").replaceChildren(...parts);
     }
 
@@ -366,7 +395,7 @@
       tg.BackButton.hide();
       renderList();
       renderSubjects();
-      if (!$("tab-summaries").hidden) loadSummaries();  // a chat's «Сводка» may have changed
+      if (!$("tab-summaries").hidden) loadSummaries();  // a chat's «Summary» may have changed
     }
 
     async function openChat(chat) {
@@ -383,44 +412,48 @@
       const s = chat.settings;
       const rerender = async (values) => { await save(chat, values); renderChat(chat, senders); };
 
-      const filter = el("select", {}, el("option", {value: "all"}, "все сообщения"),
-        el("option", {value: "important"}, "только важное"));
+      const filter = el("select", {}, el("option", {value: "all"}, L("all messages", "все сообщения")),
+        el("option", {value: "important"}, L("important only", "только важное")));
       filter.value = s.filter;
       filter.onchange = () => rerender({filter: filter.value});
 
-      const batch = el("select", {}, el("option", {value: ""}, "общий"),
-        ...BATCH_HOURS.map((h) => el("option", {value: h}, `каждые ${h} ч`)));
+      const batch = el("select", {}, el("option", {value: ""}, L("general", "общий")),
+        ...BATCH_HOURS.map((h) => el("option", {value: h}, L(`every ${h} h`, `каждые ${h} ч`))));
       batch.value = s.batch_hours ?? "";
       batch.onchange = () => rerender({batch_hours: batch.value ? Number(batch.value) : null});
 
       const settings = el("div", {className: "list"},
-        settingRow("Читать чат", "сообщения попадают в базу", toggle(s.enabled, (on) => rerender({enabled: on}))),
-        ...FLAGS.map(([name, title, hint]) => settingRow(title, hint,
+        settingRow(L("Read the chat", "Читать чат"), L("its messages go to the base", "сообщения попадают в базу"),
+          toggle(s.enabled, (on) => rerender({enabled: on}))),
+        ...FLAGS().map(([name, title, hint]) => settingRow(title, hint,
           toggle(s[name], (on) => rerender({[name]: on})))),
-        settingRow("Фильтр", "важное: люди из списка, закрепы, файлы, даты и ответы на них", filter),
-        settingRow("Разбор", "как часто разбирать пачку", batch));
+        settingRow(L("Filter", "Фильтр"), L("important: the listed people, pins, files, dates and the replies to them",
+          "важное: люди из списка, закрепы, файлы, даты и ответы на них"), filter),
+        settingRow(L("Parsing", "Разбор"), L("how often its batch is parsed", "как часто разбирать пачку"), batch));
 
       const people = el("div", {className: "list"});
       if (senders === null) {
-        people.append(el("div", {className: "row hint"}, "Загрузка…"));
+        people.append(el("div", {className: "row hint"}, L("Loading…", "Загрузка…")));
       } else if (!senders.length) {
-        people.append(el("div", {className: "row hint"}, "Пока никто не писал: список соберётся из сообщений."));
+        people.append(el("div", {className: "row hint"}, L("Nobody has written yet: the list comes from the messages.",
+          "Пока никто не писал: список соберётся из сообщений.")));
       }
       for (const sender of senders || []) {
         const chosen = s.people.includes(sender.id);
         people.append(settingRow(sender.name || `id ${sender.id}`,
-          sender.messages ? `сообщений: ${sender.messages}` : "ещё не писал",
+          sender.messages ? L("messages: ", "сообщений: ") + sender.messages : L("has not written yet", "ещё не писал"),
           toggle(chosen, (on) => rerender({people: on ? [...s.people, sender.id] :
             s.people.filter((id) => id !== sender.id)}))));
       }
 
       $("chat").replaceChildren(
         el("h2", {}, chat.title),
-        el("p", {className: "hint"}, [KINDS[chat.kind] || chat.kind, chat.username ? "@" + chat.username : ""]
+        el("p", {className: "hint"}, [KINDS()[chat.kind] || chat.kind, chat.username ? "@" + chat.username : ""]
           .filter(Boolean).join(" · ")),
         settings,
-        el("h3", {}, "Важные люди"),
-        el("p", {className: "hint"}, "Для фильтра «только важное» и для «срочно»: староста, преподаватели."),
+        el("h3", {}, L("Important people", "Важные люди")),
+        el("p", {className: "hint"}, L("For the «important only» filter and for «Urgent»: the group head, the teachers.",
+          "Для фильтра «только важное» и для «срочно»: староста, преподаватели.")),
         people);
     }
 
@@ -428,14 +461,14 @@
 
     function when(start, end) {
       const day = new Date(start.slice(0, 10) + "T00:00:00");
-      let text = `${WEEKDAYS[day.getDay()]} ${start.slice(8, 10)}.${start.slice(5, 7)} ${start.slice(11, 16)}`;
+      let text = `${WEEKDAYS()[day.getDay()]} ${start.slice(8, 10)}.${start.slice(5, 7)} ${start.slice(11, 16)}`;
       if (end && end.slice(0, 10) === start.slice(0, 10)) text += "–" + end.slice(11, 16);
       return text;
     }
 
     function room(value) {
       if (!value) return "";
-      return /^https?:\/\//.test(value) ? "ссылка" : value === "online" ? "онлайн" : value;
+      return /^https?:\/\//.test(value) ? L("link", "ссылка") : value === "online" ? L("online", "онлайн") : value;
     }
 
     async function loadSchedule() {
@@ -458,22 +491,27 @@
     function renderSchedule(data) {
       const box = $("tab-schedule");
       const ruz = data.ruz;
-      const parts = [el("p", {className: "hint"}, "События из чатов и правки пар с сегодняшнего дня. Основной "
-        + "календарь — где нужно быть, необязательный — куда можно прийти; скрытое пропадает из лент.")];
+      const parts = [el("p", {className: "hint"}, L("Events from the chats and corrections of classes from today on. "
+        + "The main calendar is where to be, the optional one where one may come; what is hidden leaves the feeds.",
+        "События из чатов и правки пар с сегодняшнего дня. Основной календарь — где нужно быть, необязательный — куда "
+        + "можно прийти; скрытое пропадает из лент."))];
       if (ruz.error) {
-        parts.push(el("div", {className: "card warn"}, "РУЗ: " + ruz.error));
+        parts.push(el("div", {className: "card warn"}, L("RUZ: ", "РУЗ: ") + ruz.error));
       } else {
-        parts.push(el("div", {className: "card"}, `РУЗ: ${ruz.classes} пар` +
-          (ruz.ok_at ? `, обновлено ${when(ruz.ok_at)}` : "")));
+        parts.push(el("div", {className: "card"}, L(`RUZ: ${ruz.classes} classes`, `РУЗ: ${ruz.classes} пар`) +
+          (ruz.ok_at ? L(", updated ", ", обновлено ") + when(ruz.ok_at) : "")));
       }
       if (ruz.subjects_error) {
-        parts.push(el("div", {className: "card warn"}, "Названия предметов ждут Haiku: " + ruz.subjects_error));
+        parts.push(el("div", {className: "card warn"}, L("The course titles wait for Haiku: ",
+          "Названия предметов ждут Haiku: ") + ruz.subjects_error));
       }
       if (!data.calendar) {
-        parts.push(el("div", {className: "card warn"}, "Ленты iCal выключены: задайте CALENDAR_SECRET в .env."));
+        parts.push(el("div", {className: "card warn"}, L("The iCal feeds are off: set CALENDAR_SECRET in .env.",
+          "Ленты iCal выключены: задайте CALENDAR_SECRET в .env.")));
       }
       if (!data.events.length) {
-        parts.push(el("p", {className: "hint"}, "Впереди нет событий из чатов и правок пар."));
+        parts.push(el("p", {className: "hint"}, L("No events from the chats or corrections of classes ahead.",
+          "Впереди нет событий из чатов и правок пар.")));
       }
       for (const event of data.events) parts.push(eventCard(event));
       box.replaceChildren(...parts);
@@ -482,15 +520,15 @@
     function eventCard(event) {
       const facts = [];
       if (event.correction) {
-        facts.push(event.cancelled ? `отмена: ${when(event.class.start, event.class.end)}` :
+        facts.push(event.cancelled ? L("cancelled: ", "отмена: ") + when(event.class.start, event.class.end) :
           `${when(event.class.start, event.class.end)} → ${when(event.start, event.end)}`);
       } else {
         facts.push(when(event.start, event.end));
       }
       if (room(event.room)) facts.push(room(event.room));
-      facts.push(TYPES[event.type] || event.type.toLowerCase());
-      if (event.cancelled && !event.correction) facts.push("отменено");
-      const source = event.link ? el("a", {href: event.link}, event.chat || "сообщение") : (event.chat || "");
+      facts.push(L(event.type.toLowerCase(), TYPES_RU[event.type] || event.type.toLowerCase()));
+      if (event.cancelled && !event.correction) facts.push(L("cancelled", "отменено"));
+      const source = event.link ? el("a", {href: event.link}, event.chat || L("message", "сообщение")) : (event.chat || "");
       if (event.link) {
         source.onclick = (click) => {  // a t.me link opens in Telegram itself, not in a browser
           click.preventDefault();
@@ -498,41 +536,45 @@
         };
       }
       const title = el("div", {className: "title" + (event.cancelled ? " struck" : "")},
-        (event.correction ? "Пара: " : "") + event.title);
+        (event.correction ? L("Class: ", "Пара: ") : "") + event.title);
       const main = el("div", {className: "main" + (event.hidden ? " faded" : "")}, title,
         el("div", {className: "hint"}, facts.join(" · ")), el("div", {className: "hint"}, source));
       const card = el("div", {className: "list"}, el("div", {className: "row"}, main));
       if (event.correction) {
-        card.append(settingRow("Применять правку", "выключите, если модель ошиблась: пара будет как в РУЗ",
+        card.append(settingRow(L("Apply the correction", "Применять правку"),
+          L("switch it off if the model was wrong: the class is as RUZ has it",
+            "выключите, если модель ошиблась: пара будет как в РУЗ"),
           toggle(!event.hidden, (on) => changeEvent(event, {hidden: !on}))));
         return card;
       }
       if (!event.cancelled) {
-        card.append(settingRow("Основной календарь", event.required ? "нужно быть" : "можно прийти",
+        card.append(settingRow(L("Main calendar", "Основной календарь"),
+          event.required ? L("must be there", "нужно быть") : L("may come", "можно прийти"),
           toggle(event.required, (on) => changeEvent(event, {required: on}))));
       }
-      card.append(settingRow("В календарях", event.hidden ? "скрыто" : "",
+      card.append(settingRow(L("In the calendars", "В календарях"), event.hidden ? L("hidden", "скрыто") : "",
         toggle(!event.hidden, (on) => changeEvent(event, {hidden: !on}))));
       return card;
     }
 
     // --- deadlines -----------------------------------------------------------
 
-    const SOURCES = {hseapp: "HSE App X", ical: "РУЗ", mail: "почта", tg: "чат", ha: "свой"};
-    const CATEGORIES = {study: "учёба", personal: "личное"};
+    const SOURCES = () => L({hseapp: "HSE App X", ical: "RUZ", mail: "mail", tg: "chat", ha: "own"},
+                            {hseapp: "HSE App X", ical: "РУЗ", mail: "почта", tg: "чат", ha: "свой"});
+    const CATEGORIES = () => L({study: "study", personal: "personal"}, {study: "учёба", personal: "личное"});
     let deadlineState = null;
 
     function dayLabel(iso) {
       const date = new Date(iso + "T00:00:00");
-      return `${WEEKDAYS[date.getDay()]} ${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+      return `${WEEKDAYS()[date.getDay()]} ${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
     }
 
     // The mark of the pinned list in the forum; `today` is the service's, a Moscow date.
     function dueMark(iso, today) {
       const days = Math.round((new Date(iso + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000);
-      if (days < 0) return `просрочен (${dayLabel(iso)})`;
-      if (days === 0) return "сегодня";
-      if (days === 1) return "завтра";
+      if (days < 0) return L("overdue", "просрочен") + ` (${dayLabel(iso)})`;
+      if (days === 0) return L("today", "сегодня");
+      if (days === 1) return L("tomorrow", "завтра");
       return dayLabel(iso);
     }
 
@@ -556,30 +598,34 @@
 
     function renderDeadlines(data) {
       deadlineState = data;
-      const parts = [el("p", {className: "hint"}, "Все дедлайны после склейки: тот же список видят Tablo, списки дел "
-        + "HA и закреп в теме «Дедлайны». Скрытый не вернётся, даже если источник пришлёт его снова.")];
+      const parts = [el("p", {className: "hint"}, L("Every deadline after the merge: Tablo, HA's to-do lists and the "
+        + "pinned list of the «Deadlines» topic see the same list. A hidden one never comes back, even if its source "
+        + "sends it again.",
+        "Все дедлайны после склейки: тот же список видят Tablo, списки дел HA и закреп в теме «Дедлайны». Скрытый не "
+        + "вернётся, даже если источник пришлёт его снова."))];
       if (data.hseapp.login_needed) {
-        parts.push(el("div", {className: "card warn"}, "HSE App X: нужен вход, дедлайны оттуда не обновляются "
-          + "(экран «HSE App X»)."));
+        parts.push(el("div", {className: "card warn"}, L("HSE App X: a login is needed, its deadlines are not updated "
+          + "(the «HSE App X» screen).", "HSE App X: нужен вход, дедлайны оттуда не обновляются (экран «HSE App X»).")));
       }
-      parts.push(el("h3", {}, `В списке · ${data.items.length}`), data.items.length ?
-        el("div", {className: "list"}, ...data.items.map(deadlineRow)) : el("p", {className: "hint"}, "Дедлайнов нет."));
-      parts.push(el("h3", {}, `Свои · ${data.own.length}`));
+      parts.push(el("h3", {}, L("On the list · ", "В списке · ") + data.items.length), data.items.length ?
+        el("div", {className: "list"}, ...data.items.map(deadlineRow)) :
+        el("p", {className: "hint"}, L("No deadlines.", "Дедлайнов нет.")));
+      parts.push(el("h3", {}, L("Own · ", "Свои · ") + data.own.length));
       if (data.own.length) parts.push(el("div", {className: "list"}, ...data.own.map(ownRow)));
-      const add = el("button", {}, "Добавить свой");
+      const add = el("button", {}, L("Add one", "Добавить свой"));
       add.onclick = () => openDeadline(null);
       parts.push(el("div", {className: "actions"}, add));
       if (data.hidden.length) {
-        parts.push(el("h3", {}, `Скрытые · ${data.hidden.length}`),
+        parts.push(el("h3", {}, L("Hidden · ", "Скрытые · ") + data.hidden.length),
           el("div", {className: "list"}, ...data.hidden.map(hiddenRow)));
       }
       $("tab-deadlines").replaceChildren(...parts);
     }
 
     function deadlineRow(d) {
-      const facts = [dueMark(d.due, deadlineState.today), SOURCES[d.source] || d.source];
+      const facts = [dueMark(d.due, deadlineState.today), SOURCES()[d.source] || d.source];
       if (d.course) facts.push(d.course);
-      if (d.category === "personal") facts.push(CATEGORIES.personal);
+      if (d.category === "personal") facts.push(CATEGORIES().personal);
       const main = el("div", {className: "main"}, el("div", {className: "title"}, d.title),
         el("div", {className: "hint" + (d.overdue ? " warn" : "")}, facts.join(" · ")));
       const row = el("div", {className: "row"}, main);
@@ -587,9 +633,10 @@
         main.onclick = () => openDeadline(deadlineState.own.find((own) => own.uid === d.uid) || d);
         return row;
       }
-      const hide = el("button", {className: "small"}, "Скрыть");
-      hide.onclick = () => tg.showConfirm(`Скрыть «${d.title}»? Он не вернётся, даже если источник пришлёт его `
-        + "снова. Вернуть можно ниже, в «Скрытых».", (yes) => {
+      const hide = el("button", {className: "small"}, L("Hide", "Скрыть"));
+      hide.onclick = () => tg.showConfirm(L(`Hide «${d.title}»? It never comes back, even if its source sends it `
+        + "again. It can be restored below, in «Hidden».", `Скрыть «${d.title}»? Он не вернётся, даже если источник `
+        + "пришлёт его снова. Вернуть можно ниже, в «Скрытых»."), (yes) => {
         if (yes) changeDeadlines("api/deadlines/" + encodeURIComponent(d.uid), "DELETE");
       });
       row.append(hide);
@@ -598,15 +645,15 @@
 
     function ownRow(d) {
       const main = el("div", {className: "main"}, el("div", {className: "title"}, d.title),
-        el("div", {className: "hint"}, `${dueMark(d.due, deadlineState.today)} · ${CATEGORIES[d.category]}`));
+        el("div", {className: "hint"}, `${dueMark(d.due, deadlineState.today)} · ${CATEGORIES()[d.category]}`));
       main.onclick = () => openDeadline(d);
       return el("div", {className: "row"}, main);
     }
 
     function hiddenRow(h) {
       const main = el("div", {className: "main faded"}, el("div", {className: "title"}, h.title),
-        el("div", {className: "hint"}, `${dayLabel(h.due)} · ${SOURCES[h.source] || h.source}`));
-      const restore = el("button", {className: "small"}, "Вернуть");
+        el("div", {className: "hint"}, `${dayLabel(h.due)} · ${SOURCES()[h.source] || h.source}`));
+      const restore = el("button", {className: "small"}, L("Restore", "Вернуть"));
       restore.onclick = () => changeDeadlines("api/hidden/" + encodeURIComponent(h.uid), "DELETE");
       return el("div", {className: "row"}, main, restore);
     }
@@ -615,12 +662,13 @@
       openView("deadline");
       const fresh = !d;
       d = d || {title: "", due: deadlineState.today, category: "study"};
-      const title = el("input", {value: d.title, maxLength: 200, placeholder: "Записаться на майнор"});
+      const title = el("input", {value: d.title, maxLength: 200,
+        placeholder: L("Sign up for a minor", "Записаться на майнор")});
       const due = el("input", {type: "date", value: d.due});
-      const category = el("select", {disabled: !fresh}, el("option", {value: "study"}, "учёба"),
-        el("option", {value: "personal"}, "личное"));
+      const category = el("select", {disabled: !fresh}, el("option", {value: "study"}, CATEGORIES().study),
+        el("option", {value: "personal"}, CATEGORIES().personal));
       category.value = d.category;
-      const saveButton = el("button", {}, "Сохранить");
+      const saveButton = el("button", {}, L("Save", "Сохранить"));
       saveButton.onclick = async () => {
         const ok = fresh ?
           await changeDeadlines("api/deadlines", "POST", {title: title.value, due: due.value, category: category.value}) :
@@ -630,19 +678,21 @@
       };
       const actions = el("div", {className: "actions"}, saveButton);
       if (!fresh) {
-        const removeButton = el("button", {className: "danger"}, "Удалить");
-        removeButton.onclick = () => tg.showConfirm("Удалить свой дедлайн?", async (yes) => {
-          if (yes && await changeDeadlines("api/deadlines/" + encodeURIComponent(d.uid), "DELETE")) back();
-        });
+        const removeButton = el("button", {className: "danger"}, L("Delete", "Удалить"));
+        removeButton.onclick = () => tg.showConfirm(L("Delete this own deadline?", "Удалить свой дедлайн?"),
+          async (yes) => {
+            if (yes && await changeDeadlines("api/deadlines/" + encodeURIComponent(d.uid), "DELETE")) back();
+          });
         actions.append(removeButton);
       }
       $("deadline").replaceChildren(
-        el("h2", {}, fresh ? "Свой дедлайн" : d.title),
-        el("p", {className: "hint"}, "Виден в Tablo, в списке дел HA и в закрепе темы «Дедлайны». Через 30 дней "
-          + "после срока удаляется сам."),
-        el("label", {className: "field"}, "Что сделать", title),
-        el("label", {className: "field"}, "Срок", due),
-        el("label", {className: "field"}, "Список", category),
+        el("h2", {}, fresh ? L("Own deadline", "Свой дедлайн") : d.title),
+        el("p", {className: "hint"}, L("Shown in Tablo, in HA's to-do list and in the pinned list of the «Deadlines» "
+          + "topic. Deleted by itself 30 days after it is due.", "Виден в Tablo, в списке дел HA и в закрепе темы "
+          + "«Дедлайны». Через 30 дней после срока удаляется сам.")),
+        el("label", {className: "field"}, L("What to do", "Что сделать"), title),
+        el("label", {className: "field"}, L("Due", "Срок"), due),
+        el("label", {className: "field"}, L("List", "Список"), category),
         actions);
     }
 
@@ -666,19 +716,24 @@
           loadSummaries();
         }
       };
-      const parts = [el("p", {className: "hint"}, "Ежедневная сводка приходит в тему «Сводки»: по каждому чату — "
-        + "что в нём было с прошлой сводки. Сводку любого включённого чата можно попросить у бота: /summary "
-        + "[чат] [3h | 2d | 20.10-22.10].")];
+      const parts = [el("p", {className: "hint"}, L("The daily summary comes to the «Summaries» topic: for each chat, "
+        + "what it said since the last summary. A summary of any enabled chat can be asked of the bot: /summary "
+        + "[chat] [3h | 2d | 20.10-22.10] [en | ru]; the language is the forum's unless named.",
+        "Ежедневная сводка приходит в тему «Сводки»: по каждому чату — что в нём было с прошлой сводки. Сводку любого "
+        + "включённого чата можно попросить у бота: /summary [чат] [3h | 2d | 20.10-22.10] [en | ru]; язык — как в "
+        + "форуме, если не назван."))];
       if (data.status.error) {
-        parts.push(el("div", {className: "card warn"}, "Последняя сводка: " + data.status.error));
+        parts.push(el("div", {className: "card warn"}, L("The last summary: ", "Последняя сводка: ") + data.status.error));
       }
-      parts.push(el("div", {className: "list"}, settingRow("Время", "по Москве", time)));
-      const done = data.status.ok_at ? `последняя собрана ${data.status.ok_at.slice(8, 10)}.`
-        + `${data.status.ok_at.slice(5, 7)} в ${data.status.ok_at.slice(11, 16)}` : "";
-      parts.push(el("h3", {}, `Чаты в сводке · ${data.chats.length}`));
-      if (done) parts.push(el("p", {className: "hint"}, done[0].toUpperCase() + done.slice(1) + "."));
+      parts.push(el("div", {className: "list"}, settingRow(L("Time", "Время"), L("Moscow time", "по Москве"), time)));
+      const okAt = data.status.ok_at;
+      const done = okAt ? L(`The last one was made on ${okAt.slice(8, 10)}.${okAt.slice(5, 7)} at ${okAt.slice(11, 16)}.`,
+        `Последняя собрана ${okAt.slice(8, 10)}.${okAt.slice(5, 7)} в ${okAt.slice(11, 16)}.`) : "";
+      parts.push(el("h3", {}, L("Chats in the summary · ", "Чаты в сводке · ") + data.chats.length));
+      if (done) parts.push(el("p", {className: "hint"}, done));
       if (!data.chats.length) {
-        parts.push(el("p", {className: "hint"}, "Пока ни одного: включите «Сводку» в настройках чата."));
+        parts.push(el("p", {className: "hint"}, L("None yet: switch «Summary» on in a chat's settings.",
+          "Пока ни одного: включите «Сводку» в настройках чата.")));
       } else {
         parts.push(el("div", {className: "list"}, ...data.chats.map((item) => {
           const main = el("div", {className: "main"}, el("div", {className: "title"}, item.title));
@@ -686,7 +741,8 @@
           if (chat) main.onclick = () => openChat(chat);
           return el("div", {className: "row"}, main);
         })));
-        parts.push(el("p", {className: "hint"}, "Убрать чат из сводки — переключатель «Сводка» в его настройках."));
+        parts.push(el("p", {className: "hint"}, L("To take a chat out of the summary, switch off «Summary» in its "
+          + "settings.", "Убрать чат из сводки — переключатель «Сводка» в его настройках.")));
       }
       $("tab-summaries").replaceChildren(...parts);
     }
@@ -711,27 +767,33 @@
     }
 
     function sheetTitle(sheet) {
-      return (sheet.title || sheet.course || "Листок") + (sheet.number ? ` · листок ${sheet.number}` : "");
+      return (sheet.title || sheet.course || L("Sheet", "Листок"))
+        + (sheet.number ? L(" · sheet ", " · листок ") + sheet.number : "");
     }
 
     function renderSheets(data) {
-      const parts = [el("p", {className: "hint"}, "PDF с заданиями из чатов: бот присылает их в тему «Листочки». "
-        + "Новая версия заменяет файл в старом сообщении. Если версию не узнали, её можно присоединить к старому "
-        + "листку здесь.")];
+      const parts = [el("p", {className: "hint"}, L("PDFs with tasks from the chats: the bot posts them to the «Sheets» "
+        + "topic. A new version replaces the file in the old message. A version that was not recognised can be "
+        + "joined to the older sheet here.", "PDF с заданиями из чатов: бот присылает их в тему «Листочки». Новая "
+        + "версия заменяет файл в старом сообщении. Если версию не узнали, её можно присоединить к старому листку "
+        + "здесь."))];
       if (data.status.error) {
-        parts.push(el("div", {className: "card warn"}, "Чтение PDF не удалось: " + data.status.error));
+        parts.push(el("div", {className: "card warn"}, L("Reading a PDF failed: ", "Чтение PDF не удалось: ")
+          + data.status.error));
       }
       if (data.status.waiting) {
-        parts.push(el("div", {className: "card"}, `Ждут отправки в форум: ${data.status.waiting}.`));
+        parts.push(el("div", {className: "card"}, L("Waiting for the forum: ", "Ждут отправки в форум: ")
+          + data.status.waiting + "."));
       }
-      parts.push(el("h3", {}, "Чтение PDF целиком"),
-        el("p", {className: "hint"}, "Для чатов с «PDF целиком»: сколько читать из одного файла, что наступит раньше."),
+      parts.push(el("h3", {}, L("Reading a whole PDF", "Чтение PDF целиком")),
+        el("p", {className: "hint"}, L("For chats with «Whole PDF»: how much of one file is read, whichever comes first.",
+          "Для чатов с «PDF целиком»: сколько читать из одного файла, что наступит раньше.")),
         el("div", {className: "list"},
-          settingRow("Страниц", "", limitInput(data.limits.pdf_pages, 1, 50, "pdf_pages")),
-          settingRow("Токенов", "скан — около 3000 на страницу", limitInput(data.limits.pdf_tokens, 1000, 200000,
-            "pdf_tokens"))));
-      parts.push(el("h3", {}, `Листочки · ${data.sheets.length}`));
-      if (!data.sheets.length) parts.push(el("p", {className: "hint"}, "Листочков пока нет."));
+          settingRow(L("Pages", "Страниц"), "", limitInput(data.limits.pdf_pages, 1, 50, "pdf_pages")),
+          settingRow(L("Tokens", "Токенов"), L("a scan is about 3000 a page", "скан — около 3000 на страницу"),
+            limitInput(data.limits.pdf_tokens, 1000, 200000, "pdf_tokens"))));
+      parts.push(el("h3", {}, L("Sheets · ", "Листочки · ") + data.sheets.length));
+      if (!data.sheets.length) parts.push(el("p", {className: "hint"}, L("No sheets yet.", "Листочков пока нет.")));
       const older = data.sheets.filter((sheet) => sheet.status === "posted");
       for (const sheet of data.sheets) parts.push(sheetCard(sheet, older));
       $("tab-sheets").replaceChildren(...parts);
@@ -747,31 +809,37 @@
 
     function sheetCard(sheet, older) {
       const facts = [sheet.name];
-      if (sheet.due) facts.push("срок " + dayLabel(sheet.due));
-      if (sheet.versions > 1) facts.push(`версий: ${sheet.versions}`);
+      if (sheet.due) facts.push(L("due ", "срок ") + dayLabel(sheet.due));
+      if (sheet.versions > 1) facts.push(L("versions: ", "версий: ") + sheet.versions);
       const where = [sheet.chat, sheet.created_at.slice(8, 10) + "." + sheet.created_at.slice(5, 7)];
       const main = el("div", {className: "main" + (sheet.status === "failed" ? " faded" : "")},
         el("div", {className: "title"}, sheetTitle(sheet)), el("div", {className: "hint"}, facts.join(" · ")),
         el("div", {className: "hint"}, where.filter(Boolean).join(" · ")));
       if (sheet.summary) main.append(el("div", {className: "hint"}, sheet.summary));
-      if (sheet.status === "failed") main.append(el("div", {className: "hint warn"}, "Не отправлен: " + sheet.error));
-      if (sheet.status === "new") main.append(el("div", {className: "hint"}, "Ждёт отправки в форум."));
+      if (sheet.status === "failed") {
+        main.append(el("div", {className: "hint warn"}, L("Not posted: ", "Не отправлен: ") + sheet.error));
+      }
+      if (sheet.status === "new") {
+        main.append(el("div", {className: "hint"}, L("Waiting for the forum.", "Ждёт отправки в форум.")));
+      }
       const card = el("div", {className: "list"}, el("div", {className: "row"}, main));
       const others = older.filter((other) => other.first !== sheet.first && other.created_at <= sheet.created_at);
       if (sheet.status === "posted" && sheet.versions === 1 && sheet.file && others.length) {
-        const select = el("select", {}, el("option", {value: ""}, "нет"),
+        const select = el("select", {}, el("option", {value: ""}, L("no", "нет")),
           ...others.map((other) => el("option", {value: other.id},
             `${sheetTitle(other)} · ${other.name} · ${other.chat || ""}`)));
         select.onchange = () => {
           if (!select.value) return;
           const other = others.find((o) => String(o.id) === select.value);
-          tg.showConfirm(`Это новая версия «${sheetTitle(other)}»? Файл заменит старый в его сообщении, а `
-            + "отдельное сообщение этого листка удалится.", (yes) => {
+          tg.showConfirm(L(`Is it a new version of «${sheetTitle(other)}»? The file replaces the old one in its `
+            + "message, and this sheet's own message is deleted.", `Это новая версия «${sheetTitle(other)}»? Файл `
+            + "заменит старый в его сообщении, а отдельное сообщение этого листка удалится."), (yes) => {
             if (yes) changeSheets(`api/sheets/${sheet.id}/join`, "POST", {previous: other.id});
             else select.value = "";
           });
         };
-        card.append(settingRow("Обновление листка", "если это новая версия уже присланного", select));
+        card.append(settingRow(L("Update of a sheet", "Обновление листка"),
+          L("if it is a new version of one posted before", "если это новая версия уже присланного"), select));
       }
       return card;
     }
@@ -818,7 +886,7 @@
 
     function renderGrades() {
       const data = grades;
-      const student = el("input", {value: data.student, placeholder: "Фамилия Имя"});
+      const student = el("input", {value: data.student, placeholder: L("Surname Name", "Фамилия Имя")});
       student.style.width = "180px";
       student.style.textAlign = "right";
       student.onchange = () => {
@@ -827,7 +895,8 @@
           changeGrades({student: value}).then((ok) => ok && rereadGrades());
           return;
         }
-        tg.showConfirm("Сменить ФИО? Таблицы прочитаются заново: первое чтение — без сообщений о новых оценках.",
+        tg.showConfirm(L("Change the name? The sheets are read anew: the first reading tells of no new grades.",
+          "Сменить ФИО? Таблицы прочитаются заново: первое чтение — без сообщений о новых оценках."),
           (yes) => {
             if (yes) changeGrades({student: value}).then((ok) => ok && rereadGrades());
             else student.value = data.student;
@@ -838,16 +907,25 @@
       windowDays.style.width = "70px";
       windowDays.style.textAlign = "right";
       windowDays.onchange = () => changeGrades({window_days: Number(windowDays.value)});
-      const parts = [el("p", {className: "hint"}, "Таблицы преподавателей в Google, открытые по ссылке. Раз в 30 "
-        + "минут сервис ищет в них свою строку по ФИО; Haiku видит верх вкладки и эту строку и сама находит шапку. Новая или "
-        + "изменённая оценка приходит в тему «Оценки». Первое чтение таблицы — снимок, без сообщений.")];
-      if (!data.llm) parts.push(el("div", {className: "card warn"}, "Нет ключа Haiku: вкладки не размечаются."));
+      const parts = [el("p", {className: "hint"}, L("Teachers' Google Sheets open to anyone with the link. Every 30 "
+        + "minutes the service finds the own row in them by the name; Haiku sees the top of a tab and that row and "
+        + "finds the header itself. A new or changed grade comes to the «Grades» topic. The first reading of a sheet "
+        + "is a snapshot, without messages.", "Таблицы преподавателей в Google, открытые по ссылке. Раз в 30 минут "
+        + "сервис ищет в них свою строку по ФИО; Haiku видит верх вкладки и эту строку и сама находит шапку. Новая или "
+        + "изменённая оценка приходит в тему «Оценки». Первое чтение таблицы — снимок, без сообщений."))];
+      if (!data.llm) {
+        parts.push(el("div", {className: "card warn"}, L("No Haiku key: the tabs are not marked up.",
+          "Нет ключа Haiku: вкладки не размечаются.")));
+      }
       parts.push(el("div", {className: "list"},
-        settingRow("ФИО", "как в таблицах: «Иванов Иван» найдёт «ИВАНОВ Иван Петрович»", student),
-        settingRow("Оценка новая", "дней: столько её отдаёт API для Tablo", windowDays)));
-      parts.push(el("h3", {}, `Таблицы · ${data.sheets.length}`));
+        settingRow(L("Name", "ФИО"), L("as in the sheets: «Иванов Иван» finds «ИВАНОВ Иван Петрович»",
+          "как в таблицах: «Иванов Иван» найдёт «ИВАНОВ Иван Петрович»"), student),
+        settingRow(L("A grade is new", "Оценка новая"), L("days: the API for Tablo gives it this long",
+          "дней: столько её отдаёт API для Tablo"), windowDays)));
+      parts.push(el("h3", {}, L("Sheets · ", "Таблицы · ") + data.sheets.length));
       if (!data.student && data.sheets.length) {
-        parts.push(el("p", {className: "hint warn"}, "Без ФИО таблицы не читаются."));
+        parts.push(el("p", {className: "hint warn"}, L("Without the name the sheets are not read.",
+          "Без ФИО таблицы не читаются.")));
       }
       for (const sheet of data.sheets) parts.push(gradeSheetCard(sheet, data));
       parts.push(addSheetCard(data));
@@ -855,33 +933,39 @@
     }
 
     function gradeSheetCard(sheet, data) {
-      const name = sheet.title || sheet.label || "Таблица";
+      const name = sheet.title || sheet.label || L("Sheet", "Таблица");
       const facts = [];
-      if (sheet.label) facts.push("курс " + sheet.label);
-      if (sheet.ok_at) facts.push(`вкладок: ${sheet.tabs}, оценок: ${sheet.items}, прочитана ${when(sheet.ok_at)}`);
-      else if (!sheet.error) facts.push("ещё не прочитана");
+      if (sheet.label) facts.push(L("course ", "курс ") + sheet.label);
+      if (sheet.ok_at) {
+        facts.push(L(`tabs: ${sheet.tabs}, grades: ${sheet.items}, read ${when(sheet.ok_at)}`,
+          `вкладок: ${sheet.tabs}, оценок: ${sheet.items}, прочитана ${when(sheet.ok_at)}`));
+      } else if (!sheet.error) {
+        facts.push(L("not read yet", "ещё не прочитана"));
+      }
       const link = el("a", {href: sheet.url, target: "_blank"}, name);
       link.onclick = (event) => { event.preventDefault(); tg.openLink(sheet.url); };
       const main = el("div", {className: "main"}, el("div", {className: "title"}, link),
         el("div", {className: "hint"}, facts.join(" · ")));
-      if (sheet.error) main.append(el("div", {className: "hint warn"}, "Не читается: " + sheet.error));
+      if (sheet.error) main.append(el("div", {className: "hint warn"}, L("Cannot be read: ", "Не читается: ") + sheet.error));
       if (sheet.unread && sheet.unread.length) {
-        main.append(el("div", {className: "hint warn"}, "Haiku не смогла разметить вкладки: " + sheet.unread.join(", ")
-          + ". Они пропускаются, пока у них не изменится шапка."));
+        main.append(el("div", {className: "hint warn"}, L("Haiku could not mark up the tabs: ",
+          "Haiku не смогла разметить вкладки: ") + sheet.unread.join(", ")
+          + L(". They are skipped until their header changes.", ". Они пропускаются, пока у них не изменится шапка.")));
       }
-      const remove = el("button", {className: "small"}, "Убрать");
-      remove.onclick = () => tg.showConfirm(`Убрать «${name}»? Её оценки забудутся; если добавить снова, первое `
-        + "чтение будет снимком.", (yes) => {
+      const remove = el("button", {className: "small"}, L("Remove", "Убрать"));
+      remove.onclick = () => tg.showConfirm(L(`Remove «${name}»? Its grades are forgotten; added again, its first `
+        + "reading is a snapshot.", `Убрать «${name}»? Её оценки забудутся; если добавить снова, первое чтение будет `
+        + "снимком."), (yes) => {
         if (yes) changeGrades({sheets: sheetsOf(data).filter((s) => s.url !== sheet.url)});
       });
       const card = el("div", {className: "list"}, el("div", {className: "row"}, main, remove));
       for (const grade of sheet.grades) {
         const value = gradeMark(grade.value) + (grade.bonus ? ` ${grade.bonus > 0 ? "+" : ""}${grade.bonus}` : "");
-        const points = grade.max !== 10 ? `${grade.raw} из ${grade.max}` : "";
+        const points = grade.max !== 10 ? `${grade.raw} ${L("of", "из")} ${grade.max}` : "";
         card.append(el("div", {className: "row"},
           el("div", {className: "main"}, el("div", {className: "title"}, grade.label),
             points ? el("div", {className: "hint"}, points) : ""),
-          grade.new ? el("span", {className: "badge"}, "новая") : "",
+          grade.new ? el("span", {className: "badge"}, L("new", "новая")) : "",
           el("b", {}, value)));
       }
       return card;
@@ -893,7 +977,7 @@
       url.oninput = () => { draft.url = url.value; };
       const label = el("input", {value: draft.label, maxLength: data.label_chars, placeholder: "DM"});
       label.oninput = () => { draft.label = label.value; };
-      const add = el("button", {}, "Добавить таблицу");
+      const add = el("button", {}, L("Add the sheet", "Добавить таблицу"));
       add.onclick = async () => {
         if (await changeGrades({sheets: [...sheetsOf(data), {url: draft.url, label: draft.label}]})) {
           draft.url = draft.label = "";
@@ -902,9 +986,11 @@
         }
       };
       return el("div", {className: "card"},
-        el("label", {className: "field"}, "Ссылка на таблицу (доступ — всем, у кого есть ссылка)", url),
-        el("label", {className: "field"}, `Курс — перед каждой оценкой, до ${data.label_chars} символов; `
-          + "пусто — начало названия таблицы", label),
+        el("label", {className: "field"}, L("The sheet's link (open to anyone with the link)",
+          "Ссылка на таблицу (доступ — всем, у кого есть ссылка)"), url),
+        el("label", {className: "field"}, L(`The course, in front of every grade, up to ${data.label_chars} characters; `
+          + "empty: the start of the sheet's title", `Курс — перед каждой оценкой, до ${data.label_chars} символов; `
+          + "пусто — начало названия таблицы"), label),
         el("div", {className: "actions"}, add));
     }
 
@@ -921,8 +1007,8 @@
 
     function renderSubjects() {
       $("subjects-error").hidden = !dictionary.error;
-      $("subjects-error").textContent = dictionary.error ? "Haiku не ответила: " + dictionary.error +
-        ". Пока названия — как у источника." : "";
+      $("subjects-error").textContent = dictionary.error ? L("Haiku did not answer: ", "Haiku не ответила: ")
+        + dictionary.error + L(". Until it does, the names are the sources'.", ". Пока названия — как у источника.") : "";
       const query = $("subject-search").value.trim().toLowerCase();
       const shown = dictionary.subjects.filter((s) =>
         [s.name, s.title, s.abbr].some((text) => text.toLowerCase().includes(query)));
@@ -931,11 +1017,12 @@
           el("div", {className: "hint"}, `${subject.title} · ${subject.abbr}`));
         main.onclick = () => openSubject(subject);
         return el("div", {className: "row"}, main,
-          el("span", {className: "badge"}, subject.manual ? "вручную" : "Haiku"));
+          el("span", {className: "badge"}, subject.manual ? L("manual", "вручную") : "Haiku"));
       });
       $("subjects").replaceChildren(rows.length ? el("div", {className: "list"}, ...rows) :
-        el("p", {className: "hint"}, dictionary.subjects.length ? "Ничего не нашлось." :
-          "Словарь пуст: курсы появятся из РУЗ и из дедлайнов."));
+        el("p", {className: "hint"}, dictionary.subjects.length ? L("Nothing found.", "Ничего не нашлось.") :
+          L("The dictionary is empty: courses come from RUZ and from the deadlines.",
+            "Словарь пуст: курсы появятся из РУЗ и из дедлайнов.")));
     }
 
     function openSubject(subject) {
@@ -945,7 +1032,7 @@
       const name = el("input", {value: subject.name, readOnly: !fresh, placeholder: "Математический анализ"});
       const title = el("input", {value: subject.title, maxLength: 40, placeholder: "Calculus"});
       const abbr = el("input", {value: subject.abbr, maxLength: dictionary.abbr_chars, placeholder: "Calc"});
-      const saveButton = el("button", {}, "Сохранить");
+      const saveButton = el("button", {}, L("Save", "Сохранить"));
       saveButton.onclick = async () => {
         try {
           await send("api/subjects", "PUT", {name: name.value, title: title.value, abbr: abbr.value});
@@ -957,28 +1044,32 @@
       };
       const actions = el("div", {className: "actions"}, saveButton);
       if (!fresh) {
-        const removeButton = el("button", {className: "danger"}, "Удалить");
-        removeButton.onclick = () => tg.showConfirm(subject.manual ? "Удалить запись? Haiku назовёт курс заново." :
-          "Удалить ответ Haiku? Курс будет назван заново.", async (yes) => {
-          if (!yes) return;
-          try {
-            await send("api/subjects", "DELETE", {name: subject.name});
-            await loadSubjects();
-            back();
-          } catch (error) {
-            tg.showAlert(error.message);
-          }
-        });
+        const removeButton = el("button", {className: "danger"}, L("Delete", "Удалить"));
+        removeButton.onclick = () => tg.showConfirm(subject.manual
+          ? L("Delete the entry? Haiku names the course again.", "Удалить запись? Haiku назовёт курс заново.")
+          : L("Delete Haiku's answer? The course is named again.", "Удалить ответ Haiku? Курс будет назван заново."),
+          async (yes) => {
+            if (!yes) return;
+            try {
+              await send("api/subjects", "DELETE", {name: subject.name});
+              await loadSubjects();
+              back();
+            } catch (error) {
+              tg.showAlert(error.message);
+            }
+          });
         actions.append(removeButton);
       }
       $("subject").replaceChildren(
-        el("h2", {}, fresh ? "Новая запись" : subject.name),
-        el("p", {className: "hint"}, subject.manual ? "Запись задана вручную." :
-          "Сейчас это ответ Haiku; после сохранения запись станет ручной."),
-        el("label", {className: "field"}, "Название, как у источника", name),
-        el("label", {className: "field"}, `По-английски, для расписания (в Tablo влезает ${dictionary.title_chars})`,
-          title),
-        el("label", {className: "field"}, `Сокращение для дедлайнов, до ${dictionary.abbr_chars} символов`, abbr),
+        el("h2", {}, fresh ? L("New entry", "Новая запись") : subject.name),
+        el("p", {className: "hint"}, subject.manual ? L("The entry is set by hand.", "Запись задана вручную.") :
+          L("Now it is Haiku's answer; saved, the entry becomes manual.",
+            "Сейчас это ответ Haiku; после сохранения запись станет ручной.")),
+        el("label", {className: "field"}, L("The name, as the source gives it", "Название, как у источника"), name),
+        el("label", {className: "field"}, L(`In English, for the timetable (Tablo fits ${dictionary.title_chars})`,
+          `По-английски, для расписания (в Tablo влезает ${dictionary.title_chars})`), title),
+        el("label", {className: "field"}, L(`The abbreviation for deadlines, up to ${dictionary.abbr_chars} characters`,
+          `Сокращение для дедлайнов, до ${dictionary.abbr_chars} символов`), abbr),
         actions);
     }
 
@@ -1033,7 +1124,7 @@
           const changed = JSON.stringify(state) !== JSON.stringify(hse.state);
           if (state.status.logged_in && changed) {
             stopHseWatch();
-            if (!hse.state.status.logged_in) hse.note = {ok: true, text: LOGGED_IN};
+            if (!hse.state.status.logged_in) hse.note = {ok: true, text: loggedIn()};
           }
           hse.state = state;
           if (changed) renderHseApp();  // not on every tick: a half-pasted address must stay
@@ -1043,13 +1134,15 @@
       }, 3000);
     }
 
-    const LOGGED_IN = "Вход выполнен. Дедлайны обновятся в течение минуты.";
+    const loggedIn = () => L("Logged in. The deadlines will be updated within a minute.",
+                             "Вход выполнен. Дедлайны обновятся в течение минуты.");
     const LOGIN_ERROR = "login needed: ";  // the status error when the session ended (collectors/hseapp.py)
 
     function openHseLink(app) {
       tg.openLink(app ? hse.appLink : hse.link);
       if (app) hse.appLink = null; else hse.link = null;  // used: a fresh one for the next tap
-      hse.note = {ok: true, text: "Вход открыт в браузере. После него вернитесь сюда: экран обновится сам."};
+      hse.note = {ok: true, text: L("The login is open in the browser. Come back here after it: the screen updates "
+        + "by itself.", "Вход открыт в браузере. После него вернитесь сюда: экран обновится сам.")};
       watchHseLogin();
       prepareHseLinks();
     }
@@ -1068,37 +1161,46 @@
     function hseCards(s) {
       const cards = [];
       if (!s.enabled) {
-        cards.push(el("div", {className: "card"}, "Опрос выключен: дедлайны из HSE App X не обновляются."));
+        cards.push(el("div", {className: "card"}, L("Polling is off: the deadlines of HSE App X are not updated.",
+          "Опрос выключен: дедлайны из HSE App X не обновляются.")));
       } else if (s.logged_in) {
-        cards.push(el("div", {className: "card"}, `Вход выполнен. Активных дедлайнов: ${s.items}, `
-          + `выполненных: ${s.done}` + (s.ok_at ? `. Обновлено ${when(s.ok_at)}.` : ". Опрос — вот-вот.")));
+        cards.push(el("div", {className: "card"}, L(`Logged in. Active deadlines: ${s.items}, done: ${s.done}`,
+          `Вход выполнен. Активных дедлайнов: ${s.items}, выполненных: ${s.done}`)
+          + (s.ok_at ? L(". Updated ", ". Обновлено ") + when(s.ok_at) + "." : L(". The poll is coming.",
+            ". Опрос — вот-вот."))));
       }
       const ended = (s.error || "").startsWith(LOGIN_ERROR);  // Keycloak ended the session: said in the card below
       if (s.enabled && !s.logged_in) {
-        const why = ended ? `Вход больше не действует (${s.error.slice(LOGIN_ERROR.length)}): дедлайны`
-          : "Нужен вход: без него дедлайны";
-        cards.push(el("div", {className: "card warn"}, why + " из HSE App X не обновляются"
-          + (s.items || s.done ? " — в списке последнее полученное." : ".")));
+        const why = ended ? L(`The login is no longer valid (${s.error.slice(LOGIN_ERROR.length)}): the deadlines`,
+          `Вход больше не действует (${s.error.slice(LOGIN_ERROR.length)}): дедлайны`)
+          : L("A login is needed: without it the deadlines", "Нужен вход: без него дедлайны");
+        cards.push(el("div", {className: "card warn"}, why + L(" of HSE App X are not updated",
+          " из HSE App X не обновляются") + (s.items || s.done ? L(": the list has the last ones received.",
+          " — в списке последнее полученное.") : ".")));
       }
       if (s.error && s.enabled && !ended) {
-        cards.push(el("div", {className: "card warn"}, "Последняя ошибка: " + s.error));
+        cards.push(el("div", {className: "card warn"}, L("The last error: ", "Последняя ошибка: ") + s.error));
       }
       if (s.labels_error) {
-        cards.push(el("div", {className: "card warn"}, "Английские названия ждут Haiku: " + s.labels_error
-          + ". Пока у новых дедлайнов русские названия."));
+        cards.push(el("div", {className: "card warn"}, L("The English titles wait for Haiku: ",
+          "Английские названия ждут Haiku: ") + s.labels_error + L(". Until then new deadlines have Russian titles.",
+          ". Пока у новых дедлайнов русские названия.")));
       }
       return cards;
     }
 
     function renderHseApp() {
       const s = hse.state.status;
-      const parts = [el("p", {className: "hint"}, "Дедлайны из приложения ВШЭ. Войти нужно один раз: дальше "
-        + "сервис сам продлевает вход при каждом опросе, раз в 15 минут."), ...hseCards(s),
-        el("div", {className: "list"}, settingRow("Опрашивать HSE App X",
-          "только один клиент на вход: в Tablo HSE App X должен быть выключен",
+      const parts = [el("p", {className: "hint"}, L("Deadlines from the HSE app. Log in once: after that the service "
+        + "renews the login itself at every poll, every 15 minutes.", "Дедлайны из приложения ВШЭ. Войти нужно один "
+        + "раз: дальше сервис сам продлевает вход при каждом опросе, раз в 15 минут.")), ...hseCards(s),
+        el("div", {className: "list"}, settingRow(L("Poll HSE App X", "Опрашивать HSE App X"),
+          L("one client per login: HSE App X must be off in Tablo",
+            "только один клиент на вход: в Tablo HSE App X должен быть выключен"),
           toggle(s.enabled, (on) => changeHseApp({enabled: on}))))];
       if (s.enabled) {
-        const login = el("button", {disabled: !hse.link}, s.logged_in ? "Войти заново" : "Войти");
+        const login = el("button", {disabled: !hse.link}, s.logged_in ? L("Log in again", "Войти заново") :
+          L("Log in", "Войти"));
         login.onclick = () => openHseLink(false);
         parts.push(el("div", {className: "actions"}, login));
       }
@@ -1108,22 +1210,24 @@
     }
 
     function hseFallback() {
-      const box = el("details", {className: "card", open: hse.fallback}, el("summary", {}, "Браузер не вернулся"));
+      const box = el("details", {className: "card", open: hse.fallback},
+        el("summary", {}, L("The browser did not come back", "Браузер не вернулся")));
       box.ontoggle = () => {
         if (box.open === hse.fallback) return;  // set by the render, not by a tap
         hse.fallback = box.open;
         if (box.open) prepareHseLinks();
       };
-      const appLogin = el("button", {disabled: !hse.appLink}, "Войти с адресом приложения");
+      const appLogin = el("button", {disabled: !hse.appLink}, L("Log in with the app's address",
+        "Войти с адресом приложения"));
       appLogin.onclick = () => openHseLink(true);
       const pasted = el("textarea", {rows: 3, value: hse.pasted, autocomplete: "off", spellcheck: false,
         placeholder: "https://…/hseapp/callback?state=…&code=…"});
       pasted.oninput = () => { hse.pasted = pasted.value; };
-      const saveLogin = el("button", {}, "Сохранить вход");
+      const saveLogin = el("button", {}, L("Save the login", "Сохранить вход"));
       saveLogin.onclick = async () => {
         try {
           hse.state = await send("api/hseapp/login", "POST", {url: hse.pasted});
-          hse.note = {ok: true, text: LOGGED_IN};
+          hse.note = {ok: true, text: loggedIn()};
           hse.pasted = "";
           hse.fallback = false;
           stopHseWatch();
@@ -1133,12 +1237,16 @@
         renderHseApp();
       };
       box.append(
-        el("p", {className: "hint"}, `После входа браузер сам возвращается на ${hse.state.callback} и пишет `
-          + "«Вход выполнен». Если эта страница не открылась, скопируйте её адрес из адресной строки целиком "
-          + "(в нём есть code=) и вставьте ниже в течение минуты."),
-        el("p", {className: "hint"}, "Если ВШЭ не пускает с этим адресом, войдите с адресом приложения: после "
+        el("p", {className: "hint"}, L(`After the login the browser comes back to ${hse.state.callback} by itself and `
+          + "says «Logged in». If that page did not open, copy its whole address from the address bar (it has code= in "
+          + "it) and paste it below within a minute.", `После входа браузер сам возвращается на ${hse.state.callback} `
+          + "и пишет «Вход выполнен». Если эта страница не открылась, скопируйте её адрес из адресной строки целиком "
+          + "(в нём есть code=) и вставьте ниже в течение минуты.")),
+        el("p", {className: "hint"}, L("If HSE does not let you in with this address, log in with the app's address: "
+          + "after the login the browser cannot open ru.hse.hseappx://…, and that address is the one to copy (Safari "
+          + "loses it, Chrome is needed).", "Если ВШЭ не пускает с этим адресом, войдите с адресом приложения: после "
           + "входа браузер не сможет открыть ru.hse.hseappx://… — этот адрес и нужно скопировать (Safari его "
-          + "теряет, нужен Chrome)."),
+          + "теряет, нужен Chrome).")),
         el("div", {className: "actions"}, appLogin), pasted, el("div", {className: "actions"}, saveLogin));
       return box;
     }
@@ -1163,7 +1271,7 @@
       const go = el("button", {type: "submit"}, button);
       const form = el("form", {}, el("label", {className: "field"}, label, input), el("div", {className: "actions"}, go));
       if (cancel) {
-        const stop = el("button", {type: "button", className: "danger"}, "Отмена");
+        const stop = el("button", {type: "button", className: "danger"}, L("Cancel", "Отмена"));
         stop.onclick = () => twinStep("api/twin/cancel");
         form.lastChild.append(stop);
       }
@@ -1174,41 +1282,48 @@
       const box = $("twin");
       box.hidden = false;
       if (t.account) {
-        const out = el("button", {className: "link"}, "Выйти");
-        out.onclick = () => tg.showConfirm("Выйти из аккаунта твинка? Чаты перестанут читаться, их настройки "
-          + "останутся.", (yes) => { if (yes) twinStep("api/twin/logout"); });
+        const out = el("button", {className: "link"}, L("Log out", "Выйти"));
+        out.onclick = () => tg.showConfirm(L("Log out of the twin's account? The chats stop being read, their settings "
+          + "stay.", "Выйти из аккаунта твинка? Чаты перестанут читаться, их настройки останутся."),
+          (yes) => { if (yes) twinStep("api/twin/logout"); });
         box.replaceChildren(el("div", {className: "row", style: "padding: 0"},
-          el("div", {className: "main"}, el("div", {className: "title"}, "Твинк: " + t.account.name
+          el("div", {className: "main"}, el("div", {className: "title"}, L("Twin: ", "Твинк: ") + t.account.name
             + (t.account.username ? " (@" + t.account.username + ")" : "")),
-            el("div", {className: t.error ? "hint warn" : "hint"}, t.error || "читает включённые чаты")),
+            el("div", {className: t.error ? "hint warn" : "hint"}, t.error || L("reads the enabled chats",
+              "читает включённые чаты"))),
           out));
         return;
       }
       let form;
       if (t.login && t.login.step === "code") {
         const code = el("input", {inputMode: "numeric", autocomplete: "one-time-code", placeholder: "12345"});
-        form = twinForm(`Код из Telegram твинка (${t.login.phone})`, code, "Войти", true);
+        form = twinForm(L(`The code from the twin's Telegram (${t.login.phone})`,
+          `Код из Telegram твинка (${t.login.phone})`), code, L("Log in", "Войти"), true);
         form.onsubmit = (event) => { event.preventDefault(); twinStep("api/twin/login", {code: code.value}); };
-        box.replaceChildren(el("p", {className: "hint"}, "Код приходит в Telegram твинка или по SMS. Не пересылайте "
-          + "его в Telegram: тогда он перестаёт действовать."), form);
+        box.replaceChildren(el("p", {className: "hint"}, L("The code comes to the twin's Telegram or by SMS. Do not "
+          + "forward it in Telegram: then it stops working.", "Код приходит в Telegram твинка или по SMS. Не "
+          + "пересылайте его в Telegram: тогда он перестаёт действовать.")), form);
       } else if (t.login && t.login.step === "password") {
         const password = el("input", {type: "password", autocomplete: "current-password"});
-        form = twinForm("Облачный пароль твинка", password, "Войти", true);
+        form = twinForm(L("The twin's cloud password", "Облачный пароль твинка"), password, L("Log in", "Войти"), true);
         form.onsubmit = (event) => { event.preventDefault(); twinStep("api/twin/login", {password: password.value}); };
         box.replaceChildren(form);
       } else {
         const phone = el("input", {type: "tel", autocomplete: "tel", placeholder: "+7…"});
-        form = twinForm("Телефон твинка", phone, "Получить код", false);
+        form = twinForm(L("The twin's phone", "Телефон твинка"), phone, L("Get a code", "Получить код"), false);
         form.onsubmit = (event) => { event.preventDefault(); twinStep("api/twin/login", {phone: phone.value}); };
-        box.replaceChildren(el("div", {className: "warn"}, "Твинк не читает чаты: " + (t.error || "нужен вход") + "."),
-          el("p", {className: "hint"}, "Отдельный аккаунт Telegram, не ваш основной и не бот."), form);
+        box.replaceChildren(el("div", {className: "warn"}, L("The twin reads no chats: ", "Твинк не читает чаты: ")
+          + (t.error || L("a login is needed", "нужен вход")) + "."),
+          el("p", {className: "hint"}, L("A Telegram account of its own, not your main one and not a bot.",
+            "Отдельный аккаунт Telegram, не ваш основной и не бот.")), form);
       }
     }
 
     // --- general settings -----------------------------------------------------
 
-    const PRICE_FIELDS = [["input", "вход"], ["output", "выход"], ["long_input", "вход > 100K"],
-                          ["long_output", "выход > 100K"]];
+    const PRICE_FIELDS = () => [["input", L("input", "вход")], ["output", L("output", "выход")],
+                                ["long_input", L("input > 100K", "вход > 100K")],
+                                ["long_output", L("output > 100K", "выход > 100K")]];
 
     async function loadGeneral() {
       try {
@@ -1227,20 +1342,53 @@
       }
     }
 
+    // The languages (р. 41): the Mini App's is drawn anew at once, the forum's applies to what the bot says next.
+    function languageSelect(value, onchange) {
+      const select = el("select", {}, ...Object.entries(LANGUAGE_NAMES).map(([code, name]) =>
+        el("option", {value: code}, name)));
+      select.value = value;
+      select.onchange = () => onchange(select.value);
+      return select;
+    }
+
+    async function changeLanguage(value) {
+      try {
+        await send("api/general", "PATCH", {miniapp_language: value});
+      } catch (error) {
+        tg.showAlert(error.message);
+        loadGeneral();
+        return;
+      }
+      start("general");
+    }
+
     function renderGeneral(data) {
       const every = el("select", {}, ...data.batch_choices.map((n) =>
-        el("option", {value: n, selected: n === data.batch_hours}, `${n} ч`)));
+        el("option", {value: n, selected: n === data.batch_hours}, L(`${n} h`, `${n} ч`))));
       every.onchange = () => changeGeneral({batch_hours: Number(every.value)});
       const ttl = el("input", {type: "number", min: 1, max: 168, step: 1, value: data.news_ttl_hours});
       ttl.onchange = () => changeGeneral({news_ttl_hours: Number(ttl.value)});
-      const parts = [el("p", {className: "hint"}, "Остальные настройки — на своих экранах: чаты, расход LLM, листочки, "
-        + "сводки, оценки, HSE App X. Секреты (токены, пароль почты, ссылка РУЗ) — в .env на сервере."),
+      const parts = [el("p", {className: "hint"}, L("The other settings are on their own screens: chats, LLM spending, "
+        + "sheets, summaries, grades, HSE App X. The secrets (tokens, the mail password, the RUZ link) are in .env on "
+        + "the server.", "Остальные настройки — на своих экранах: чаты, расход LLM, листочки, сводки, оценки, HSE App X. "
+        + "Секреты (токены, пароль почты, ссылка РУЗ) — в .env на сервере.")),
         el("div", {className: "list"},
-          settingRow("Разбор пачек", "каждые N часов, в часы суток, кратные N; у чата может быть свой", every),
-          settingRow("Новости живут, ч", "в форуме и в Tablo; неучебное старше этого разбирается без модели", ttl))];
+          settingRow(L("Batch parsing", "Разбор пачек"), L("every N hours, at the hours of the day divisible by N; a "
+            + "chat may have its own", "каждые N часов, в часы суток, кратные N; у чата может быть свой"), every),
+          settingRow(L("News lives, h", "Новости живут, ч"), L("in the forum and in Tablo; non-study messages older "
+            + "than this are parsed without the model", "в форуме и в Tablo; неучебное старше этого разбирается без "
+            + "модели"), ttl)),
+        el("h3", {}, L("Language", "Язык")),
+        el("div", {className: "list"},
+          settingRow("Mini App", L("this app and the HSE App X login page", "это приложение и страница входа HSE App X"),
+            languageSelect(data.miniapp_language, changeLanguage)),
+          settingRow(L("Forum", "Форум"), L("the bot's messages, buttons and answers, the summaries and the sheets' "
+            + "descriptions; news and deadline titles stay English, as Tablo gets them", "сообщения, кнопки и ответы "
+            + "бота, сводки и описания листочков; новости и названия дедлайнов остаются английскими, как в Tablo"),
+            languageSelect(data.forum_language, (value) => changeGeneral({forum_language: value}))))];
       for (const [model, price] of Object.entries(data.llm_prices)) {
-        parts.push(el("h3", {}, `${model} · $ за 1 млн токенов`));
-        parts.push(el("div", {className: "list"}, ...PRICE_FIELDS.map(([key, title]) => {
+        parts.push(el("h3", {}, L(`${model} · $ per 1M tokens`, `${model} · $ за 1 млн токенов`)));
+        parts.push(el("div", {className: "list"}, ...PRICE_FIELDS().map(([key, title]) => {
           const input = el("input", {type: "number", min: 0, step: 0.01, value: price[key]});
           input.onchange = () => changeGeneral({llm_prices: {...data.llm_prices,
                                                              [model]: {...price, [key]: Number(input.value)}}});
@@ -1252,9 +1400,12 @@
 
     // --- LLM spending ---------------------------------------------------------
 
-    const TASKS = {batch: "Разбор пачек", image: "Картинки", pdf: "PDF целиком", summary: "Сводки",
-                   subjects: "Словарь", grades: "Оценки", hseapp_labels: "Метки HSE App X"};
-    const PERIODS = [["today", "Сегодня"], ["week", "Неделя"], ["month", "Месяц"]];
+    const TASKS = () => L({batch: "Batch parsing", image: "Images", pdf: "Whole PDF", summary: "Summaries",
+                           subjects: "Dictionary", grades: "Grades", hseapp_labels: "HSE App X labels"},
+                          {batch: "Разбор пачек", image: "Картинки", pdf: "PDF целиком", summary: "Сводки",
+                           subjects: "Словарь", grades: "Оценки", hseapp_labels: "Метки HSE App X"});
+    const PERIODS = () => [["today", L("Today", "Сегодня")], ["week", L("Week", "Неделя")],
+                           ["month", L("Month", "Месяц")]];
     const llmView = {data: null, period: "today", day: null};
     const SVG = "http://www.w3.org/2000/svg";
 
@@ -1263,6 +1414,7 @@
     }
 
     function runs(n) {
+      if (lang !== "ru") return `${n} call${n === 1 ? "" : "s"}`;
       const last = n % 10, tens = n % 100;
       const word = last === 1 && tens !== 11 ? "вызов"
         : last >= 2 && last <= 4 && (tens < 12 || tens > 14) ? "вызова" : "вызовов";
@@ -1271,7 +1423,7 @@
 
     function shortDay(iso) {
       const date = new Date(iso + "T12:00:00");
-      return `${WEEKDAYS[date.getDay()]} ${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+      return `${WEEKDAYS()[date.getDay()]} ${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
     }
 
     async function loadLlm() {
@@ -1318,7 +1470,8 @@
       for (const i of [0, Math.floor(last / 2), last]) {
         const label = svg("text", {x: i * step + step / 2, y: height - 3, "font-size": 9, fill: "currentColor",
                                    opacity: .6, "text-anchor": i === 0 ? "start" : i === last ? "end" : "middle"});
-        label.textContent = i === last ? "сегодня" : data.days[i].day.slice(8, 10) + "." + data.days[i].day.slice(5, 7);
+        label.textContent = i === last ? L("today", "сегодня")
+          : data.days[i].day.slice(8, 10) + "." + data.days[i].day.slice(5, 7);
         picture.append(label);
       }
       return picture;
@@ -1334,26 +1487,30 @@
     }
 
     function showLlmLine(spent, limit, count) {
-      $("llm").replaceChildren(el("span", {}, `LLM сегодня: ${usd(spent)} из ${usd(limit)}, ${runs(count)}`),
-        el("span", {className: "hint"}, "›"));
+      $("llm").replaceChildren(el("span", {}, L(`LLM today: ${usd(spent)} of ${usd(limit)}, ${runs(count)}`,
+        `LLM сегодня: ${usd(spent)} из ${usd(limit)}, ${runs(count)}`)), el("span", {className: "hint"}, "›"));
     }
 
     function renderLlm(data) {
       llmView.data = data;
       showLlmLine(data.spent_usd, data.limit_usd, data.periods.today.runs);
       const period = data.periods[llmView.period];
-      const parts = [el("p", {className: "hint"}, "Все вызовы Haiku, неудачные тоже. Сутки — по Москве, неделя "
-        + "с понедельника. Выше 80 % лимита отключаются картинки, PDF целиком и ежедневная сводка; на 100 % вызовы "
-        + "стоят до полуночи.")];
+      const parts = [el("p", {className: "hint"}, L("Every call of Haiku, the failed ones too. A day is Moscow's, a "
+        + "week starts on Monday. Above 80 % of the limit images, whole PDFs and the daily summary are off; at 100 % "
+        + "calls wait until midnight.", "Все вызовы Haiku, неудачные тоже. Сутки — по Москве, неделя с понедельника. "
+        + "Выше 80 % лимита отключаются картинки, PDF целиком и ежедневная сводка; на 100 % вызовы стоят до "
+        + "полуночи."))];
       if (data.level !== "ok") {
         parts.push(el("div", {className: "card warn"}, data.level === "hard"
-          ? "Лимит на сегодня исчерпан: вызовы стоят до полуночи, сообщения ждут в очереди."
-          : "Больше 80 % лимита: картинки, PDF целиком и ежедневная сводка отключены до полуночи."));
+          ? L("Today's limit is spent: calls wait until midnight, messages wait in the queue.",
+            "Лимит на сегодня исчерпан: вызовы стоят до полуночи, сообщения ждут в очереди.")
+          : L("Over 80 % of the limit: images, whole PDFs and the daily summary are off until midnight.",
+            "Больше 80 % лимита: картинки, PDF целиком и ежедневная сводка отключены до полуночи.")));
       }
       const share = Math.round(data.spent_usd / data.limit_usd * 100);
-      const subtitles = {today: `${share} % лимита`, week: runs(data.periods.week.runs),
-                         month: `прогноз ${usd(data.month_forecast_usd)}`};
-      parts.push(el("div", {className: "periods"}, ...PERIODS.map(([name, title]) => {
+      const subtitles = {today: L(`${share} % of the limit`, `${share} % лимита`), week: runs(data.periods.week.runs),
+                         month: L("forecast ", "прогноз ") + usd(data.month_forecast_usd)};
+      parts.push(el("div", {className: "periods"}, ...PERIODS().map(([name, title]) => {
         const button = el("button", {className: name === llmView.period ? "on" : ""},
           el("div", {className: "hint"}, title), el("div", {className: "sum"}, usd(data.periods[name].cost_usd)),
           el("div", {className: "hint"}, subtitles[name]));
@@ -1361,42 +1518,49 @@
         return button;
       })));
 
-      parts.push(el("h3", {}, `${data.days.length} дней`));
+      parts.push(el("h3", {}, L(`${data.days.length} days`, `${data.days.length} дней`)));
       parts.push(el("div", {className: "card"}, chart(data), el("div", {className: "hint"}, (() => {
         const day = data.days.find((d) => d.day === llmView.day);
-        if (!day) return `Пунктир — лимит ${usd(data.daily_limit_usd)} в день, красные дни упёрлись в лимит. `
-          + "Нажмите на столбик.";
+        if (!day) {
+          return L(`The dashes are the limit, ${usd(data.daily_limit_usd)} a day; red days hit the limit. Tap a bar.`,
+            `Пунктир — лимит ${usd(data.daily_limit_usd)} в день, красные дни упёрлись в лимит. Нажмите на столбик.`);
+        }
         return `${shortDay(day.day)}: ${usd(day.cost_usd)}, ${runs(day.runs)}`
-          + (day.failed ? `, неудачных ${day.failed}` : "") + (day.stopped ? ", лимит исчерпан" : "");
+          + (day.failed ? L(`, failed ${day.failed}`, `, неудачных ${day.failed}`) : "")
+          + (day.stopped ? L(", the limit was spent", ", лимит исчерпан") : "");
       })())));
 
-      const title = PERIODS.find(([name]) => name === llmView.period)[1].toLowerCase();
-      parts.push(el("h3", {}, `По задачам · ${title}`));
+      const title = PERIODS().find(([name]) => name === llmView.period)[1].toLowerCase();
+      parts.push(el("h3", {}, L("By task · ", "По задачам · ") + title));
       if (!period.runs) {
-        parts.push(el("p", {className: "hint"}, "Вызовов не было."));
+        parts.push(el("p", {className: "hint"}, L("No calls.", "Вызовов не было.")));
       } else {
-        parts.push(el("div", {className: "list"}, ...period.by_task.map((row) => costRow(TASKS[row.task] || row.task,
-          runs(row.runs) + (row.failed ? `, неудачных ${row.failed}` : ""), row.cost_usd, period.cost_usd))));
-        parts.push(el("h3", {}, `По чатам · ${title}`));
+        parts.push(el("div", {className: "list"}, ...period.by_task.map((row) => costRow(TASKS()[row.task] || row.task,
+          runs(row.runs) + (row.failed ? L(`, failed ${row.failed}`, `, неудачных ${row.failed}`) : ""), row.cost_usd,
+          period.cost_usd))));
+        parts.push(el("h3", {}, L("By chat · ", "По чатам · ") + title));
         const chatted = period.by_chat.reduce((sum, row) => sum + row.cost_usd, 0);
         const rows = period.by_chat.map((row) => costRow(row.title, runs(row.runs), row.cost_usd, period.cost_usd));
         if (period.cost_usd - chatted > 0.0005) {
-          rows.push(costRow("Без чата", "словарь, оценки, метки HSE App X", period.cost_usd - chatted,
-                            period.cost_usd));
+          rows.push(costRow(L("No chat", "Без чата"), L("dictionary, grades, HSE App X labels",
+            "словарь, оценки, метки HSE App X"), period.cost_usd - chatted, period.cost_usd));
         }
         parts.push(el("div", {className: "list"}, ...rows));
       }
 
-      parts.push(el("h3", {}, "Лимит"));
+      parts.push(el("h3", {}, L("Limit", "Лимит")));
       const limit = el("input", {type: "number", min: 0.05, step: 0.05, value: data.daily_limit_usd});
       limit.onchange = () => changeLlm("api/llm", "PATCH", {daily_limit_usd: Number(limit.value)});
       const raise = el("button", {className: "link"}, `+${usd(data.daily_limit_usd)}`);
-      raise.onclick = () => tg.showConfirm(`Поднять лимит на сегодня до ${usd(data.limit_usd + data.daily_limit_usd)}?`,
+      const raised = usd(data.limit_usd + data.daily_limit_usd);
+      raise.onclick = () => tg.showConfirm(L(`Raise today's limit to ${raised}?`, `Поднять лимит на сегодня до ${raised}?`),
         (yes) => { if (yes) changeLlm("api/llm/raise", "POST", {}); });
       parts.push(el("div", {className: "list"},
-        settingRow("В день, $", "каждые сутки по Москве", limit),
-        settingRow("Поднять на сегодня", data.raised_usd
-          ? `сегодня уже поднят на ${usd(data.raised_usd)}, до полуночи` : "до полуночи, как кнопка в «Системе»",
+        settingRow(L("A day, $", "В день, $"), L("every Moscow day", "каждые сутки по Москве"), limit),
+        settingRow(L("Raise for today", "Поднять на сегодня"), data.raised_usd
+          ? L(`raised by ${usd(data.raised_usd)} today already, until midnight`,
+            `сегодня уже поднят на ${usd(data.raised_usd)}, до полуночи`)
+          : L("until midnight, like the button in «System»", "до полуночи, как кнопка в «Системе»"),
           raise)));
       $("tab-llm").replaceChildren(...parts);
     }
@@ -1427,31 +1591,38 @@
     $("search").oninput = renderList;
     $("subject-search").oninput = renderSubjects;
     $("subject-add").onclick = () => openSubject(null);
-    for (const button of $("tabs").querySelectorAll("button")) button.onclick = () => showTab(button.dataset.tab);
     $("llm").onclick = () => showTab("llm");
 
-    Promise.all([call("api/me"), call("api/chats")])
-      .then(([me, list]) => {
-        $("title").textContent = "Привет, " + me.first_name;
-        $("state").hidden = true;
-        showLlmLine(me.llm.spent_usd, me.llm.limit_usd, me.llm.runs_today);
-        $("llm").hidden = false;
-        $("tabs").hidden = false;
-        renderTwin(list.twin);
-        const mail = list.mail || {};
-        if (mail.configured) {  // collectors/mail.py: letters are read with the chats
-          $("mail").textContent = mail.error ? "Почта не читается: " + mail.error + "."
-            : `Почта: писем за 14 дней — ${mail.letters}` + (mail.ok_at ? `, проверена ${mail.ok_at.slice(11, 16)}` : "");
-          $("mail").classList.toggle("warn", Boolean(mail.error));
-          $("mail").hidden = false;
-        }
-        chats = list.chats;
-        $("search").hidden = chats.length < 8;
-        renderList();
-        renderImages(list.images);
-        if (startScreen && $("tab-" + startScreen)) showTab(startScreen);
-      })
-      .catch((error) => { $("state").textContent = error.message; });
+    // The home screen and the screen to show, again after the Mini App's language changed.
+    function start(screen) {
+      return Promise.all([call("api/me"), call("api/chats")])
+        .then(([me, list]) => {
+          lang = me.language;
+          applyLanguage();
+          $("title").textContent = L("Hi, ", "Привет, ") + me.first_name;
+          $("state").hidden = true;
+          showLlmLine(me.llm.spent_usd, me.llm.limit_usd, me.llm.runs_today);
+          $("llm").hidden = false;
+          $("tabs").hidden = false;
+          renderTwin(list.twin);
+          const mail = list.mail || {};
+          if (mail.configured) {  // collectors/mail.py: letters are read with the chats
+            $("mail").textContent = mail.error ? L("The mail is not read: ", "Почта не читается: ") + mail.error + "."
+              : L("Mail: letters of 14 days: ", "Почта: писем за 14 дней — ") + mail.letters
+                + (mail.ok_at ? L(", checked ", ", проверена ") + mail.ok_at.slice(11, 16) : "");
+            $("mail").classList.toggle("warn", Boolean(mail.error));
+            $("mail").hidden = false;
+          }
+          chats = list.chats;
+          $("search").hidden = chats.length < 8;
+          renderList();
+          renderImages(list.images);
+          showTab(screen && $("tab-" + screen) ? screen : "chats");
+        })
+        .catch((error) => { $("state").hidden = false; $("state").textContent = error.message; });
+    }
+
+    start(startScreen);
   </script>
 </body>
 </html>

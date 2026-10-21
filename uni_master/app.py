@@ -17,6 +17,7 @@ from .collectors.mail import Mail
 from .collectors.ruz import Diff, Ruz
 from .collectors.telegram import Twin
 from .config import Env
+from .i18n import Phrase
 from .llm.budget import Budget
 from .llm.client import Haiku
 from .llm.journal import Journal
@@ -137,17 +138,18 @@ class Service:
         self.forum.on_button(SUMMARY_BUTTON, self.summary_topic.on_button)
         self.forum.on_command(SUMMARY_COMMAND, self.summary_topic.on_command)
 
-    def _to_system(self, text: str) -> None:
+    def _to_system(self, text: Phrase) -> None:
         self.forum.spawn(self.forum.post("system", text))
 
-    def _twin_notice(self, text: str) -> None:
-        """Twin.notify_login: the line gets the button that leads to the login on the Mini App's «Чаты» screen."""
-        button = self.forum.app_button("Войти в твинк", "chats")
+    def _twin_notice(self, text: Phrase) -> None:
+        """Twin.notify_login: the line gets the button that leads to the login on the Mini App's «Chats» screen."""
+        button = self.forum.app_button(self.forum.tr("Log the twin in", "Войти в твинк"), "chats")
         self.forum.spawn(self.forum.post("system", text, buttons=[button] if button else None))
 
-    def _hseapp_notice(self, text: str, login: bool) -> None:
+    def _hseapp_notice(self, text: Phrase, login: bool) -> None:
         """HseApp.notify: a line for the System topic; one that asks for a login gets the button to the Mini App."""
-        button = self.forum.app_button("Войти в HSE App X", "hseapp") if login else None
+        button = self.forum.app_button(self.forum.tr("Log in to HSE App X", "Войти в HSE App X"), "hseapp") \
+            if login else None
         self.forum.spawn(self.forum.post("system", text, buttons=[button] if button else None))
 
     async def _publish(self, changes: Changes) -> None:
@@ -225,7 +227,7 @@ class Service:
                      self.env.internal_port)
             if not self.env.calendar_secret:
                 log.info("CALENDAR_SECRET is not set: the iCal feeds are off")
-            await self.forum.post("system", "uni-master запущен.")
+            await self.forum.post("system", Phrase("uni-master is up.", "uni-master запущен."))
             await self.twin.start()  # without a login the service runs on, and the twin says so
             tasks.append(asyncio.create_task(self._prune()))
             tasks.append(asyncio.create_task(self.batches.run()))

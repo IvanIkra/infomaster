@@ -35,7 +35,7 @@ class FakeLLM:
         self.answers, self.readings, self.calls = [], [], []
 
     async def json(self, task, system, prompt, schema, *, max_tokens, chat_id=None, documents=()):
-        self.calls.append(SimpleNamespace(task=task, prompt=prompt, documents=list(documents)))
+        self.calls.append(SimpleNamespace(task=task, system=system, prompt=prompt, documents=list(documents)))
         answer = (self.answers if task == "batch" else self.readings).pop(0)
         if isinstance(answer, Exception):
             raise answer
@@ -282,6 +282,7 @@ async def test_same_message_new_file_is_a_version(batches, llm, sheets, topic, f
 async def test_reading_the_whole_sheet(batches, llm, sheets, topic, forum, schedule):
     sheets.chat_settings.update(CHAT, {"pdf_content": True})
     sheets.settings.set("pdf_pages", 1)
+    sheets.settings.set("forum_language", "ru")  # the summary is written for the forum (р. 41)
     await schedule.subjects.resolve(["Математический анализ"])
     llm.readings = [{"summary": "Ряды: 6 задач, сдать в LMS.",
                      "deadlines": [{"label": "Calc sheet 3", "due": "2026-10-29"},
@@ -292,6 +293,7 @@ async def test_reading_the_whole_sheet(batches, llm, sheets, topic, forum, sched
     await topic.publish()
     reading = llm.calls[-1]
     assert reading.task == "pdf" and reading.documents == []
+    assert "- summary: in Russian" in reading.system and 'no "в этом листке"' in reading.system
     assert "Course: Математический анализ, abbreviation Calc" in reading.prompt
     assert "Text of the sheet (1 of 2 pages):\n--- page 1 ---\nCalculus. Sheet 3" in reading.prompt
     assert "Task 1" not in reading.prompt  # past the page limit
@@ -309,6 +311,7 @@ async def test_reading_the_whole_sheet(batches, llm, sheets, topic, forum, sched
     await topic.publish()
     describing = llm.calls[-1]
     assert describing.task == "pdf" and "Changed lines:\n-Hand in by 29.10 23:59 in the LMS" in describing.prompt
+    assert "Output changes: in Russian" in describing.system and "Изменилось только оформление." in describing.system
     assert "+Task 1. Prove that the series converges" in describing.prompt
     reply = max(forum.replies)
     assert "\nСрок сдвинут на 30.10, в задаче 1 уточнено условие.\n" in forum.messages[reply][1]
@@ -343,7 +346,7 @@ async def test_a_failed_post_waits_and_a_lost_file_fails(batches, llm, sheets, t
     await found(batches, llm, 2, make_pdf(["Sheet 9"]), number="9")
     batches.files.by_hash(sheets.get(2)["sha256"]).unlink()
     await topic.publish()
-    assert sheets.get(2)["status"] == "failed" and sheets.get(2)["error"] == "файл уже удалён"
+    assert sheets.get(2)["status"] == "failed" and sheets.get(2)["error"] == "the file is deleted already"
 
 
 async def test_owner_joins_a_sheet_to_an_older_one(batches, llm, sheets, topic, forum):
@@ -353,14 +356,14 @@ async def test_owner_joins_a_sheet_to_an_older_one(batches, llm, sheets, topic, 
     first, own = sheets.get(1)["post_id"], sheets.get(2)["post_id"]
     assert first != own and sheets.get(2)["previous"] is None
 
-    with pytest.raises(ValueError, match="тот же листок"):
+    with pytest.raises(ValueError, match="the same sheet"):
         await topic.join(1, 1)
     await topic.join(2, 1)
     assert own in forum.deleted and list(forum.files) == [first] and forum.files[first][0] == SHEET3_FIXED
     joined = sheets.get(2)
     assert (joined["previous"], joined["version"], joined["post_id"]) == (1, 2, first)
     assert forum.replies[max(forum.replies)] == first
-    with pytest.raises(ValueError, match="уже есть версии"):
+    with pytest.raises(ValueError, match="has versions already"):
         await topic.join(1, 2)
     assert [(s["id"], s["first"], s["versions"]) for s in sheets.listing()] == [(2, 1, 2)]
 

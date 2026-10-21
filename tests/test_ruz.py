@@ -80,7 +80,7 @@ async def server(aiohttp_server):
 def collector(url, store, now) -> Ruz:
     ruz = Ruz(url, store, now=now)
     ruz.polls, ruz.notices = [], []
-    ruz.notify = ruz.notices.append
+    ruz.notify = lambda line: ruz.notices.append(line.ru)  # a Phrase: the forum picks its language
 
     async def on_poll(diff):
         ruz.polls.append(diff)

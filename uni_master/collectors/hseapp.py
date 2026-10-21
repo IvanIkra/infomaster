@@ -36,6 +36,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import aiohttp
 
 from .. import clock
+from ..i18n import Phrase
 from ..settings import Settings
 from ..store import Store
 
@@ -154,24 +155,29 @@ class Auth:
 
     async def finish_login(self, session: aiohttp.ClientSession, returned: str) -> None:
         """`returned`: the return address with ?state=…&code=…, from the callback or pasted by hand. Raises
-        ValueError with the reason in Russian, for the Mini App and the callback page."""
+        ValueError with the reason (a Phrase), for the Mini App and the callback page."""
         query = parse_qs(urlsplit(returned.strip()).query)
         code, state = _first(query, "code"), _first(query, "state")
         if not code:
             if error := _first(query, "error"):
-                raise ValueError(f"ВШЭ не пустила: {_first(query, 'error_description') or error}")
-            raise ValueError("в адресе нет кода: скопируйте адрес из адресной строки целиком")
+                why = _first(query, "error_description") or error
+                raise ValueError(Phrase(f"HSE did not let you in: {why}", f"ВШЭ не пустила: {why}"))
+            raise ValueError(Phrase("the address has no code: copy the whole address from the address bar",
+                                    "в адресе нет кода: скопируйте адрес из адресной строки целиком"))
         verifier, redirect_uri = self._pending.pop(state, (None, None)) if state else (None, None)
         if not verifier:
-            raise ValueError("эта ссылка входа устарела: откройте новую в Mini App")
+            raise ValueError(Phrase("this login link is out of date: open a new one in the Mini App",
+                                    "эта ссылка входа устарела: откройте новую в Mini App"))
         try:
             async with self._lock:
                 await self._token_request(session, {"grant_type": "authorization_code", "code": code,
                                                     "redirect_uri": redirect_uri, "code_verifier": verifier})
         except LoginNeeded as e:
-            raise ValueError(f"ВШЭ не приняла код ({e}): войдите ещё раз") from None
+            raise ValueError(Phrase(f"HSE did not take the code ({e}): log in again",
+                                    f"ВШЭ не приняла код ({e}): войдите ещё раз")) from None
         except ValueError:
-            raise ValueError("сервер входа ВШЭ ответил непонятно: войдите ещё раз") from None
+            raise ValueError(Phrase("the HSE login server gave an unclear answer: log in again",
+                                    "сервер входа ВШЭ ответил непонятно: войдите ещё раз")) from None
 
 
 def _first(query: dict[str, list[str]], name: str) -> str | None:
@@ -249,7 +255,7 @@ class HseApp:
         self.auth = Auth(store, now)
         self.on_poll: Callable[[list[Raw], list[Raw]], Awaitable[None]] | None = None  # active, done
         # A line for the System topic; True asks for the button that opens the Mini App's HSE App X screen.
-        self.notify: Callable[[str, bool], None] | None = None
+        self.notify: Callable[[Phrase, bool], None] | None = None
         self.ok_at: str | None = None
         self.error: str | None = None
         self._failing_since: dt.datetime | None = None
@@ -273,12 +279,14 @@ class HseApp:
         return self.auth.login_url(APP_REDIRECT_URI if app else self.callback_url)
 
     async def login(self, returned: str) -> None:
-        """Finish a login with the return address; ValueError with the reason in Russian."""
+        """Finish a login with the return address; ValueError with the reason (a Phrase)."""
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=LOGIN_TIMEOUT)) as session:
                 await self.auth.finish_login(session, returned)
         except (aiohttp.ClientError, TimeoutError) as e:
-            raise ValueError(f"сервер входа ВШЭ недоступен ({type(e).__name__}): попробуйте ещё раз") from None
+            what = type(e).__name__
+            raise ValueError(Phrase(f"the HSE login server is unavailable ({what}): try again",
+                                    f"сервер входа ВШЭ недоступен ({what}): попробуйте ещё раз")) from None
         self.error = None
         log.info("HSE App X: logged in")
         self._tell_login()
@@ -367,16 +375,21 @@ class HseApp:
             if self.auth.ever:
                 reason = self.error.removeprefix(LOGIN_ERROR) if (self.error or "").startswith(LOGIN_ERROR) else ""
                 why = f" ({reason})" if reason else ""
-                text = (f"Вход в HSE App X больше не действует{why}: дедлайны оттуда не обновляются.\n"
-                        "Войти заново — кнопкой ниже или в Mini App, экран «HSE App X».")
+                text = Phrase(f"The HSE App X login is no longer valid{why}: its deadlines are not updated.\n"
+                              "Log in again with the button below or in the Mini App, screen «HSE App X».",
+                              f"Вход в HSE App X больше не действует{why}: дедлайны оттуда не обновляются.\n"
+                              "Войти заново — кнопкой ниже или в Mini App, экран «HSE App X».")
             else:
-                text = ("Нужен вход в HSE App X: без него дедлайны оттуда не приходят.\n"
-                        "Войти — кнопкой ниже или в Mini App, экран «HSE App X».")
+                text = Phrase("An HSE App X login is needed: without it no deadlines come from there.\n"
+                              "Log in with the button below or in the Mini App, screen «HSE App X».",
+                              "Нужен вход в HSE App X: без него дедлайны оттуда не приходят.\n"
+                              "Войти — кнопкой ниже или в Mini App, экран «HSE App X».")
             self._notify(text, login=True)
         elif told and (logged_in or not enabled):
             self.store.put_json(TOLD_KEY, False)
             if logged_in:
-                self._notify("Вход в HSE App X выполнен: дедлайны обновляются.")
+                self._notify(Phrase("Logged in to HSE App X: the deadlines are updated.",
+                                    "Вход в HSE App X выполнен: дедлайны обновляются."))
 
     def _failed(self, error: str) -> None:
         self.error = error
@@ -386,15 +399,17 @@ class HseApp:
         if not self._told_down and now - self._failing_since >= STALE_AFTER:
             self._told_down = True
             since = self._failing_since.astimezone(clock.TZ)
-            self._notify(f"HSE App X недоступен с {since:%d.%m %H:%M}: {error}.\n"
-                         "В дедлайнах — последний полученный список.")
+            self._notify(Phrase(f"HSE App X is unavailable since {since:%d.%m %H:%M}: {error}.\n"
+                                "The deadlines have the last list received.",
+                                f"HSE App X недоступен с {since:%d.%m %H:%M}: {error}.\n"
+                                "В дедлайнах — последний полученный список."))
 
     def _recovered(self) -> None:
         if self._told_down:
-            self._notify("HSE App X снова доступен.")
+            self._notify(Phrase("HSE App X is available again.", "HSE App X снова доступен."))
         self.ok_at, self.error = clock.local_iso(self.now()), None
         self._failing_since, self._told_down = None, False
 
-    def _notify(self, text: str, login: bool = False) -> None:
+    def _notify(self, text: Phrase, login: bool = False) -> None:
         if self.notify is not None:
             self.notify(text, login)

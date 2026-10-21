@@ -87,7 +87,8 @@ def test_chat_kind():
 def twin(store, tmp_path):
     inbox, chat_settings = Inbox(store), ChatSettings(store)
     notices = []
-    twin = telegram.Twin(SimpleNamespace(), inbox, chat_settings, tmp_path / "twin", notices.append)
+    twin = telegram.Twin(SimpleNamespace(), inbox, chat_settings, tmp_path / "twin",
+                         lambda line: notices.append(line.ru))  # a Phrase: the forum picks its language
     twin.notices = notices
     inbox.put_chat(CHANNEL, "Матан", "supergroup", None, 4)
     return twin
@@ -231,13 +232,13 @@ def fake_client(monkeypatch):
 
 async def test_login_and_logout(twin, fake_client):
     twin.env = SimpleNamespace(api_id=1, api_hash="h", owner_id=42)
-    with pytest.raises(telegram.LoginError, match="сначала запросите код"):
+    with pytest.raises(telegram.LoginError, match="ask for a code first"):
         await twin.sign_in(code="12345")
-    with pytest.raises(telegram.LoginError, match="не знает"):
+    with pytest.raises(telegram.LoginError, match="does not know"):
         await twin.send_code("+7 000 000-00-00")
     await twin.send_code("+7 (916) 123-45-67")
     assert twin.status()["login"] == {"step": "code", "phone": "+7916•••••67"}
-    with pytest.raises(telegram.LoginError, match="неверный код"):
+    with pytest.raises(telegram.LoginError, match="wrong code"):
         await twin.sign_in(code="11111")
     assert twin.client is None and twin.status()["login"]["step"] == "code"  # one more try with the same code
 
@@ -247,7 +248,7 @@ async def test_login_and_logout(twin, fake_client):
     assert status["login_needed"] is False and status["error"] is None and twin.changed.is_set()
     assert twin.client.handlers and "Твинк вошёл: Twin" in twin.notices[-1]
     assert telegram.session_file(twin.session).stat().st_mode & 0o777 == 0o600
-    with pytest.raises(telegram.LoginError, match="уже вошёл"):
+    with pytest.raises(telegram.LoginError, match="logged in already"):
         await twin.send_code("+79161234567")
 
     twin.changed.clear()
@@ -255,7 +256,7 @@ async def test_login_and_logout(twin, fake_client):
     assert twin.client is None and not telegram.session_file(twin.session).exists() and twin.changed.is_set()
     assert twin.status()["login_needed"] is True and twin.status()["account"] is None
     assert "вышел из аккаунта Twin" in twin.notices[-1]
-    with pytest.raises(telegram.LoginError, match="и так не вошёл"):
+    with pytest.raises(telegram.LoginError, match="not logged in anyway"):
         await twin.logout()
 
 
@@ -265,7 +266,7 @@ async def test_login_with_a_cloud_password(twin, fake_client):
     await twin.send_code("+79161234567")
     await twin.sign_in(code="12345")
     assert twin.status()["login"]["step"] == "password" and twin.client is None
-    with pytest.raises(telegram.LoginError, match="неверный облачный пароль"):
+    with pytest.raises(telegram.LoginError, match="wrong cloud password"):
         await twin.sign_in(password="nope")
     await twin.sign_in(password="pw")
     assert twin.status()["account"]["name"] == "Twin"
@@ -282,6 +283,6 @@ async def test_login_with_a_cloud_password(twin, fake_client):
 async def test_the_owners_account_is_no_twin(twin, fake_client):
     twin.env = SimpleNamespace(api_id=1, api_hash="h", owner_id=777)
     await twin.send_code("+79161234567")
-    with pytest.raises(telegram.LoginError, match="это не твинк"):
+    with pytest.raises(telegram.LoginError, match="this is no twin"):
         await twin.sign_in(code="12345")
     assert twin.client is None and not telegram.session_file(twin.session).exists()

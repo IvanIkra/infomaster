@@ -6,9 +6,11 @@ import datetime as dt
 import pytest
 from conftest import Press, labels
 
+from uni_master import clock
 from uni_master.collectors.inbox import Inbox
 from uni_master.outputs import deadlines as topic_module
-from uni_master.outputs.deadlines import BUTTON, DeadlineTopic, due_mark
+from uni_master.outputs.deadlines import BUTTON, DeadlineTopic, due_mark, hide_button
+from uni_master.processing.todo import Deadline
 
 CHAT = -1001234567890
 OWNER = 42
@@ -304,6 +306,17 @@ async def test_run_refreshes_at_midnight(topic, forum, monkeypatch):
 
 def test_due_marks():
     today = dt.date(2026, 10, 20)
-    assert [due_mark(today + dt.timedelta(days=n), today) for n in (-1, 0, 1, 2)] == [
+    assert [due_mark(today + dt.timedelta(days=n), today, "ru") for n in (-1, 0, 1, 2)] == [
         "просрочен (пн 19.10)", "сегодня", "завтра", "чт 22.10"]
+    assert [due_mark(today + dt.timedelta(days=n), today, "en") for n in (-1, 0, 1, 2)] == [
+        "overdue (Mon 19.10)", "today", "tomorrow", "Thu 22.10"]
     assert BUTTON.match(b"dl:hide") and BUTTON.match(b"dl:show") and not BUTTON.match(b"dl:hide:3")
+
+
+async def test_english_forum(topic, merged, forum):
+    """The forum's language (р. 41): the list's frame, the marks and the buttons in English."""
+    forum.lang = "en"
+    assert topic.board([]) == ["<b>Deadlines</b>\n\nNo deadlines."]
+    d = Deadline("Minor sign-up", clock.local_day(topic.now()), "study", "ha", None, ref="ha:1")
+    assert topic.board([d]) == ["<b>Deadlines</b>\n\n🏠 <b>Minor sign-up</b> — today"]
+    assert labels(hide_button(d, "en")) == [[("Delete", b"dl:hide")]]

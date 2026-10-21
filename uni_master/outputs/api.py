@@ -16,12 +16,15 @@ The iCal feeds live here too, under /calendar/<secret>/ without the token (see i
 
 import datetime as dt
 import hmac
+import json
 from collections.abc import Callable
+from functools import partial
 
 from aiohttp import web
 
 from .. import clock
 from ..config import Env
+from ..i18n import json_default
 from ..llm.budget import Budget
 from ..processing.grades import Grades
 from ..processing.merge import DeadlineList
@@ -52,9 +55,11 @@ async def bearer(request: web.Request, handler):
 
 
 async def status(request: web.Request) -> web.Response:
-    """Every source that has joined so far, and the LLM spending of today."""
+    """Every source that has joined so far, and the LLM spending of today. An error kept as a Phrase (р. 41) is
+    given in English."""
     return web.json_response({**{name: status() for name, status in request.app[SOURCES_KEY].items()},
-                              "llm": request.app[BUDGET_KEY].status()})
+                              "llm": request.app[BUDGET_KEY].status()},
+                             dumps=partial(json.dumps, default=json_default("en")))
 
 
 async def list_deadlines(request: web.Request) -> web.Response:

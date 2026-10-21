@@ -170,3 +170,18 @@ def test_old_news_table_gets_hidden(tmp_path):
 def test_split():
     assert split("H\n", ["a", "b"], 100) == ["H\n\na\nb"]
     assert split("H", ["aaaa", "bbbb", "cc"], limit=8) == ["H\naaaa", "bbbb\ncc"]
+
+
+async def test_english_forum(feed):
+    """The forum's language (р. 41): the frame in English, the news as the model wrote them."""
+    forum = feed.forum
+    forum.lang = "en"
+    await feed.publish(Changes())
+    assert forum.texts("news") == ["<b>News</b>\n\nNo live news."]
+    first = add_news(feed, "Alg seminar moved to Thu", importance=5, msg_id=7)
+    await feed.publish(Changes(news=[first]))
+    assert forum.messages[101][1].startswith("<b>News</b>\n\n💬 <b>Alg seminar moved to Thu</b>")
+    assert labels(forum.buttons[102]) == [[("Hide", f"nw:hide:{first}".encode())]]
+    press = Press(BUTTON, f"nw:hide:{first}".encode(), message_id=102)
+    await feed.on_button(press)
+    assert press.answers == [("Hidden: it is off the news list", False)]

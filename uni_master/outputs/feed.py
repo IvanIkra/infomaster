@@ -25,6 +25,7 @@ from telethon import Button
 
 from .. import clock
 from ..collectors.inbox import Inbox, message_link
+from ..i18n import tr
 from ..processing.batches import Changes
 from ..processing.news import News
 from ..settings import Settings
@@ -37,7 +38,7 @@ MESSAGE_LIMIT = 4096   # characters; the HTML is counted whole, so the visible t
 ALERT_IMPORTANCE = 4
 ICONS = {"channel": "📢", "user": "👤", "bot": "👤"}  # chats and groups: 💬
 MAIL_ICON = "✉️"
-WEEKDAYS = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+WEEKDAYS = {"en": ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"), "ru": ("пн", "вт", "ср", "чт", "пт", "сб", "вс")}
 BUTTON = re.compile(rb"^nw:hide:(\d+)$")
 
 
@@ -57,17 +58,19 @@ def split(header: str, lines: list[str], limit: int) -> list[str]:
     return [*chunks, chunk]
 
 
-def day(due: str) -> str:
+def day(due: str, lang: str) -> str:
+    """'2026-10-22' -> 'Thu 22.10' (the date is day.month in both languages)."""
     date = dt.date.fromisoformat(due)
-    return f"{WEEKDAYS[date.weekday()]} {date:%d.%m}"
+    return f"{WEEKDAYS[lang][date.weekday()]} {date:%d.%m}"
 
 
-def source(inbox: Inbox, row: dict) -> str:
+def source(inbox: Inbox, row: dict, lang: str) -> str:
     """Where a news item, deadline or event (`row`: source, chat_id, msg_ids) came from: the chat's name with a link
     to the message where the platform has one; for a letter its subject (§8.3), while the letter is kept."""
     if row["source"] == "mail":
         subject = inbox.subject(row["msg_ids"])
-        return f"письмо «{html.escape(subject)}»" if subject else "письмо"
+        letter = tr(lang, "letter", "письмо")
+        return f"{letter} «{html.escape(subject)}»" if subject else letter
     chat = inbox.chat(row["chat_id"]) if row["chat_id"] is not None else None
     if chat is None:
         return "?"
@@ -160,8 +163,8 @@ class Feed:
                 item = self.news.get(news_id)
                 if item and item["replaced_by"] is None and item["gone_at"] is None and not item["hidden"] \
                         and item["importance"] >= ALERT_IMPORTANCE:
-                    text = f"🔔 {html.escape(item['full'])}\n{source(self.inbox, item)}"
-                    hide = [[Button.inline("Скрыть", f"nw:hide:{news_id}".encode())]]
+                    text = f"🔔 {html.escape(item['full'])}\n{source(self.inbox, item, self.forum.lang)}"
+                    hide = [[Button.inline(self.forum.tr("Hide", "Скрыть"), f"nw:hide:{news_id}".encode())]]
                     self._remember(await self.forum.post("news", text, buttons=hide, html=True), "news_alert",
                                    news_id)
 
@@ -169,13 +172,14 @@ class Feed:
 
     def board(self) -> list[str]:
         """The messages of the list as they should be now."""
-        lines = []
+        lines, lang = [], self.forum.lang
         for item in self.news.live(self.now(), self.settings.get("news_ttl_hours")):
             text = html.escape(item["full"])
             if item["importance"] >= 5:
                 text = f"<b>{text}</b>"
-            lines.append(f"{icon(self.inbox, item)} {text} · {source(self.inbox, item)}")
-        return split("<b>Новости</b>\n", lines or ["Живых новостей нет."], MESSAGE_LIMIT)
+            lines.append(f"{icon(self.inbox, item)} {text} · {source(self.inbox, item, lang)}")
+        return split(tr(lang, "<b>News</b>\n", "<b>Новости</b>\n"),
+                     lines or [tr(lang, "No live news.", "Живых новостей нет.")], MESSAGE_LIMIT)
 
     async def _rebuild(self) -> None:
         """The list as it should be; a change deletes the alerts, whose items are on it already. Under the lock."""
@@ -187,12 +191,14 @@ class Feed:
     async def on_button(self, event) -> None:
         """«Скрыть» under an alert (Telethon's CallbackQuery): the item leaves the list for good."""
         if event.sender_id != self.owner_id:
-            await event.answer("Нет доступа", alert=True)
+            await event.answer(self.forum.tr("No access", "Нет доступа"), alert=True)
             return
         news_id = int(event.pattern_match.group(1))
         item = self.news.get(news_id)
         if item is None or item["replaced_by"] is not None or item["gone_at"] is not None:
-            await event.answer("Этой новости больше нет: её заменила другая или сообщение удалено", alert=True)
+            await event.answer(self.forum.tr("This news is gone: another one replaced it or the message was deleted",
+                                             "Этой новости больше нет: её заменила другая или сообщение удалено"),
+                               alert=True)
             await event.edit(buttons=None)
             return
         async with self._lock:  # hidden under the lock: a rebuild running now must not see it half done
@@ -201,7 +207,7 @@ class Feed:
             # Only this alert goes: the others stay until a rebuild of the batches, as they would without the hiding.
             await self.pinned.sync(self.board())
             await forget(self.forum, self.db, [row for row in posts(self.db, "news_alert") if row["ref"] == news_id])
-        await event.answer("Скрыто: в списке новостей её больше нет")
+        await event.answer(self.forum.tr("Hidden: it is off the news list", "Скрыто: в списке новостей её больше нет"))
 
     # --- helpers --------------------------------------------------------------------------
 

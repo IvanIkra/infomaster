@@ -6,6 +6,7 @@ import pytest
 from uni_master import clock
 from uni_master.collectors.inbox import Inbox
 from uni_master.collectors.ruz import Ruz
+from uni_master.i18n import say, tr
 from uni_master.llm.budget import Budget
 from uni_master.llm.journal import Journal
 from uni_master.processing.deadlines import Deadlines
@@ -63,9 +64,11 @@ class Clock:
 
 
 class FakeForum:
-    """The bot's forum: posts are kept by id; every post is HTML."""
+    """The bot's forum: posts are kept by id; every post is HTML. Its language is Russian, as the tests of the topics
+    were written; the English texts have tests of their own (lang = "en")."""
 
-    def __init__(self):
+    def __init__(self, lang: str = "ru"):
+        self.lang = lang
         self.messages: dict[int, tuple[str, str]] = {}  # msg_id -> (topic, text)
         self.buttons: dict[int, list] = {}
         self.files: dict[int, tuple[bytes, str]] = {}  # msg_id -> (the file's bytes, its name)
@@ -74,8 +77,12 @@ class FakeForum:
         self.next_id = 100
         self.tasks: list[asyncio.Task] = []
 
+    def tr(self, en, ru):
+        return tr(self.lang, en, ru)
+
     async def post(self, topic, text, buttons=None, *, html=False, reply_to=None):
         assert html
+        text = say(text, self.lang)
         self.next_id += 1
         self.messages[self.next_id] = (topic, text)
         self.buttons[self.next_id] = buttons

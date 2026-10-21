@@ -34,6 +34,7 @@ from html.parser import HTMLParser
 
 from .. import clock
 from ..config import Env
+from ..i18n import Phrase
 from ..settings import Settings
 from ..store import Store
 from .inbox import Inbox
@@ -239,7 +240,7 @@ class Mail:
             env.mail_password
         self.store, self.db, self.settings, self.inbox, self.now = store, store.db, settings, inbox, now
         self.fetcher: Callable = fetch  # replaced in tests
-        self.notify: Callable[[str], None] | None = None  # a line for the System topic
+        self.notify: Callable[[Phrase], None] | None = None  # a line for the System topic
         self.ok_at: str | None = None
         self.error: str | None = None if self.configured else NOT_SET
         self._failing_since: dt.datetime | None = None
@@ -331,11 +332,13 @@ class Mail:
             self._told = True
             if self.notify is not None:
                 since = self._failing_since.astimezone(clock.TZ)
-                self.notify(f"Почта недоступна с {since:%d.%m %H:%M}: {error}.\n"
-                            "Новые письма не читаются; прочитанные остаются в новостях и дедлайнах.")
+                self.notify(Phrase(f"The mailbox is unavailable since {since:%d.%m %H:%M}: {error}.\nNew letters are "
+                                   "not read; the read ones stay in the news and the deadlines.",
+                                   f"Почта недоступна с {since:%d.%m %H:%M}: {error}.\n"
+                                   "Новые письма не читаются; прочитанные остаются в новостях и дедлайнах."))
 
     def _recovered(self) -> None:
         if self._told and self.notify is not None:
-            self.notify("Почта снова доступна.")
+            self.notify(Phrase("The mailbox is available again.", "Почта снова доступна."))
         self.ok_at, self.error = clock.local_iso(self.now()), None
         self._failing_since, self._told = None, False

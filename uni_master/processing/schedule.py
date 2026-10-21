@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from .. import clock
 from ..collectors.inbox import Inbox, message_link
 from ..collectors.ruz import Diff, Ruz
+from ..i18n import Phrase
 from ..store import Store
 from .deadlines import Deadlines
 from .events import Events
@@ -179,11 +180,11 @@ class Schedule:
         chat = self.inbox.chat(event["chat_id"]) if event["chat_id"] is not None else None
         return message_link(chat, event["msg_ids"][0]) if chat and event["msg_ids"] else None
 
-    def told_by(self, event: dict) -> str | None:
+    def told_by(self, event: dict) -> str | Phrase | None:
         """Who told it, for the Mini App: the chat's name, or the letter's subject (§8.3)."""
         if event["source"] == "mail":
             subject = self.inbox.subject(event["msg_ids"])
-            return f"письмо «{subject}»" if subject else "письмо"
+            return Phrase(f"letter «{subject}»", f"письмо «{subject}»") if subject else Phrase("letter", "письмо")
         chat = self.inbox.chat(event["chat_id"]) if event["chat_id"] is not None else None
         return chat["title"] if chat else None
 

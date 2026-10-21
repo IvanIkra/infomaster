@@ -224,3 +224,20 @@ async def test_kinds_are_escaped(timetable, forum):
     new, ruz = forum.texts("schedule")
     assert new.startswith("🆕 <b>Alg consult</b> — &lt;a href=&quot;https://x.test/&quot;&gt;q&amp;a&lt;/a&gt;\n")
     assert "Algebra (q&amp;a &lt;b&gt;) вт 20.10 13:00: R401 → R5" in ruz and "x.test/\">" not in new + ruz
+
+
+async def test_english_forum(timetable, forum):
+    """The forum's language (р. 41): the type, the day and the buttons in English, the titles as they are."""
+    forum.lang = "en"
+    timetable.schedule.subjects.set_manual("Алгебра", "Algebra", "Alg")
+    event_id = add(timetable, room="online")
+    await timetable.publish(Changes(events=[event_id]))
+    [(msg_id, (_, text))] = forum.messages.items()
+    assert text == f"🆕 <b>Alg consult</b> — consultation\nFri 23.10 18:10–19:30 · online\nAlgebra\n{LINK.format(1)}"
+    assert labels(forum.buttons[msg_id]) == [
+        [("✓ Main", f"ev:main:{event_id}".encode()), ("Optional", f"ev:optional:{event_id}".encode())],
+        [("Hide", f"ev:hide:{event_id}".encode())]]
+    moved = move(timetable, event_id, 2, start="2026-10-24T18:10:00", end="2026-10-24T19:30:00")
+    await timetable.publish(Changes(events_moved=[(event_id, moved)]))
+    assert forum.texts("schedule")[-1].startswith(
+        "↪️ <b>Alg consult</b> moved: Fri 23.10 18:10 → Sat 24.10 18:10–19:30 · R205")

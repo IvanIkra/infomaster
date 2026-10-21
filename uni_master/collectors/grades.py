@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 import aiohttp
 
 from .. import clock
+from ..i18n import Phrase, say
 from ..llm.budget import BudgetExceeded
 from ..llm.client import LLMError
 from ..settings import GOOGLE_SHEET, Settings
@@ -38,7 +39,8 @@ TIMEOUT = 120               # seconds
 STALE_AFTER = dt.timedelta(hours=12)
 TOP_ROWS = 15               # rows of a tab above the own row the model sees: the header is somewhere among them
 COURSE_FROM_TITLE = 8       # characters of the sheet's title that name the course when its label is not set
-NO_ROW = "своей строки нет ни на одной вкладке: проверьте ФИО на экране «Оценки»"
+NO_ROW = Phrase("the own row is on no tab: check the name on the «Grades» screen",
+                "своей строки нет ни на одной вкладке: проверьте ФИО на экране «Оценки»")
 
 
 def sheet_id(url: str) -> str:
@@ -158,7 +160,7 @@ class SheetStatus:
     label: str = ""         # the setting's: names the sheet until its title is known
     title: str | None = None
     ok_at: str | None = None
-    error: str | None = None
+    error: str | Phrase | None = None
     tabs: int = 0
     items: int = 0
     unread: tuple[str, ...] = ()
@@ -183,7 +185,7 @@ class GradeSheets:
         self.settings, self.now = settings, now
         self.on_sheet: Callable[[Sheet], Awaitable[Read]] | None = None
         self.on_poll: Callable[[], Awaitable[None]] | None = None  # after every poll: the new grades go to the forum
-        self.notify: Callable[[str], None] | None = None           # a line for the System topic
+        self.notify: Callable[[Phrase], None] | None = None        # a line for the System topic
         self.sheets: dict[str, SheetStatus] = {}                    # by sheet id, the configured sheets only
         self._wake = asyncio.Event()
 
@@ -247,7 +249,7 @@ class GradeSheets:
             self._failed(st, f"HTTP {e.status} {e.message}".strip())
             return
         except (aiohttp.ClientError, TimeoutError, ValueError, OSError) as e:
-            self._failed(st, str(e) if str(e) == NO_ROW else f"{type(e).__name__}: {e}")
+            self._failed(st, NO_ROW if e.args[:1] == (NO_ROW,) else f"{type(e).__name__}: {e}")
             return
         except (LLMError, BudgetExceeded) as e:  # the layout; asked again at the next poll
             self._failed(st, str(e))
@@ -259,10 +261,12 @@ class GradeSheets:
         st.tabs, st.items, st.unread = len(views), read.items, read.unread
         self._recovered(st)
         if read.first:
-            self._notify(f"Таблица оценок «{st.name}» подключена: вкладок со своей строкой — {len(views)}, "
-                         f"оценок — {read.items}. Новые и изменённые оценки будут приходить в «Оценки».")
+            self._notify(Phrase(f"The grade sheet «{st.name}» is connected: tabs with the own row: {len(views)}, "
+                                f"grades: {read.items}. New and changed grades will come to «Grades».",
+                                f"Таблица оценок «{st.name}» подключена: вкладок со своей строкой — {len(views)}, "
+                                f"оценок — {read.items}. Новые и изменённые оценки будут приходить в «Оценки»."))
 
-    def _failed(self, st: SheetStatus, error: str) -> None:
+    def _failed(self, st: SheetStatus, error: str | Phrase) -> None:
         st.error = error
         log.warning("grades sheet %s failed: %s", st.name, error)
         now = self.now()
@@ -270,16 +274,19 @@ class GradeSheets:
         if not st.told and now - st.failing_since >= STALE_AFTER:
             st.told = True
             since = st.failing_since.astimezone(clock.TZ)
-            self._notify(f"Таблица оценок «{st.name}» не читается с {since:%d.%m %H:%M}: {error}.\n"
-                         "Оценки из неё не обновляются.")
+            self._notify(Phrase(f"The grade sheet «{st.name}» cannot be read since {since:%d.%m %H:%M}: "
+                                f"{say(error, 'en')}.\nIts grades are not updated.",
+                                f"Таблица оценок «{st.name}» не читается с {since:%d.%m %H:%M}: {say(error, 'ru')}.\n"
+                                "Оценки из неё не обновляются."))
 
     def _recovered(self, st: SheetStatus) -> None:
         if st.told:
-            self._notify(f"Таблица оценок «{st.name}» снова читается.")
+            self._notify(Phrase(f"The grade sheet «{st.name}» is read again.",
+                                f"Таблица оценок «{st.name}» снова читается."))
         st.ok_at, st.error = clock.local_iso(self.now()), None
         st.failing_since, st.told = None, False
 
-    def _notify(self, line: str) -> None:
+    def _notify(self, line: Phrase) -> None:
         if self.notify is not None:
             self.notify(line)
 

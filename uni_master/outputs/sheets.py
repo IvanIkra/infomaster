@@ -1,9 +1,10 @@
-"""The «Листочки» topic (§6.3, §8.3, р. 14): every sheet as its file, with a caption.
+"""The «Sheets» topic, «Листочки» in Russian (§6.3, §8.3, р. 14): every sheet as its file, with a caption.
 
 The caption: the course (its English title) and the number, the due date, the message it came from with a link, the
 course's hashtag (#Calc), and with `pdf_content` the model's summary. A newer version replaces the file and the
-caption in the first version's message (the post stays where it is, with its replies) and answers it «Листок
-обновлён», with what changed when the chat's PDFs are read. If that message is gone, the version is posted anew.
+caption in the first version's message (the post stays where it is, with its replies) and answers it «Sheet
+updated», with what changed when the chat's PDFs are read. If that message is gone, the version is posted anew. The
+captions are in the forum's language (р. 41), and so are the summary and the changes the model wrote for them.
 
 The sheets are posted after every batch run, oldest first; one that fails stays waiting for the next run. The owner's
 joining of two sheets in the Mini App goes through here too, under the same lock: the newer sheet's own post is
@@ -73,7 +74,7 @@ class SheetTopic:
         """A prepared sheet to the forum: a message of its own, or the first version's message edited."""
         path = self.files.by_hash(sheet["sha256"])
         if path is None:
-            self.sheets.failed(sheet["id"], "файл уже удалён")
+            self.sheets.failed(sheet["id"], self.sheets.file_gone())
             return
         first = self.sheets.first(sheet)
         caption = self.caption(sheet, first)
@@ -92,13 +93,14 @@ class SheetTopic:
                                 (msg_id, first["post_id"]))
 
     def caption(self, sheet: dict, first: dict) -> str:
-        subjects = self.sheets.subjects
-        what = html.escape(subjects.title(sheet["course"])) if sheet["course"] else "Листок"
+        subjects, t = self.sheets.subjects, self.forum.tr
+        what = html.escape(subjects.title(sheet["course"])) if sheet["course"] else t("Sheet", "Листок")
         if sheet["number"]:
-            what += f" · листок {html.escape(sheet['number'])}"
-        lines = [f"📄 <b>{what}</b>" + (f" (версия {sheet['version']})" if sheet["version"] > 1 else "")]
+            what += t(" · sheet ", " · листок ") + html.escape(sheet["number"])
+        version = t(f" (version {sheet['version']})", f" (версия {sheet['version']})")
+        lines = [f"📄 <b>{what}</b>" + (version if sheet["version"] > 1 else "")]
         if sheet["due"]:
-            lines.append(f"Срок: {day(sheet['due'])}")
+            lines.append(t("Due: ", "Срок: ") + day(sheet["due"], self.forum.lang))
         tag = hashtag(subjects.abbr(sheet["course"]))
         lines.append(" · ".join(part for part in (self._source(sheet), tag) if part))
         text = "\n".join(lines)
@@ -111,11 +113,14 @@ class SheetTopic:
         return text
 
     def _updated(self, sheet: dict) -> str:
-        lines = [f"🔄 Листок обновлён: версия {sheet['version']}, файл «{html.escape(sheet['name'])}»"]
+        name = html.escape(sheet["name"])
+        lines = ["🔄 " + self.forum.tr(f"Sheet updated: version {sheet['version']}, file «{name}»",
+                                       f"Листок обновлён: версия {sheet['version']}, файл «{name}»")]
         if sheet["changes"]:
             lines.append(html.escape(sheet["changes"]))
         lines.append(self._source(sheet))
         return "\n".join(line for line in lines if line)
 
     def _source(self, sheet: dict) -> str:
-        return source(self.inbox, {"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]]})
+        return source(self.inbox, {"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]]},
+                      self.forum.lang)

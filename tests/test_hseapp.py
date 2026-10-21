@@ -127,7 +127,7 @@ async def fake(aiohttp_server, monkeypatch):
 def source(store, now) -> HseApp:
     src = HseApp(store, Settings(store), CALLBACK, now=now)
     src.notices, src.polls = [], []
-    src.notify = lambda text, login: src.notices.append((text, login))
+    src.notify = lambda text, login: src.notices.append((text.ru, login))  # a Phrase: the forum picks its language
 
     async def on_poll(active, done):
         src.polls.append((active, done))
@@ -261,15 +261,15 @@ async def test_pkce_login(fake, store, now):
         (hseapp.CLIENT_ID, CALLBACK, "code", "profile email", "S256")
     fake["codes"]["code-1"] = q["code_challenge"]
 
-    with pytest.raises(ValueError, match="устарела"):
+    with pytest.raises(ValueError, match="out of date"):
         await src.login(f"{CALLBACK}?state=forged&code=code-1")
-    with pytest.raises(ValueError, match="нет кода"):
+    with pytest.raises(ValueError, match="has no code"):
         await src.login("https://example.org/somewhere")
-    with pytest.raises(ValueError, match="ВШЭ не пустила: Login was cancelled"):
+    with pytest.raises(ValueError, match="HSE did not let you in: Login was cancelled"):
         await src.login(f"{CALLBACK}?error=access_denied&error_description=Login+was+cancelled&state={q['state']}")
     await src.login(f"  {CALLBACK}?state={q['state']}&session_state=s&code=code-1 ")
     assert src.auth.logged_in and fake["redirects"] == [CALLBACK]
-    with pytest.raises(ValueError, match="устарела"):  # a state works once
+    with pytest.raises(ValueError, match="out of date"):  # a state works once
         await src.login(f"{CALLBACK}?state={q['state']}&code=code-1")
 
     # The fallback: the app's own address, pasted by hand; the code exchange names the same address.
@@ -279,14 +279,14 @@ async def test_pkce_login(fake, store, now):
     await src.login(f"{hseapp.APP_REDIRECT_URI}?state={query(app_url)['state']}&code=code-2")
     assert fake["redirects"] == [CALLBACK, hseapp.APP_REDIRECT_URI]
 
-    with pytest.raises(ValueError, match="ВШЭ не приняла код"):  # a code Keycloak does not know
+    with pytest.raises(ValueError, match="HSE did not take the code"):  # a code Keycloak does not know
         await src.login(f"{CALLBACK}?state={query(src.login_link())['state']}&code=unknown")
 
 
 async def test_only_the_last_five_links_work(fake, store, now):
     src = source(store, now)
     links = [query(src.login_link()) for _ in range(6)]
-    with pytest.raises(ValueError, match="устарела"):
+    with pytest.raises(ValueError, match="out of date"):
         await src.login(f"{CALLBACK}?state={links[0]['state']}&code=c")
     fake["codes"]["c"] = links[1]["code_challenge"]
     await src.login(f"{CALLBACK}?state={links[1]['state']}&code=c")
@@ -297,7 +297,7 @@ async def test_login_server_down(store, now, monkeypatch):
     monkeypatch.setattr(hseapp, "TOKEN_URL", "http://127.0.0.1:9/token")  # nothing listens there
     src = source(store, now)
     state = query(src.login_link())["state"]
-    with pytest.raises(ValueError, match="сервер входа ВШЭ недоступен"):
+    with pytest.raises(ValueError, match="the HSE login server is unavailable"):
         await src.login(f"{CALLBACK}?state={state}&code=c")
     assert not src.auth.logged_in
 
@@ -493,10 +493,11 @@ async def client(aiohttp_client, fake, store, now, budget, journal, schedule, me
     src = source(store, now)
     lists = HseAppDeadlines(store, schedule.subjects, FakeLabeler(), now=now)
     sources = {"hseapp": lambda: {**src.status(), **lists.status()}}
+    settings = Settings(store)
     app = miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), sources, schedule.subjects,
-                             schedule, src, merged)
+                             schedule, src, merged, settings)
     test_client = await aiohttp_client(app)
-    test_client.src = src
+    test_client.src, test_client.settings = src, settings
     return test_client
 
 
@@ -516,6 +517,9 @@ async def test_miniapp_screen(client, fake, store):
     assert query(app_link["url"])["redirect_uri"] == hseapp.APP_REDIRECT_URI
     assert (await client.post("/app/api/hseapp/link", json={"app": "yes"}, headers=owner())).status == 400
 
+    bad = await client.post("/app/api/hseapp/login", json={"url": f"{CALLBACK}?state=x&code=y"}, headers=owner())
+    assert bad.status == 400 and await bad.text() == "this login link is out of date: open a new one in the Mini App"
+    client.settings.set("miniapp_language", "ru")  # the reason in the Mini App's language (р. 41)
     bad = await client.post("/app/api/hseapp/login", json={"url": f"{CALLBACK}?state=x&code=y"}, headers=owner())
     assert bad.status == 400 and "устарела" in await bad.text()
     assert (await client.post("/app/api/hseapp/login", json={"url": " "}, headers=owner())).status == 400
@@ -537,6 +541,10 @@ async def test_callback_needs_no_init_data(client, fake):
 
     forged = await client.get("/hseapp/callback?state=forged&code=code-1")
     assert forged.status == 400 and forged.headers["Cache-Control"] == "no-store"
+    assert '<html lang="en">' in await forged.text() and "The login failed" in await forged.text()
+    assert "This login link is out of date" in await forged.text()
+    client.settings.set("miniapp_language", "ru")  # the page in the Mini App's language (р. 41)
+    forged = await client.get("/hseapp/callback?state=forged&code=code-1")
     assert "Вход не удался" in await forged.text() and "Эта ссылка входа устарела" in await forged.text()
     denied = await client.get(f"/hseapp/callback?error=access_denied&error_description=%3Cscript%3Ex%3C/script%3E"
                               f"&state={query(url)['state']}")

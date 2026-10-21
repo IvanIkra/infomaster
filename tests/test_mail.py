@@ -76,7 +76,7 @@ async def test_poll_hides_the_password_and_recovers(mail, now):
         raise OSError(f"login failed for {PASSWORD}")
 
     told = []
-    mail.notify = told.append
+    mail.notify = lambda line: told.append(line.ru)  # a Phrase: the forum picks its language
     mail.fetcher = failing
     assert await mail.poll() == 0
     assert PASSWORD not in mail.status()["error"] and "***" in mail.status()["error"]

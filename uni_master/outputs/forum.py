@@ -15,19 +15,25 @@ from telethon.tl import types
 
 from .. import clock
 from ..config import Env
+from ..i18n import Phrase, say, tr
 from ..llm.budget import SOFT_SHARE, Budget, Level, Notice
 from ..store import Store
 
 log = logging.getLogger(__name__)
 
-# key -> title; the other topics come with their stages
-TOPICS = {"system": "Система", "news": "Новости", "deadlines": "Дедлайны", "schedule": "Расписание",
-          "sheets": "Листочки", "grades": "Оценки", "summaries": "Сводки"}
+# key -> title, in the forum's language when the topic is created; the other topics come with their stages
+TOPICS = {"system": Phrase("System", "Система"), "news": Phrase("News", "Новости"),
+          "deadlines": Phrase("Deadlines", "Дедлайны"), "schedule": Phrase("Timetable", "Расписание"),
+          "sheets": Phrase("Sheets", "Листочки"), "grades": Phrase("Grades", "Оценки"),
+          "summaries": Phrase("Summaries", "Сводки")}
 # The bot's commands for Telegram's menu: name -> description
-COMMANDS = {"summary": "Сводка чата: /summary [чат] [3h | 2d | 20.10-22.10]"}
+COMMANDS = {"summary": Phrase("Chat summary: /summary [chat] [3h | 2d | 20.10-22.10] [en | ru]",
+                              "Сводка чата: /summary [чат] [3h | 2d | 20.10-22.10] [en | ru]")}
 RAISE_LIMIT = re.compile(rb"^llm:raise:(\d{4}-\d{2}-\d{2})$")  # the day is in the data: the button raises only that day
 # Mini App screens a post can open (see app_button) -> what the bot says above the Mini App's button
-SCREENS = {"hseapp": "Вход в HSE App X — в Mini App.", "chats": "Вход твинка — в Mini App, экран «Чаты»."}
+SCREENS = {"hseapp": Phrase("The HSE App X login is in the Mini App.", "Вход в HSE App X — в Mini App."),
+           "chats": Phrase("The twin's login is in the Mini App, screen «Chats».",
+                           "Вход твинка — в Mini App, экран «Чаты».")}
 
 
 def start_screen(text: str) -> str | None:
@@ -45,6 +51,14 @@ class Forum:
         self.username: str | None = None  # the bot's, for links that open its chat
         self._topics_lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
+
+    @property
+    def lang(self) -> str:
+        """The forum's language (р. 41): everything the bot says, as it says it."""
+        return self.budget.settings.get("forum_language")
+
+    def tr(self, en: str, ru: str) -> str:
+        return tr(self.lang, en, ru)
 
     @property
     def miniapp_url(self) -> str:
@@ -76,7 +90,7 @@ class Forum:
         try:
             await self.client(functions.bots.SetBotCommandsRequest(
                 scope=types.BotCommandScopeDefault(), lang_code="",
-                commands=[types.BotCommand(name, about) for name, about in COMMANDS.items()]))
+                commands=[types.BotCommand(name, about.get(self.lang)) for name, about in COMMANDS.items()]))
         except errors.RPCError as e:
             log.info("bot commands not set: %s", e)
 
@@ -96,10 +110,11 @@ class Forum:
             task.cancel()
         await self.client.disconnect()
 
-    async def post(self, topic: str, text: str, buttons=None, *, html: bool = False,
+    async def post(self, topic: str, text: str | Phrase, buttons=None, *, html: bool = False,
                    reply_to: int | None = None) -> int:
         """Send to a topic; returns the message id. With `html` the text is HTML and links get no preview; with
-        `reply_to` it answers that message of the topic."""
+        `reply_to` it answers that message of the topic. A Phrase goes in the forum's language."""
+        text = say(text, self.lang)
         for attempt in (1, 2):
             topic_id = await self._topic(topic)
             try:
@@ -173,11 +188,15 @@ class Forum:
     def on_budget(self, notice: Notice) -> None:
         """Budget.notify: the limit's warnings go to the System topic (§7)."""
         if notice.level is Level.HARD:
-            text = (f"Дневной лимит LLM исчерпан: ${notice.spent:.2f} из ${notice.limit:.2f}.\n"
-                    "Вызовы стоят до полуночи по Москве, сообщения копятся в очереди.")
+            text = self.tr(f"The daily LLM limit is spent: ${notice.spent:.2f} of ${notice.limit:.2f}.\n"
+                           "Calls wait until midnight Moscow time, messages queue up.",
+                           f"Дневной лимит LLM исчерпан: ${notice.spent:.2f} из ${notice.limit:.2f}.\n"
+                           "Вызовы стоят до полуночи по Москве, сообщения копятся в очереди.")
         else:
-            text = (f"Расход LLM: ${notice.spent:.2f} из ${notice.limit:.2f}, это {SOFT_SHARE:.0%} дневного лимита.\n"
-                    "Отключены необязательные задачи: картинки, чтение PDF целиком, ежедневная сводка.")
+            text = self.tr(f"LLM spending: ${notice.spent:.2f} of ${notice.limit:.2f}, {SOFT_SHARE:.0%} of the daily "
+                           "limit.\nThe optional tasks are off: images, reading PDFs whole, the daily summary.",
+                           f"Расход LLM: ${notice.spent:.2f} из ${notice.limit:.2f}, это {SOFT_SHARE:.0%} дневного "
+                           "лимита.\nОтключены необязательные задачи: картинки, чтение PDF целиком, ежедневная сводка.")
         self.spawn(self.post("system", text, buttons=[self._raise_button()]))
 
     # --- topics -----------------------------------------------------------------
@@ -186,7 +205,7 @@ class Forum:
         async with self._topics_lock:
             saved = self._saved_topics()
             if key not in saved["ids"]:
-                saved["ids"][key] = await self._create_topic(TOPICS[key])
+                saved["ids"][key] = await self._create_topic(TOPICS[key].get(self.lang))
                 self.store.put_json("forum.topics", saved)
             return saved["ids"][key]
 
@@ -217,21 +236,24 @@ class Forum:
     def _raise_button(self) -> types.KeyboardInlineButton:
         step = self.budget.settings.get("llm_daily_limit_usd")
         day = clock.local_day(clock.now_utc()).isoformat()
-        return Button.inline(f"+${step:.2f} на сегодня", f"llm:raise:{day}".encode())
+        return Button.inline(self.tr(f"+${step:.2f} for today", f"+${step:.2f} на сегодня"),
+                             f"llm:raise:{day}".encode())
 
     async def _on_raise(self, event: events.CallbackQuery.Event) -> None:
         if event.sender_id != self.env.owner_id:
-            await event.answer("Нет доступа", alert=True)
+            await event.answer(self.tr("No access", "Нет доступа"), alert=True)
             return
         day = event.pattern_match.group(1).decode()
         if day != clock.local_day(clock.now_utc()).isoformat():
-            await event.answer("Эта кнопка за прошлый день, лимит уже обновился", alert=True)
+            await event.answer(self.tr("This button is for a past day, the limit is new already",
+                                       "Эта кнопка за прошлый день, лимит уже обновился"), alert=True)
             await event.edit(buttons=None)
             return
         limit = self.budget.raise_today(self.budget.settings.get("llm_daily_limit_usd"))
-        await event.answer(f"Лимит на сегодня: ${limit:.2f}")
+        await event.answer(self.tr(f"Today's limit: ${limit:.2f}", f"Лимит на сегодня: ${limit:.2f}"))
         message = await event.get_message()
-        await event.edit(f"{message.text}\n\nЛимит на сегодня поднят до ${limit:.2f}.", buttons=None)
+        raised = self.tr(f"Today's limit is raised to ${limit:.2f}.", f"Лимит на сегодня поднят до ${limit:.2f}.")
+        await event.edit(f"{message.text}\n\n{raised}", buttons=None)
 
     async def _on_start(self, event: events.NewMessage.Event) -> None:
         if event.sender_id != self.env.owner_id:
@@ -239,14 +261,16 @@ class Forum:
         await self._set_menu_button(await event.get_input_sender())
         screen = start_screen(event.raw_text)  # from a button under a forum post
         url = self.screen_url(screen) if screen else self.miniapp_url
-        open_app = types.KeyboardInlineButton("Открыть", types.InlineButtonTypeWebView(url))
-        await event.respond(SCREENS[screen] if screen else "Настройки — в Mini App.", buttons=[open_app])
+        open_app = types.KeyboardInlineButton(self.tr("Open", "Открыть"), types.InlineButtonTypeWebView(url))
+        text = SCREENS[screen].get(self.lang) if screen else self.tr("The settings are in the Mini App.",
+                                                                     "Настройки — в Mini App.")
+        await event.respond(text, buttons=[open_app])
 
     async def _set_menu_button(self, user) -> None:
         """The button next to the message field in the chat with the bot, for the owner only."""
         try:
             await self.client(functions.bots.SetBotMenuButtonRequest(
-                user_id=user, button=types.BotMenuButton("Настройки", self.miniapp_url)))
+                user_id=user, button=types.BotMenuButton(self.tr("Settings", "Настройки"), self.miniapp_url)))
         except (ValueError, errors.RPCError) as e:
             log.info("menu button not set (%s); send /start to the bot", e)
 

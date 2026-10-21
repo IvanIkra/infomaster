@@ -11,6 +11,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from ..i18n import LANGUAGES
 from ..store import Store
 
 
@@ -117,6 +118,12 @@ def _flag(value: Any) -> bool:
     return value
 
 
+def _language(value: Any) -> str:
+    if value not in LANGUAGES:
+        raise SettingsError(f"expected one of {', '.join(LANGUAGES)}, got {value!r}")
+    return value
+
+
 # name -> (default, check); the check returns the value to keep or raises SettingsError.
 SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "llm_daily_limit_usd": (0.50, _positive_money),  # р. 27
@@ -136,6 +143,9 @@ SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "grades_student": ("", _student),
     "grades_sheets": ([], _grade_sheets),
     "grades_window_days": (7, _whole(1, 60, "a number of days")),  # a grade is new this long: the API for Tablo
+    # What the owner reads (р. 41): the bot's posts and the models' summaries for them, and the Mini App.
+    "forum_language": ("en", _language),
+    "miniapp_language": ("en", _language),
 }
 
 

@@ -54,6 +54,7 @@ from dataclasses import dataclass, field
 from .. import clock
 from ..collectors.files import Files, NotNow, image_file
 from ..collectors.inbox import MAILBOX, Inbox, message_link
+from ..i18n import Phrase
 from ..llm.budget import BudgetExceeded
 from ..llm.client import BadAnswer, Document, Haiku, LLMError
 from ..settings import CHAT_SPECS, ChatSettings, Settings
@@ -509,7 +510,7 @@ class Batches:
         self.news, self.deadlines, self.llm, self.now, self.monotonic = news, deadlines, llm, now, monotonic
         self.schedule, self.events, self.subjects = schedule, schedule.events, schedule.subjects
         self.publish: Callable[[Changes], Awaitable[None]] | None = None  # after every run, also an empty one
-        self.notify: Callable[[str], None] | None = None                  # a line for the System topic
+        self.notify: Callable[[Phrase], None] | None = None               # a line for the System topic
         self.mail = False  # mail is configured: the mailbox takes its slots like an enabled chat
         self.files: Files | None = None    # PDFs of the messages; without it the model reads their names only
         self.sheets: Sheets | None = None  # where the sheets the model finds go
@@ -791,11 +792,15 @@ class Batches:
         if self.notify is None:
             return
         if chat["source"] == "mail":
-            self.notify(f"Письмо «{message['subject'] or 'без темы'}» ({message['sender_name']}) пропущено разбором: "
-                        f"{error}.")
+            sender = message["sender_name"]
+            self.notify(Phrase(f"The letter «{message['subject'] or 'no subject'}» ({sender}) is skipped by the "
+                               f"parsing: {error}.",
+                               f"Письмо «{message['subject'] or 'без темы'}» ({sender}) пропущено разбором: {error}."))
             return
         link = message_link(chat, message["msg_id"])
-        self.notify(f"Сообщение из «{chat['title']}» пропущено разбором: {error}." + (f"\n{link}" if link else ""))
+        tail = f"\n{link}" if link else ""
+        self.notify(Phrase(f"A message of «{chat['title']}» is skipped by the parsing: {error}.{tail}",
+                           f"Сообщение из «{chat['title']}» пропущено разбором: {error}.{tail}"))
 
     # --- the prompt -------------------------------------------------------------------
 

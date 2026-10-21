@@ -1,4 +1,5 @@
-"""Summaries of chats (§6.6, р. 17, р. 20): what was said in a chat over a period, in Russian, as points.
+"""Summaries of chats (§6.6, р. 17, р. 20): what was said in a chat over a period, as points, in English or Russian
+(р. 41): the daily one in the forum's language, one asked for with /summary in the language it names, if any.
 
 They are made from the raw messages (`messages`) and never wait for a batch. A period is either asked for (`3h`, `2d`,
 `20.10`, `20.10-22.10`; at most 7 days) or runs since the chat's last summary: the messages no summary has taken yet
@@ -20,6 +21,7 @@ from dataclasses import dataclass, field
 from .. import clock
 from ..collectors.files import Files
 from ..collectors.inbox import Inbox
+from ..i18n import Phrase
 from ..llm.client import Haiku
 from ..settings import ChatSettings
 from .batches import IMAGE_LIMIT, KINDS, image_size, important, readable, replies_to_important
@@ -36,7 +38,7 @@ DAY_POINTS = 15
 
 
 class PeriodError(ValueError):
-    """Looks like a period, but is not a usable one; the text is for the owner."""
+    """Looks like a period, but is not a usable one; the text (a Phrase) is for the owner."""
 
 
 @dataclass(frozen=True)
@@ -75,16 +77,18 @@ def parse_period(text: str, now: dt.datetime) -> Period | None:
         number, unit = int(match[1]), UNITS[match[2]]
         hours = number * (24 if unit == "d" else 1)
         if not 1 <= hours <= MAX_DAYS * 24:
-            raise PeriodError(f"Промежуток — от 1 часа до {MAX_DAYS} дней.")
+            raise PeriodError(Phrase(f"A period is 1 hour to {MAX_DAYS} days.",
+                                     f"Промежуток — от 1 часа до {MAX_DAYS} дней."))
         return Period(now - dt.timedelta(hours=hours), now, f"{number}{unit}")
     if match := re.fullmatch(DAY + r"(?:\s*[-–—]\s*" + DAY + r")?", text):
         today = clock.local_day(now)
         first = _date(int(match[1]), int(match[2]), today)
         last = _date(int(match[3]), int(match[4]), today) if match[3] else first
         if last < first:
-            raise PeriodError("Конец промежутка раньше начала.")
+            raise PeriodError(Phrase("The period ends before it starts.", "Конец промежутка раньше начала."))
         if (last - first).days >= MAX_DAYS:
-            raise PeriodError(f"Промежуток — не больше {MAX_DAYS} дней.")
+            raise PeriodError(Phrase(f"A period is {MAX_DAYS} days at most.",
+                                     f"Промежуток — не больше {MAX_DAYS} дней."))
         label = f"{first:%d.%m}" + (f"-{last:%d.%m}" if last != first else "")
         return Period(clock.day_start_utc(first), clock.day_start_utc(last + dt.timedelta(days=1)), label)
     return None
@@ -94,7 +98,8 @@ def _date(day: int, month: int, today: dt.date) -> dt.date:
     try:
         date = dt.date(today.year, month, day)
     except ValueError:
-        raise PeriodError(f"Нет такой даты: {day:02d}.{month:02d}.") from None
+        raise PeriodError(Phrase(f"No such date: {day:02d}.{month:02d}.", f"Нет такой даты: {day:02d}.{month:02d}.")) \
+            from None
     return date.replace(year=date.year - 1) if date > today else date
 
 
@@ -126,14 +131,18 @@ make one point. Small talk, jokes, stickers, thanks and greetings get no point; 
 happened gets no points at all.
 
 Every point:
-- text: 1-2 sentences in Russian, plain and specific: dates, times, rooms, courses and tasks as the messages give \
-them; who said it when it matters (a teacher, the group head). Relative dates ("завтра", "в пятницу") become dates \
-counted from the message time: "в пятницу, 23.10". No emoji, no links, no hashtags, no Markdown.
+- text: 1-2 sentences in {{language}}, plain and specific: dates, times, rooms, courses and tasks as the messages \
+give them; who said it when it matters (a teacher, the group head). Relative dates ("завтра", "в пятницу") become \
+dates counted from the message time: "{{dates}}". No emoji, no links, no hashtags, no Markdown.
 - msg_id: the message that shows the point best; the point links to it.
 
 At most {MAX_POINTS} points unless the task says otherwise: leave out the least important rather than squeeze several \
 topics into one point. Never add what the messages do not tell; an open question stays a question.
 """
+
+# The words of the prompt in each language a summary may be written in.
+PROMPT_WORDS = {"en": {"language": "English", "dates": "on Friday, 23.10"},
+                "ru": {"language": "Russian", "dates": "в пятницу, 23.10"}}
 
 PERIOD_TASK = "Task: the summary of the period."
 DAY_TASK = (f"Task: the digest of one day of a longer period. Your points will be merged with the other days' into "
@@ -253,15 +262,15 @@ class Summaries:
         return Collected({**chat, "study": settings["study"], "people": people}, local_start, local_end, seen,
                          chosen, fresh=period is None, dates=dates)
 
-    async def summarize(self, collected: Collected, asked: bool) -> list[dict]:
-        """The points of a summary, also kept in `collected`. `asked`: by the owner (/summary), which runs above 80 %
-        of the LLM limit, unlike the daily one. Raises BudgetExceeded and LLMError (BadAnswer when the answer itself
-        is unusable)."""
-        messages = collected.chosen
+    async def summarize(self, collected: Collected, *, asked: bool, lang: str) -> list[dict]:
+        """The points of a summary in `lang`, also kept in `collected`. `asked`: by the owner (/summary), which runs
+        above 80 % of the LLM limit, unlike the daily one. Raises BudgetExceeded and LLMError (BadAnswer when the
+        answer itself is unusable)."""
+        messages, system = collected.chosen, SYSTEM.format(**PROMPT_WORDS[lang])
         if not messages:
             collected.points = []
         elif sum(map(size, messages)) <= CALL_CHARS:
-            collected.points = await self._ask(collected, PERIOD_TASK, messages, MAX_POINTS, asked)
+            collected.points = await self._ask(collected, system, PERIOD_TASK, messages, MAX_POINTS, asked)
         else:
             days: dict[str, list[dict]] = {}
             for message in messages:
@@ -270,12 +279,12 @@ class Summaries:
             for day, day_messages in days.items():
                 points = []
                 for part in split(day_messages, CALL_CHARS):
-                    points += await self._ask(collected, DAY_TASK, part, DAY_POINTS, asked)
+                    points += await self._ask(collected, system, DAY_TASK, part, DAY_POINTS, asked)
                 digests.append((day, points))
-            collected.points = await self._merge(collected, digests, asked)
+            collected.points = await self._merge(collected, system, digests, asked)
         return collected.points
 
-    async def _ask(self, collected: Collected, task: str, messages: list[dict], limit: int,
+    async def _ask(self, collected: Collected, system: str, task: str, messages: list[dict], limit: int,
                    asked: bool) -> list[dict]:
         lines = self._header(collected, task)
         lines += ["", "Messages:"]
@@ -287,11 +296,11 @@ class Summaries:
                 replied = self.inbox.message(chat_id, message["reply_to"])
                 quote = " ".join(((replied or {}).get("text") or message["reply_quote"] or "").split())[:QUOTE_LIMIT]
             lines += render(message, shown, collected.chat["people"], quote)
-        answer = await self.llm.json("summary", SYSTEM, "\n".join(lines), SCHEMA, max_tokens=MAX_TOKENS,
+        answer = await self.llm.json("summary", system, "\n".join(lines), SCHEMA, max_tokens=MAX_TOKENS,
                                      chat_id=chat_id, asked=asked)
         return check(answer, shown, limit)
 
-    async def _merge(self, collected: Collected, digests: list[tuple[str, list[dict]]],
+    async def _merge(self, collected: Collected, system: str, digests: list[tuple[str, list[dict]]],
                      asked: bool) -> list[dict]:
         lines = [*self._header(collected, MERGE_TASK), "", "Digests of the days:"]
         ids = set()
@@ -299,7 +308,7 @@ class Summaries:
             lines.append(f"{dt.date.fromisoformat(day):%a %Y-%m-%d}:")
             lines += [f"- {point['msg_id'] or 0}: {point['text']}" for point in points] or ["(nothing of substance)"]
             ids |= {point["msg_id"] for point in points if point["msg_id"]}
-        answer = await self.llm.json("summary", SYSTEM, "\n".join(lines), SCHEMA, max_tokens=MAX_TOKENS,
+        answer = await self.llm.json("summary", system, "\n".join(lines), SCHEMA, max_tokens=MAX_TOKENS,
                                      chat_id=collected.chat["id"], asked=asked)
         return check(answer, ids, MAX_POINTS)
 

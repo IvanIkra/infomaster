@@ -65,7 +65,7 @@ async def test_miniapp(aiohttp_client, budget, journal, store, schedule, merged)
     response = await client.get("/app/api/me", headers={"Authorization": "tma " + init_data()})
     assert response.status == 200
     body = await response.json()
-    assert body["first_name"] == "Ivan" and body["llm"]["limit_usd"] == 0.5
+    assert body["first_name"] == "Ivan" and body["llm"]["limit_usd"] == 0.5 and body["language"] == "en"
     page = await client.get("/app/")
     assert page.status == 200 and "telegram-web-app.js" in await page.text()
 
@@ -89,7 +89,11 @@ async def test_miniapp_llm(aiohttp_client, budget, journal, store, schedule, mer
     assert today["cost_usd"] == 0.3 and today["runs"] == 3 and month["cost_usd"] == 0.6
     assert today["by_task"] == [{"task": "batch", "runs": 2, "failed": 0, "cost_usd": 0.25, "tokens": 4},
                                 {"task": "subjects", "runs": 1, "failed": 0, "cost_usd": 0.05, "tokens": 2}]
-    assert [(c["title"], c["cost_usd"]) for c in today["by_chat"]] == [("Матан", 0.2), ("Почта", 0.05)]
+    assert [(c["title"], c["cost_usd"]) for c in today["by_chat"]] == [("Матан", 0.2), ("Mail", 0.05)]
+    settings.set("miniapp_language", "ru")  # what the service names itself follows the Mini App's language (р. 41)
+    body = await (await client.get("/app/api/llm", headers=owner())).json()
+    assert [c["title"] for c in body["periods"]["today"]["by_chat"]] == ["Матан", "Почта"]
+    settings.reset("miniapp_language")
     assert len(body["days"]) == 30 and body["days"][-1] == {"day": "2026-10-20", "runs": 3, "failed": 0,
                                                             "cost_usd": 0.3, "stopped": False}
     assert body["days"][-4]["cost_usd"] == 0.3
@@ -119,7 +123,7 @@ async def test_miniapp_twin_login(aiohttp_client, budget, journal, store, schedu
                                                      None, merged, twin=twin))
     assert (await client.post("/app/api/twin/login", json={"phone": "+79161234567"})).status == 401
     bad = await client.post("/app/api/twin/login", json={"code": "1"}, headers=owner())
-    assert bad.status == 400 and await bad.text() == "сначала запросите код"
+    assert bad.status == 400 and await bad.text() == "ask for a code first"
     assert (await client.post("/app/api/twin/login", json={"x": 1}, headers=owner())).status == 400
     body = await (await client.post("/app/api/twin/login", json={"phone": "+79161234567"}, headers=owner())).json()
     assert body["login"] == {"step": "code", "phone": "+7916•••••67"}
@@ -147,6 +151,14 @@ async def test_miniapp_general(aiohttp_client, budget, journal, store, schedule,
     assert bad.status == 400 and settings.get("batch_hours") == 6  # nothing saved from a rejected request
     assert (await client.patch("/app/api/general", json={"pdf_pages": 3}, headers=owner())).status == 400
     assert (await client.patch("/app/api/general", json={}, headers=owner())).status == 400
+
+    # the languages (р. 41): English by default, each its own
+    assert (body["forum_language"], body["miniapp_language"], body["languages"]) == ("en", "en", ["en", "ru"])
+    body = await (await client.patch("/app/api/general", json={"miniapp_language": "ru"}, headers=owner())).json()
+    assert (body["forum_language"], body["miniapp_language"]) == ("en", "ru")
+    assert (await (await client.get("/app/api/me", headers=owner())).json())["language"] == "ru"
+    bad = await client.patch("/app/api/general", json={"forum_language": "de"}, headers=owner())
+    assert bad.status == 400 and settings.get("forum_language") == "en"
 
 
 async def test_miniapp_chats(aiohttp_client, budget, journal, store, schedule, merged):
@@ -252,7 +264,7 @@ async def test_miniapp_subjects(aiohttp_client, budget, journal, store, schedule
                 {"name": "Матан", "title": "", "abbr": "C"}, {"name": "Матан", "title": 5, "abbr": "C"}):
         response = await client.put("/app/api/subjects", json=bad, headers=owner())
         assert response.status == 400
-    assert "сокращение" in await (await client.put("/app/api/subjects", json={
+    assert "the abbreviation" in await (await client.put("/app/api/subjects", json={
         "name": "Матан", "title": "Calculus", "abbr": "Calculus"}, headers=owner())).text()
     assert (await client.put("/app/api/subjects", data="[", headers=owner())).status == 400
 

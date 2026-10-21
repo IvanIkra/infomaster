@@ -325,9 +325,11 @@ async def test_a_sheet_dropped_while_read_records_nothing(grades, settings):
 def test_lines():
     assert mark(8.43) == "8.4" and mark(9.0) == "9" and mark(9.96) == "10"
     event = {"label": "DM HW 1A", "value": 8.43, "raw": 5.9, "max": 7, "bonus": 1.0, "previous": None}
-    assert line(event) == "DM HW 1A — <b>8.4</b> +1 (5.9 из 7)"
+    assert line(event, "ru") == "DM HW 1A — <b>8.4</b> +1 (5.9 из 7)"
+    assert line(event, "en") == "DM HW 1A — <b>8.4</b> +1 (5.9 of 7)"
     event = {"label": "Calc <Quiz> 2", "value": 6, "raw": 6, "max": 10, "bonus": None, "previous": 5.5}
-    assert line(event) == "Calc &lt;Quiz&gt; 2 — <b>6</b> (было 5.5)"
+    assert line(event, "ru") == "Calc &lt;Quiz&gt; 2 — <b>6</b> (было 5.5)"
+    assert line(event, "en") == "Calc &lt;Quiz&gt; 2 — <b>6</b> (was 5.5)"
 
 
 async def test_topic_posts_a_message_per_sheet_and_keeps_failures(grades, forum, now):
@@ -411,7 +413,7 @@ async def test_poll_end_to_end(google, grades, settings, llm, forum, now):
     topic = GradeTopic(forum, grades.store, grades, now=now)
     source.on_sheet, source.on_poll = grades.apply, topic.publish
     system = []
-    source.notify = system.append
+    source.notify = lambda line: system.append(line.ru)  # a Phrase: the forum picks its language
 
     await source.poll()  # the baseline
     status = source.status()["sheets"]["abc123"]
@@ -433,7 +435,7 @@ async def test_poll_failures(google, grades, settings, now):
     source = GradeSheets(settings, now=now)
     source.on_sheet = grades.apply
     system = []
-    source.notify = system.append
+    source.notify = lambda line: system.append(line.ru)  # a Phrase: the forum picks its language
     await source.poll()
     assert grades.items("abc123")
 

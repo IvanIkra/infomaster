@@ -30,7 +30,7 @@ class FakeLLM:
 
     async def json(self, task, system, prompt, schema, *, max_tokens, chat_id, asked):
         assert task == "summary"
-        self.calls.append({"prompt": prompt, "chat_id": chat_id, "asked": asked})
+        self.calls.append({"system": system, "prompt": prompt, "chat_id": chat_id, "asked": asked})
         answer = self.answers.pop(0) if self.answers else {"points": []}
         if isinstance(answer, Exception):
             raise answer
@@ -91,8 +91,15 @@ def test_periods(now):
             parse_period(wrong, moment)
     assert split_args("Матан 2026 18.10 - 19.10", moment)[0] == "Матан 2026"
     assert split_args("Матан 2026 3h", moment)[1].label == "3h"
-    assert split_args("Матан 2026", moment) == ("Матан 2026", None)
-    assert split_args("", moment) == ("", None)
+    assert split_args("Матан 2026", moment) == ("Матан 2026", None, None)
+    assert split_args("", moment) == ("", None, None)
+    # the language at the end, before or after the period (р. 41)
+    query, period, lang = split_args("Матан 2026 18.10 - 19.10 EN", moment)
+    assert (query, period.label, lang) == ("Матан 2026", "18.10-19.10", "en")
+    query, period, lang = split_args("Матан 2026 ru 3h", moment)
+    assert (query, period.label, lang) == ("Матан 2026", "3h", "ru")
+    assert split_args("ru", moment) == ("", None, "ru")
+    assert split_args("English club", moment) == ("English club", None, None)
 
 
 def test_summary_time_setting(store):
@@ -158,11 +165,12 @@ async def test_summary_in_one_call(summaries, inbox, now):
     summaries.llm.answers = [points(("Семинар по матану перенесли на четверг, 22.10.", 1), ("  ", 2),
                                     ("Спросили, во сколько.", 99))]
     collected = summaries.collect(CHAT, None)
-    result = await summaries.summarize(collected, asked=False)
+    result = await summaries.summarize(collected, asked=False, lang="ru")
     assert result == [{"text": "Семинар по матану перенесли на четверг, 22.10.", "msg_id": 1},
                       {"text": "Спросили, во сколько.", "msg_id": None}]  # 99 is none of the messages
     [call] = summaries.llm.calls
     assert not call["asked"] and call["chat_id"] == CHAT
+    assert "1-2 sentences in Russian" in call["system"] and '"в пятницу, 23.10"' in call["system"]
     prompt = call["prompt"]
     assert 'Chat: "Матан 2026" (group, study)' in prompt and "Task: the summary of the period." in prompt
     assert "- 1 · Староста · listed person · Tue 2026-10-20 11:00 · pinned\n  Завтрашний семинар" in prompt
@@ -178,10 +186,10 @@ async def test_a_long_period_goes_by_days(summaries, inbox, now, monkeypatch):
     summaries.llm.answers = [points(("Первое.", 1)), points(("Третье.", 3)), points(),
                              points(("Итог.", 3), ("Чужой id.", 4))]
     collected = summaries.collect(CHAT, parse_period("3d", now()))
-    assert await summaries.summarize(collected, asked=True) == [
+    assert await summaries.summarize(collected, asked=True, lang="en") == [
         {"text": "Итог.", "msg_id": 3}, {"text": "Чужой id.", "msg_id": None}]  # 4 gave no point of a digest
     calls = summaries.llm.calls
-    assert len(calls) == 4 and all(call["asked"] for call in calls)
+    assert len(calls) == 4 and all(call["asked"] and "1-2 sentences in English" in call["system"] for call in calls)
     assert "Task: the digest of one day" in calls[0]["prompt"] and "- 1 · " in calls[0]["prompt"]
     assert "- 3 · " in calls[1]["prompt"] and "- 4 · " in calls[2]["prompt"]
     merge = calls[3]["prompt"]
@@ -220,8 +228,8 @@ async def test_daily_failures(topic, summaries, inbox, forum, now):
 
     summaries.llm.answers = [BudgetExceeded("optional LLM tasks are off")]
     await topic.daily()
-    assert forum.texts("summaries")[-1] == LIMIT_SPENT and len(summaries.llm.calls) == 3
-    assert len(summaries.collect(OTHER, None).seen) == 1 and topic.status()["error"] == "лимит LLM"
+    assert forum.texts("summaries")[-1] == LIMIT_SPENT.ru and len(summaries.llm.calls) == 3
+    assert len(summaries.collect(OTHER, None).seen) == 1 and topic.status()["error"].ru == "лимит LLM"
 
 
 async def test_daily_schedule(topic, store, summaries, inbox, forum, now):
@@ -428,3 +436,34 @@ async def test_command_details(topic, summaries, inbox, chat_settings, forum, no
 def test_point_length():
     [point] = summaries_module.check({"points": [{"text": "слово " * 200, "msg_id": 1}]}, {1}, 12)
     assert len(point["text"]) == summaries_module.POINT_CHARS and point["text"].endswith("…")
+
+
+async def test_languages(topic, summaries, inbox, forum, now):
+    """The bot speaks the forum's language, the summary is in the one /summary names, else in the forum's (р. 41)."""
+    add(inbox, now, 1, "Семинар переносится")
+    summaries.llm.answers = [points(("Seminar moved.", 1))]
+    command = Command("/summary матан 3h en")  # the forum is Russian, the summary English
+    await topic.on_command(command)
+    assert command.replies[0].text == "Собираю сводку «Матан 2026»…"
+    assert "1-2 sentences in English" in summaries.llm.calls[-1]["system"]
+    assert "• Seminar moved." in forum.texts("summaries")[-1]
+
+    command = Command("/summary 2d ru")
+    await topic.on_command(command)
+    assert buttons(command.replies[0])[0] == ("Матан 2026", f"sm:{CHAT}:2d:ru".encode())
+    assert BUTTON.match(f"sm:{CHAT}:2d:ru".encode()) and BUTTON.match(f"sm:{CHAT}::en".encode())
+    assert not BUTTON.match(f"sm:{CHAT}:2d:de".encode())
+
+    forum.lang = "en"  # the forum switched: the bot and the daily summary follow
+    press = Press(f"sm:{CHAT}:2d:ru".encode())
+    summaries.llm.answers = [points(("Семинар перенесли.", 1))]
+    await topic.on_button(press)
+    assert press.edits[0] == "Making the summary of «Матан 2026»…"
+    assert press.edits[1].startswith("The summary of «Матан 2026» is <a href=")
+    assert "1-2 sentences in Russian" in summaries.llm.calls[-1]["system"]
+    summaries.llm.answers = [points(("Seminar moved.", 1))]
+    await topic.daily()
+    assert "1-2 sentences in English" in summaries.llm.calls[-1]["system"]
+    command = Command("/summary матан 8d")
+    await topic.on_command(command)
+    assert command.replies[0].text == "A period is 1 hour to 7 days."

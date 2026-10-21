@@ -19,6 +19,7 @@ import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
+from ..i18n import Phrase
 from ..llm.budget import BudgetExceeded
 from ..llm.client import Haiku, LLMError
 from ..store import Store
@@ -152,11 +153,13 @@ class Subjects:
         """Add or change an entry by hand; it becomes manual. Returns the entry."""
         name, title, abbr = clean(name), " ".join(str(title or "").split()), " ".join(str(abbr or "").split())
         if not name:
-            raise SubjectError("нужно название курса")
+            raise SubjectError(Phrase("the course's name is needed", "нужно название курса"))
         if not title or len(title) > MANUAL_TITLE_CHARS:
-            raise SubjectError(f"название на английском: от 1 до {MANUAL_TITLE_CHARS} символов")
+            raise SubjectError(Phrase(f"the English title: 1 to {MANUAL_TITLE_CHARS} characters",
+                                      f"название на английском: от 1 до {MANUAL_TITLE_CHARS} символов"))
         if not abbr or len(abbr) > ABBR_CHARS:
-            raise SubjectError(f"сокращение: от 1 до {ABBR_CHARS} символов")
+            raise SubjectError(Phrase(f"the abbreviation: 1 to {ABBR_CHARS} characters",
+                                      f"сокращение: от 1 до {ABBR_CHARS} символов"))
         self._put(name, title, abbr, manual=True)
         self._settle()
         self._changed()

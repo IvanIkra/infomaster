@@ -12,7 +12,8 @@
    limit): at most `pdf_pages` pages and `pdf_tokens` tokens, what comes first. It writes a short summary for the post
    and gives the deadlines of its pages; they join the deadlines from the chat (source tg, the sheet's message), and an
    edit of the message's text does not withdraw them, its deletion does. For a newer version the model sees only the
-   diff of the texts and says what changed.
+   diff of the texts and says what changed. The summary and the changes are written in the forum's language (р. 41),
+   as it is when the sheet is prepared.
 
 The forum side is outputs/sheets.py. Writing methods commit themselves, except `add`: the batch calls it inside its
 own transaction.
@@ -27,6 +28,7 @@ from collections.abc import Callable
 from .. import clock
 from ..collectors.files import Files
 from ..collectors.inbox import Inbox
+from ..i18n import Phrase, tr
 from ..llm.budget import CHARS_PER_TOKEN, PAGE_TOKENS, BudgetExceeded
 from ..llm.client import Document, Haiku, LLMError
 from ..settings import ChatSettings, Settings
@@ -51,8 +53,8 @@ You read a sheet (листок) of a university course: a PDF with tasks for stu
 Software Engineering). The student sees your summary in Telegram under the file.
 
 Output:
-- summary: in Russian, at most 3 short sentences: what the tasks are about, how many there are, how and when to hand \
-in, anything unusual (a defence, a variant to choose, bonus tasks). No greeting, no "в этом листке".
+- summary: in {language}, at most 3 short sentences: what the tasks are about, how many there are, how and when to \
+hand in, anything unusual (a defence, a variant to choose, bonus tasks). No greeting, no "{no_intro}".
 - deadlines: every date the student must hand something in by, as written in the sheet: label "<abbr> <work>" \
 in English within 14 characters with the course abbreviation given ("Calc HW 3", "DM ИДЗ-1" → "DM IDZ-1"), due \
 YYYY-MM-DD; a date without a year is in the academic year of the posting date. [] when the sheet gives no date.
@@ -77,9 +79,14 @@ CHANGES_SYSTEM = """\
 You compare two versions of a sheet (листок) of a university course: a PDF with tasks for students. You get only the \
 lines that changed: "-" the old version, "+" the new one, as text extracted from the PDF (layout noise is possible).
 
-Output changes: in Russian, one or two short sentences on what changed for the student: a task fixed or added, a new \
-due date, a typo. Ignore changes of layout or spacing. "Изменилось только оформление." when nothing else did.
+Output changes: in {language}, one or two short sentences on what changed for the student: a task fixed or added, a \
+new due date, a typo. Ignore changes of layout or spacing. "{layout_only}" when nothing else did.
 """
+
+# The words of the prompts in each language the summary may be written in.
+PROMPT_WORDS = {"en": {"language": "English", "no_intro": "this sheet", "layout_only": "Only the layout changed."},
+                "ru": {"language": "Russian", "no_intro": "в этом листке",
+                       "layout_only": "Изменилось только оформление."}}
 
 CHANGES_SCHEMA = {
     "type": "object",
@@ -177,6 +184,11 @@ class Sheets:
         with self.db:
             self.db.execute("update sheets set status = 'posted', post_id = ? where id = ?", (post_id, sheet_id))
 
+    def file_gone(self) -> str:
+        """The reason a sheet failed when its file is gone, for the Mini App: kept in the row, so in its language
+        of now."""
+        return tr(self.settings.get("miniapp_language"), "the file is deleted already", "файл уже удалён")
+
     def failed(self, sheet_id: int, error: str) -> None:
         with self.db:
             self.db.execute("update sheets set status = 'failed', error = ? where id = ?", (error, sheet_id))
@@ -214,7 +226,7 @@ class Sheets:
             return sheet
         path = self.files.by_hash(sheet["sha256"])
         if path is None:
-            self.failed(sheet_id, "файл уже удалён")
+            self.failed(sheet_id, self.file_gone())
             return None
         try:
             extract = await asyncio.to_thread(pdf.extract, path, TEXT_PAGES)
@@ -271,8 +283,8 @@ class Sheets:
             lines += [f"Text of the sheet ({pages} of {extract.pages} pages" + (", cut at the limit" if cut else "")
                       + "):", text[:limit]]
         try:
-            answer = await self.llm.json("pdf", READ_SYSTEM, "\n".join(lines), READ_SCHEMA, max_tokens=MAX_TOKENS,
-                                         chat_id=sheet["chat_id"], documents=documents)
+            answer = await self.llm.json("pdf", self._prompt(READ_SYSTEM), "\n".join(lines), READ_SCHEMA,
+                                         max_tokens=MAX_TOKENS, chat_id=sheet["chat_id"], documents=documents)
         except BudgetExceeded as e:
             log.info("sheet %d is posted without reading: %s", sheet["id"], e)
             return None, []
@@ -289,12 +301,13 @@ class Sheets:
     async def _describe(self, sheet: dict, old: str, new: str) -> str | None:
         """What changed against the older version, from the diff alone (р. 14)."""
         changed = pdf.diff(old, new, DIFF_CHARS)
-        if not changed:
-            return "Текст не изменился." if old and new else None  # a scan has no text to compare
+        if not changed:  # a scan has no text to compare
+            return tr(self.settings.get("forum_language"), "The text is the same.", "Текст не изменился.") \
+                if old and new else None
         prompt = "\n".join(self._context(sheet) + ["", "Changed lines:", changed])
         try:
-            answer = await self.llm.json("pdf", CHANGES_SYSTEM, prompt, CHANGES_SCHEMA, max_tokens=MAX_TOKENS,
-                                         chat_id=sheet["chat_id"])
+            answer = await self.llm.json("pdf", self._prompt(CHANGES_SYSTEM), prompt, CHANGES_SCHEMA,
+                                         max_tokens=MAX_TOKENS, chat_id=sheet["chat_id"])
         except BudgetExceeded as e:
             log.info("the changes of sheet %d are not described: %s", sheet["id"], e)
             return None
@@ -305,21 +318,29 @@ class Sheets:
         self.error = None
         return str(answer.get("changes") or "").strip()[:CHANGES_CHARS] or None
 
+    def _prompt(self, system: str) -> str:
+        """A system prompt asking for the forum's language."""
+        return system.format(**PROMPT_WORDS[self.settings.get("forum_language")])
+
     # --- the owner's joining (the Mini App) -------------------------------------------------------
 
     async def join(self, sheet_id: int, previous_id: int) -> tuple[dict, int]:
         """Make a sheet posted as new a newer version of another one: (the sheet now, its own post to delete).
-        ValueError when it cannot be: a sheet with versions of its own, the same sheet, its file gone."""
+        ValueError (with a Phrase) when it cannot be: a sheet with versions of its own, the same sheet, its file
+        gone."""
         sheet, older = self.get(sheet_id), self.get(previous_id)
         if sheet is None or older is None or sheet["status"] != "posted" or older["status"] != "posted":
-            raise ValueError("такого листка нет")
+            raise ValueError(Phrase("no such sheet", "такого листка нет"))
         if sheet["previous"] is not None or not self._latest(sheet_id):
-            raise ValueError("у этого листка уже есть версии: присоединить можно только листок без них")
+            raise ValueError(Phrase("this sheet has versions already: only a sheet without them can be joined",
+                                    "у этого листка уже есть версии: присоединить можно только листок без них"))
         older = self.versions(self.first(older))[-1]  # the newest version of the other sheet
         if self.first(older)["id"] == sheet_id:
-            raise ValueError("это тот же листок")
+            raise ValueError(Phrase("it is the same sheet", "это тот же листок"))
         if self.files.by_hash(sheet["sha256"]) is None:
-            raise ValueError("файл листка уже удалён (прошло 14 дней): заменить файл в старом сообщении нечем")
+            raise ValueError(Phrase("the sheet's file is deleted already (14 days passed): nothing to put into the old "
+                                    "message", "файл листка уже удалён (прошло 14 дней): заменить файл в старом "
+                                    "сообщении нечем"))
         changes = None
         if self.chat_settings.get(sheet["chat_id"], "pdf_content"):
             changes = await self._describe(sheet, older["text"] or "", sheet["text"] or "")

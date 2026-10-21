@@ -1,19 +1,20 @@
 """The «Дедлайны» topic (§6.4, §8.3, р. 24): the merged list pinned, and a message for every new or moved deadline.
 
 - The pinned list: every deadline the merge shows (processing/merge.py: the list Tablo and HA get), in its order, with
-  its source's icon, the title, when it is due (сегодня, завтра, просрочен, else the weekday and the date) and the
+  its source's icon, the title, when it is due (today, tomorrow, overdue, else the weekday and the date) and the
   course as the source names it. The bot edits it in place, several messages in a row when it is long.
 - A message for every deadline that joins the list or moves there, from any source. The list is compared with the
   one shown last (kv "deadlines.shown") by the row each deadline comes from (`Deadline.ref`), so a rename (a Midterm
   once the dictionary knows its course, an HSE App X label once Haiku answers) only edits the list, and a move of the
   chats or RUZ (a new row that moves the old one) is a move. A deadline its source withdrew (its message deleted or
-  edited, its class gone, gone from HSE App X) gets «снят»; one that leaves the list otherwise (hidden, done in HSE
+  edited, its class gone, gone from HSE App X) gets «withdrawn»; one that leaves the list otherwise (hidden, done in HSE
   App X, past) leaves quietly, and a copy of the same work and date taking the place of another is no news.
 - Quiet: the first refresh (nothing shown yet) takes the list as it is, and so do the first poll of HSE App X and the
   first RUZ poll for what they bring, so a source joining floods nothing. The owner's own changes (HA, the Mini App,
   the buttons) only edit the list too.
-- Under the message of a new or moved deadline «Скрыть» hides it exactly as HA's to-do lists do (an own deadline,
-  «Удалить», is deleted); a hidden one gets «Вернуть». Only the owner may press them.
+- Under the message of a new or moved deadline «Hide» hides it exactly as HA's to-do lists do (an own deadline,
+  «Delete», is deleted); a hidden one gets «Restore». Only the owner may press them. Texts and buttons are in the
+  forum's language (р. 41); the titles are the merge's, English.
 
 Several tasks change deadlines (the batches, the RUZ and HSE App X polls, the owner): one refresh runs at a time under
 a lock and compares the list as it is then, so nothing is told twice. The marks move on at midnight.
@@ -30,6 +31,7 @@ from telethon import Button
 
 from .. import clock
 from ..collectors.inbox import Inbox
+from ..i18n import Phrase, tr
 from ..processing.merge import DeadlineList, same
 from ..processing.todo import Deadline
 from ..store import Store
@@ -42,20 +44,21 @@ TOPIC = "deadlines"
 SHOWN_KEY = "deadlines.shown"   # the list as the forum showed it last: [{ref, title, due, source, course}]
 BUTTON = re.compile(rb"^dl:(hide|show)$")  # the deadline is the post's: bot_posts.key by the message id
 ICONS = {"hseapp": "🎓", "ical": "📅", "mail": "✉️", "tg": "💬", "ha": "🏠"}
-WHY = {"ical": "пары больше нет в расписании", "hseapp": "его больше нет в HSE App X"}
-WHY_MESSAGE = "сообщение удалено или исправлено"
+WHY = {"ical": Phrase("the class is gone from the timetable", "пары больше нет в расписании"),
+       "hseapp": Phrase("it is gone from HSE App X", "его больше нет в HSE App X")}
+WHY_MESSAGE = Phrase("the message was deleted or edited", "сообщение удалено или исправлено")
 MIDNIGHT_DELAY = 5              # seconds past midnight: today and tomorrow move on
 
 
-def due_mark(due: dt.date, today: dt.date) -> str:
+def due_mark(due: dt.date, today: dt.date, lang: str) -> str:
     days = (due - today).days
     if days < 0:
-        return f"просрочен ({day(due.isoformat())})"
+        return tr(lang, "overdue", "просрочен") + f" ({day(due.isoformat(), lang)})"
     if days == 0:
-        return "сегодня"
+        return tr(lang, "today", "сегодня")
     if days == 1:
-        return "завтра"
-    return day(due.isoformat())
+        return tr(lang, "tomorrow", "завтра")
+    return day(due.isoformat(), lang)
 
 
 def entry(d: Deadline) -> dict:
@@ -66,8 +69,9 @@ def from_entry(e: dict) -> Deadline:
     return Deadline(e["title"], dt.date.fromisoformat(e["due"]), "study", e["source"], e["course"], ref=e["ref"])
 
 
-def hide_button(d: Deadline) -> list[list]:
-    return [[Button.inline("Удалить" if d.source == "ha" else "Скрыть", b"dl:hide")]]
+def hide_button(d: Deadline, lang: str) -> list[list]:
+    text = tr(lang, "Delete", "Удалить") if d.source == "ha" else tr(lang, "Hide", "Скрыть")
+    return [[Button.inline(text, b"dl:hide")]]
 
 
 class DeadlineTopic:
@@ -124,14 +128,15 @@ class DeadlineTopic:
     # --- the pinned list ---------------------------------------------------------------------
 
     def board(self, shown: list[Deadline]) -> list[str]:
-        today = clock.local_day(self.now())
+        today, lang = clock.local_day(self.now()), self.forum.lang
         lines = []
         for d in shown:
-            line = f"{ICONS.get(d.source, '•')} <b>{html.escape(d.title)}</b> — {due_mark(d.due, today)}"
+            line = f"{ICONS.get(d.source, '•')} <b>{html.escape(d.title)}</b> — {due_mark(d.due, today, lang)}"
             if d.name:
                 line += f" · {html.escape(d.name)}"
             lines.append(line)
-        return split("<b>Дедлайны</b>\n", lines or ["Дедлайнов нет."], MESSAGE_LIMIT)
+        return split(tr(lang, "<b>Deadlines</b>\n", "<b>Дедлайны</b>\n"),
+                     lines or [tr(lang, "No deadlines.", "Дедлайнов нет.")], MESSAGE_LIMIT)
 
     # --- the messages --------------------------------------------------------------------------
 
@@ -175,7 +180,7 @@ class DeadlineTopic:
         row = self.merged.deadlines.latest(int(ref[3:]))
         return f"dl:{row['id']}" if row is not None and f"dl:{row['id']}" != ref else None
 
-    def _withdrawn(self, e: dict) -> str | None:
+    def _withdrawn(self, e: dict) -> Phrase | None:
         """Why the source withdrew a deadline; None when it left the list for another reason."""
         ref = e["ref"]
         if ref.startswith("dl:"):
@@ -189,19 +194,24 @@ class DeadlineTopic:
         return None
 
     def _new(self, d: Deadline) -> str:
-        lines = [f"🆕 <b>{html.escape(d.title)}</b> — {day(d.due.isoformat())}"]
+        lang = self.forum.lang
+        lines = [f"🆕 <b>{html.escape(d.title)}</b> — {day(d.due.isoformat(), lang)}"]
         if d.name:
             lines.append(html.escape(d.name))
         if d.source == "ical":
-            lines.append("Рубежный контроль в РУЗ")
+            lines.append(tr(lang, "Interim assessment in RUZ", "Рубежный контроль в РУЗ"))
         return "\n".join(lines + self._origin(d.ref, new=True))
 
     def _moved(self, e: dict, d: Deadline) -> str:
-        lines = [f"↪️ <b>{html.escape(d.title)}</b> перенесён: {day(e['due'])} → {day(d.due.isoformat())}"]
+        lang = self.forum.lang
+        moved = f"{day(e['due'], lang)} → {day(d.due.isoformat(), lang)}"
+        lines = [f"↪️ <b>{html.escape(d.title)}</b> " + tr(lang, f"moved: {moved}", f"перенесён: {moved}")]
         return "\n".join(lines + self._origin(d.ref))
 
-    def _gone(self, e: dict, why: str) -> str:
-        return "\n".join([f"✖️ <b>{html.escape(e['title'])}</b> ({day(e['due'])}) снят: {why}"]
+    def _gone(self, e: dict, why: Phrase) -> str:
+        lang = self.forum.lang
+        withdrawn = tr(lang, "withdrawn", "снят")
+        return "\n".join([f"✖️ <b>{html.escape(e['title'])}</b> ({day(e['due'], lang)}) {withdrawn}: {why.get(lang)}"]
                          + self._origin(e["ref"]))
 
     def _origin(self, ref: str, new: bool = False) -> list[str]:
@@ -210,7 +220,7 @@ class DeadlineTopic:
         if ref.startswith("dl:"):
             row = self.merged.deadlines.get(int(ref[3:]))
             if row is not None and row["chat_id"] is not None:
-                return [source(self.inbox, row)]
+                return [source(self.inbox, row, self.forum.lang)]
         elif ref.startswith("hseapp:"):
             item_id = ref.removeprefix("hseapp:")
             item = next((item for item in self.merged.hseapp.current() if item["id"] == item_id), None)
@@ -218,45 +228,48 @@ class DeadlineTopic:
                 return [f"HSE App X: «{html.escape(item['title'])}»"]
             return ["HSE App X"]
         elif new:
-            return ["Свой дедлайн"]
+            return [self.forum.tr("Own deadline", "Свой дедлайн")]
         return []
 
     async def _post(self, text: str, d: Deadline | None, ref: str) -> None:
-        msg_id = await self.forum.post(TOPIC, text, buttons=hide_button(d) if d is not None else None, html=True)
+        buttons = hide_button(d, self.forum.lang) if d is not None else None
+        msg_id = await self.forum.post(TOPIC, text, buttons=buttons, html=True)
         row_id = int(ref[3:]) if ref.startswith("dl:") else None
         remember(self.db, TOPIC, msg_id, "deadline", row_id, self.now(), key=ref if d is not None else None)
 
     # --- the buttons -------------------------------------------------------------------------
 
     async def on_button(self, event) -> None:
-        """«Скрыть», «Удалить» or «Вернуть» under a deadline's message (Telethon's CallbackQuery)."""
+        """«Hide», «Delete» or «Restore» under a deadline's message (Telethon's CallbackQuery)."""
+        t = self.forum.tr
         if event.sender_id != self.owner_id:
-            await event.answer("Нет доступа", alert=True)
+            await event.answer(t("No access", "Нет доступа"), alert=True)
             return
         action = event.pattern_match.group(1).decode()
         post = self.db.execute("select key from bot_posts where topic = ? and kind = 'deadline' and msg_id = ?",
                                (TOPIC, event.message_id)).fetchone()
         d = self.merged.by_ref(post["key"]) if post is not None and post["key"] else None
         if d is None:
-            await event.answer("Этого дедлайна больше нет в списке", alert=True)
+            await event.answer(t("This deadline is off the list", "Этого дедлайна больше нет в списке"), alert=True)
             await event.edit(buttons=None)
             return
         if action == "show":
             self.merged.restore(d)
-            await event.answer("Снова в списке")
-            await event.edit(buttons=hide_button(d))
+            await event.answer(t("Back on the list", "Снова в списке"))
+            await event.edit(buttons=hide_button(d, self.forum.lang))
             return
         if d.source == "ha":
             self.merged.remove(d)
-            await event.answer("Удалён")
+            await event.answer(t("Deleted", "Удалён"))
             await event.edit(buttons=None)
             return
         if self.merged.is_hidden(d):
-            await event.answer("Уже скрыт")
+            await event.answer(t("Hidden already", "Уже скрыт"))
         else:
             self.merged.remove(d)
-            await event.answer("Скрыт: в списке, в Tablo и в HA его больше нет")
-        await event.edit(buttons=[[Button.inline("Вернуть", b"dl:show")]])
+            await event.answer(t("Hidden: gone from the list, Tablo and HA",
+                                 "Скрыт: в списке, в Tablo и в HA его больше нет"))
+        await event.edit(buttons=[[Button.inline(t("Restore", "Вернуть"), b"dl:show")]])
 
     def _seconds_to_midnight(self) -> float:
         local = self.now().astimezone(clock.TZ)

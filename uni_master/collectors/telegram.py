@@ -23,6 +23,7 @@ from telethon.tl.custom import Message
 
 from .. import clock
 from ..config import Env
+from ..i18n import Phrase
 from ..settings import ChatSettings
 from .files import NotNow
 from .inbox import RETENTION, Inbox
@@ -34,7 +35,7 @@ LOGIN_HINT = "docker compose run --rm uni-master python -m uni_master login"
 
 
 class LoginError(ValueError):
-    """A step of the login that did not go; the text is for the owner, in Russian."""
+    """A step of the login that did not go; the text, a Phrase, is for the owner in the Mini App."""
 
 
 @dataclass
@@ -52,14 +53,14 @@ def session_file(session: Path) -> Path:
 
 class Twin:
     def __init__(self, env: Env, inbox: Inbox, chat_settings: ChatSettings, session: Path,
-                 notify: Callable[[str], None]):
+                 notify: Callable[[Phrase], None]):
         self.env, self.inbox, self.chat_settings = env, inbox, chat_settings
         self.session = session
         self.notify = notify  # a line for the System topic
-        self.notify_login: Callable[[str], None] | None = None  # the same, with a button to the login screen
+        self.notify_login: Callable[[Phrase], None] | None = None  # the same, with a button to the login screen
         self.client: TelegramClient | None = None
         self.ok_at: str | None = None
-        self.error: str | None = None
+        self.error: str | Phrase | None = None
         self.login_needed = False
         self.account: dict | None = None  # id, name, username of the logged-in account
         self.changed = asyncio.Event()     # set when the client changes: a login or a logout (app.py watches it)
@@ -74,13 +75,15 @@ class Twin:
     async def start(self) -> bool:
         """Connect, list the chats and catch up; False when the account is not logged in (the service runs on)."""
         if not session_file(self.session).exists():
-            return self._needs_login("твинк ещё не входил в Telegram")
+            return self._needs_login(Phrase("the twin has not logged in to Telegram yet",
+                                            "твинк ещё не входил в Telegram"))
         self.client = TelegramClient(str(self.session), self.env.api_id, self.env.api_hash)
         await self.client.connect()
         if not await self.client.is_user_authorized():
             await self.client.disconnect()
             self.client = None
-            return self._needs_login("сессия твинка больше не действует")
+            return self._needs_login(Phrase("the twin's session is no longer valid",
+                                            "сессия твинка больше не действует"))
         await self._listen()
         return True
 
@@ -104,11 +107,13 @@ class Twin:
         if self.client is not None:
             await self.client.disconnect()
 
-    def _needs_login(self, why: str) -> bool:
+    def _needs_login(self, why: Phrase) -> bool:
         self.login_needed, self.error = True, why
         log.warning("%s; log in in the Mini App or with: %s", why, LOGIN_HINT)
-        (self.notify_login or self.notify)(f"Чаты не читаются: {why}.\nВойти — в Mini App, экран «Чаты» "
-                                           f"(или на сервере: {LOGIN_HINT}).")
+        (self.notify_login or self.notify)(Phrase(
+            f"The chats are not read: {why.en}.\nLog in in the Mini App, screen «Chats» (or on the server: "
+            f"{LOGIN_HINT}).",
+            f"Чаты не читаются: {why.ru}.\nВойти — в Mini App, экран «Чаты» (или на сервере: {LOGIN_HINT})."))
         return False
 
     # --- login and logout from the Mini App ---------------------------------------
@@ -117,10 +122,12 @@ class Twin:
         """Ask Telegram for a login code; it comes to the account's other sessions or by SMS."""
         phone = "+" + re.sub(r"\D", "", phone)
         if len(phone) < 8:
-            raise LoginError("нужен номер телефона твинка в международном формате: +7…")
+            raise LoginError(Phrase("the twin's phone number is needed in the international format: +7…",
+                                    "нужен номер телефона твинка в международном формате: +7…"))
         async with self._login_lock:
             if self.client is not None:
-                raise LoginError("твинк уже вошёл; чтобы сменить аккаунт, сначала выйдите")
+                raise LoginError(Phrase("the twin is logged in already; to change the account, log out first",
+                                        "твинк уже вошёл; чтобы сменить аккаунт, сначала выйдите"))
             await self._drop_pending()
             client = TelegramClient(str(self.session), self.env.api_id, self.env.api_hash)
             try:
@@ -128,13 +135,15 @@ class Twin:
                 sent = await client.send_code_request(phone)
             except errors.PhoneNumberInvalidError:
                 await client.disconnect()
-                raise LoginError("Telegram не знает такого номера") from None
+                raise LoginError(Phrase("Telegram does not know this number", "Telegram не знает такого номера")) \
+                    from None
             except errors.FloodWaitError as e:
                 await client.disconnect()
-                raise LoginError(f"Telegram просит подождать {e.seconds} с перед новым кодом") from None
+                raise LoginError(Phrase(f"Telegram asks to wait {e.seconds} s before a new code",
+                                        f"Telegram просит подождать {e.seconds} с перед новым кодом")) from None
             except (errors.RPCError, ConnectionError, OSError) as e:
                 await client.disconnect()
-                raise LoginError(f"Telegram не ответил: {e}") from None
+                raise LoginError(Phrase(f"Telegram did not answer: {e}", f"Telegram не ответил: {e}")) from None
             self._pending = Pending(client, phone, sent.phone_code_hash)
 
     async def sign_in(self, code: str | None = None, password: str | None = None) -> None:
@@ -142,44 +151,50 @@ class Twin:
         async with self._login_lock:
             pending = self._pending
             if pending is None:
-                raise LoginError("сначала запросите код")
+                raise LoginError(Phrase("ask for a code first", "сначала запросите код"))
             try:
                 if pending.step == "code":
                     code = re.sub(r"\D", "", code or "")
                     if not code:
-                        raise LoginError("введите код из Telegram")
+                        raise LoginError(Phrase("enter the code from Telegram", "введите код из Telegram"))
                     await pending.client.sign_in(pending.phone, code, phone_code_hash=pending.code_hash)
                 else:
                     if not password:
-                        raise LoginError("введите облачный пароль")
+                        raise LoginError(Phrase("enter the cloud password", "введите облачный пароль"))
                     await pending.client.sign_in(password=password)
             except errors.SessionPasswordNeededError:
                 pending.step = "password"
                 return
             except errors.PhoneCodeInvalidError:
-                raise LoginError("неверный код") from None
+                raise LoginError(Phrase("wrong code", "неверный код")) from None
             except errors.PhoneCodeExpiredError:
                 await self._drop_pending()
-                raise LoginError("код устарел или им поделились в Telegram — запросите новый") from None
+                raise LoginError(Phrase("the code expired or was shared in Telegram: ask for a new one",
+                                        "код устарел или им поделились в Telegram — запросите новый")) from None
             except errors.PasswordHashInvalidError:
-                raise LoginError("неверный облачный пароль") from None
+                raise LoginError(Phrase("wrong cloud password", "неверный облачный пароль")) from None
             except errors.FloodWaitError as e:
-                raise LoginError(f"Telegram просит подождать {e.seconds} с") from None
+                raise LoginError(Phrase(f"Telegram asks to wait {e.seconds} s",
+                                        f"Telegram просит подождать {e.seconds} с")) from None
             except (errors.RPCError, ConnectionError, OSError) as e:
-                raise LoginError(f"Telegram не ответил: {e}") from None
+                raise LoginError(Phrase(f"Telegram did not answer: {e}", f"Telegram не ответил: {e}")) from None
             me = await pending.client.get_me()
             self._pending = None
             if me.bot or me.id == self.env.owner_id:
                 await pending.client.log_out()  # the twin is its own account (р. 15)
-                raise LoginError("это не твинк: нужен отдельный аккаунт, а не бот и не ваш основной")
+                raise LoginError(Phrase("this is no twin: a separate account is needed, not a bot and not your own",
+                                        "это не твинк: нужен отдельный аккаунт, а не бот и не ваш основной"))
             self.client = pending.client
             self.changed.set()
             try:
                 await self._listen()
             except (errors.RPCError, ConnectionError, OSError) as e:  # logged in; the next start catches up
                 log.warning("the first sync after the login failed: %s", e)
-                self.error = f"вход выполнен, но чаты не догнались: {e}"
-            self.notify(f"Твинк вошёл: {self.account['name'] if self.account else me.id}. Чаты читаются.")
+                self.error = Phrase(f"logged in, but the chats did not catch up: {e}",
+                                    f"вход выполнен, но чаты не догнались: {e}")
+            name = self.account["name"] if self.account else me.id
+            self.notify(Phrase(f"The twin logged in: {name}. The chats are read.",
+                               f"Твинк вошёл: {name}. Чаты читаются."))
 
     async def cancel_login(self) -> None:
         async with self._login_lock:
@@ -189,7 +204,7 @@ class Twin:
         """End the session on Telegram's side and forget it here; the chats and their settings stay."""
         async with self._login_lock:
             if self.client is None:
-                raise LoginError("твинк и так не вошёл")
+                raise LoginError(Phrase("the twin is not logged in anyway", "твинк и так не вошёл"))
             client, self.client, name = self.client, None, (self.account or {}).get("name", "?")
             self.changed.set()  # first: the watcher must not take the disconnect for a lost connection
             try:
@@ -199,8 +214,10 @@ class Twin:
                 await client.disconnect()
             session_file(self.session).unlink(missing_ok=True)
             self.account = None
-            self.login_needed, self.error = True, "вы вышли из аккаунта твинка"
-            self.notify(f"Твинк вышел из аккаунта {name}. Чаты не читаются, пока он снова не войдёт.")
+            self.login_needed, self.error = True, Phrase("you logged out of the twin's account",
+                                                         "вы вышли из аккаунта твинка")
+            self.notify(Phrase(f"The twin logged out of {name}. The chats are not read until it logs in again.",
+                               f"Твинк вышел из аккаунта {name}. Чаты не читаются, пока он снова не войдёт."))
 
     async def _drop_pending(self) -> None:
         if self._pending is not None:
@@ -226,7 +243,8 @@ class Twin:
                     caught_up += await self._catch_up(dialog.input_entity, chat_id, known["last_id"])
                 except errors.RPCError as e:  # one chat closed to the twin must not stop the others
                     log.warning("catch-up of %s failed: %s", chat_id, e)
-                    self.error = f"не удалось догнать «{known['title']}»: {e}"
+                    self.error = Phrase(f"could not catch up with «{known['title']}»: {e}",
+                                        f"не удалось догнать «{known['title']}»: {e}")
                     continue  # last_id stays: the next start tries again
             self.inbox.advance(chat_id, top)
         log.info("twin: %d new chats, %d messages caught up, %d chats enabled", added, caught_up, len(enabled))
@@ -241,8 +259,10 @@ class Twin:
 
     def _announce(self, chat_id: int) -> None:
         chat = self.inbox.chat(chat_id)
-        self.notify(f"Новый чат в аккаунте твинка: «{chat['title']}» ({chat['kind']}). "
-                    "Он выключен, включить можно в Mini App.")
+        self.notify(Phrase(f"A new chat in the twin's account: «{chat['title']}» ({chat['kind']}). It is off; it can "
+                           "be enabled in the Mini App.",
+                           f"Новый чат в аккаунте твинка: «{chat['title']}» ({chat['kind']}). Он выключен, включить "
+                           "можно в Mini App."))
 
     # --- live updates -----------------------------------------------------------
 
@@ -407,8 +427,8 @@ async def login(env: Env, session: Path) -> None:
     me = await client.get_me()
     if me.bot or me.id == env.owner_id:
         await client.log_out()  # the twin is its own account (р. 15): not the bot, not the owner's
-        raise SystemExit("это не твинк: нужен отдельный аккаунт, а не бот и не TG_OWNER_ID")
+        raise SystemExit("this is no twin: a separate account is needed, not a bot and not TG_OWNER_ID")
     session_file(session).chmod(0o600)
-    print(f"Твинк вошёл: {utils.get_display_name(me)} (id {me.id}). Перезапустите сервис.")
+    print(f"The twin logged in: {utils.get_display_name(me)} (id {me.id}). Restart the service.")
     await client.disconnect()
 

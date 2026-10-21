@@ -12,11 +12,13 @@ limits of reading them and the joining of a sheet posted as new to an older one 
 of the daily one and its chats (§6.6), the grades: the name, the sheets and what was read in them (§6.7), the LLM
 spending (§7, р. 40): today, this week and this month by task and by chat, the cost of each of the last 30 days and
 the daily limit, which can be changed or raised for today. Tablo and HA show no spending: this screen is the one place.
-The general settings: the batches' N, how long news lives and the prices of the models. Every setting is here (р. 33);
-only the secrets of .env are not.
+The general settings: the batches' N, how long news lives, the prices of the models and the languages of the forum
+and the Mini App (р. 41). Every setting is here (р. 33); only the secrets of .env are not. The Mini App's texts are
+the page's own; what the service says here (errors, the reasons of a failed login, the statuses) comes in the Mini
+App's language too.
 
 The same port serves /hseapp/callback, where the browser comes back after the HSE login. It has no initData: the
-PKCE state of the login link is its protection, and it answers with a short page in Russian.
+PKCE state of the login link is its protection, and it answers with a short page in the Mini App's language.
 """
 
 import calendar
@@ -26,6 +28,7 @@ import hmac
 import html
 import json
 import time
+from functools import partial
 from pathlib import Path
 from urllib.parse import parse_qsl
 
@@ -37,6 +40,7 @@ from ..collectors.hseapp import CALLBACK_PATH, HseApp
 from ..collectors.inbox import MAILBOX, Inbox
 from ..collectors.telegram import LoginError, Twin
 from ..config import Env
+from ..i18n import LANGUAGES, json_default, reason, tr
 from ..llm.budget import SOFT_SHARE, Budget
 from ..llm.journal import Journal
 from ..processing.grades import Grades
@@ -66,7 +70,7 @@ SHEETS_KEY = web.AppKey("sheets", SheetTopic)
 SUMMARIES_KEY = web.AppKey("summaries", SummaryTopic)
 GRADES_KEY = web.AppKey("grades", Grades)
 TWIN_KEY = web.AppKey("twin", Twin)
-GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices")  # the settings of no other screen
+GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "forum_language", "miniapp_language")  # of no other screen
 GRADE_SETTINGS = {"student": "grades_student", "sheets": "grades_sheets", "window_days": "grades_window_days"}
 PDF_LIMITS = ("pdf_pages", "pdf_tokens")
 TITLE_LIMIT = 200  # characters of an own deadline's title
@@ -92,6 +96,21 @@ def check_init_data(init_data: str, bot_token: str, now: float | None = None) ->
     if (now if now is not None else time.time()) - auth_date > INIT_DATA_TTL:
         return None
     return user if isinstance(user, dict) else None
+
+
+def language(request: web.Request) -> str:
+    """The Mini App's language (р. 41); English where the app has no settings."""
+    settings = request.app.get(SETTINGS_KEY)
+    return settings.get("miniapp_language") if settings is not None else "en"
+
+
+def respond(request: web.Request, data) -> web.Response:
+    """JSON with every Phrase in it (a status error, a letter's subject) in the Mini App's language."""
+    return web.json_response(data, dumps=partial(json.dumps, default=json_default(language(request))))
+
+
+def bad_request(request: web.Request, en: str, ru: str) -> web.HTTPBadRequest:
+    return web.HTTPBadRequest(text=tr(language(request), en, ru))
 
 
 @web.middleware
@@ -120,8 +139,8 @@ async def to_index(request: web.Request) -> web.Response:
 async def me(request: web.Request) -> web.Response:
     """The stub screen: who is in and what the LLM cost today."""
     today = request.app[JOURNAL_KEY].usage(clock.now_utc())["today"]
-    return web.json_response({"first_name": request["user"].get("first_name", ""),
-                              "llm": {**request.app[BUDGET_KEY].status(), "runs_today": today["runs"]}})
+    return respond(request, {"first_name": request["user"].get("first_name", ""), "language": language(request),
+                             "llm": {**request.app[BUDGET_KEY].status(), "runs_today": today["runs"]}})
 
 
 async def chats(request: web.Request) -> web.Response:
@@ -130,7 +149,7 @@ async def chats(request: web.Request) -> web.Response:
     listed = [{**chat, "settings": chat_settings.all(chat["id"])} for chat in request.app[INBOX_KEY].chats()]
     listed.sort(key=lambda chat: not chat["settings"]["enabled"])
     sources = request.app[SOURCES_KEY]
-    return web.json_response({"twin": sources["telegram"](), "mail": sources.get("mail", dict)(),
+    return respond(request, {"twin": sources["telegram"](), "mail": sources.get("mail", dict)(),
                               "images": sources.get("images", dict)(), "chats": listed})
 
 
@@ -143,7 +162,7 @@ async def update_images(request: web.Request) -> web.Response:
         daily = request.app[SETTINGS_KEY].set("images_daily", values["daily"])
     except SettingsError as e:
         raise web.HTTPBadRequest(text=str(e)) from None
-    return web.json_response(request.app[SOURCES_KEY].get("images", lambda: {"daily": daily})())
+    return respond(request, request.app[SOURCES_KEY].get("images", lambda: {"daily": daily})())
 
 
 def _chat_id(request: web.Request) -> int:
@@ -171,7 +190,7 @@ async def update_chat(request: web.Request) -> web.Response:
     chat_id = _chat_id(request)
     values = await _json(request)
     try:
-        return web.json_response(request.app[CHAT_SETTINGS_KEY].update(chat_id, values))
+        return respond(request, request.app[CHAT_SETTINGS_KEY].update(chat_id, values))
     except SettingsError as e:
         raise web.HTTPBadRequest(text=str(e)) from None
 
@@ -183,7 +202,7 @@ async def senders(request: web.Request) -> web.Response:
     seen = {sender["id"] for sender in listed}
     listed += [{"id": person, "name": None, "messages": 0}
                for person in request.app[CHAT_SETTINGS_KEY].get(chat_id, "people") if person not in seen]
-    return web.json_response(listed)
+    return respond(request, listed)
 
 
 async def subjects(request: web.Request) -> web.Response:
@@ -191,7 +210,7 @@ async def subjects(request: web.Request) -> web.Response:
     dictionary = request.app[SUBJECTS_KEY]
     entries = [{"name": name, "title": s.title, "abbr": s.abbr, "manual": s.manual}
                for name, s in dictionary.all().items()]
-    return web.json_response({"subjects": entries, "error": dictionary.error, "title_chars": TITLE_CHARS,
+    return respond(request, {"subjects": entries, "error": dictionary.error, "title_chars": TITLE_CHARS,
                               "abbr_chars": ABBR_CHARS})
 
 
@@ -199,10 +218,10 @@ async def put_subject(request: web.Request) -> web.Response:
     """Add or change an entry by hand: {name, title, abbr}; it becomes manual."""
     values = await _json(request)
     try:
-        return web.json_response(request.app[SUBJECTS_KEY].set_manual(
+        return respond(request, request.app[SUBJECTS_KEY].set_manual(
             *(values.get(key) if isinstance(values.get(key), str) else "" for key in ("name", "title", "abbr"))))
     except SubjectError as e:
-        raise web.HTTPBadRequest(text=str(e)) from None
+        raise web.HTTPBadRequest(text=reason(e, language(request))) from None
 
 
 async def delete_subject(request: web.Request) -> web.Response:
@@ -210,13 +229,13 @@ async def delete_subject(request: web.Request) -> web.Response:
     name = (await _json(request)).get("name")
     if not isinstance(name, str) or not request.app[SUBJECTS_KEY].delete(name):
         raise web.HTTPNotFound(text="no such entry")
-    return web.json_response({"deleted": name})
+    return respond(request, {"deleted": name})
 
 
 async def schedule(request: web.Request) -> web.Response:
     """The Расписание screen: events from chats and corrections of classes from today on, hidden ones too."""
     timetable = request.app[SCHEDULE_KEY]
-    return web.json_response({"ruz": request.app[SOURCES_KEY]["ruz"](),
+    return respond(request, {"ruz": request.app[SOURCES_KEY]["ruz"](),
                               "calendar": bool(request.app[ENV_KEY].calendar_secret),
                               "events": timetable.listing(clock.local_day(timetable.now()))})
 
@@ -237,7 +256,8 @@ async def update_event(request: web.Request) -> web.Response:
     if event is None or event["gone_at"] is not None:
         raise web.HTTPNotFound(text="no such event")
     if "required" in values and event["class_uid"] is not None:
-        raise web.HTTPBadRequest(text="пара из РУЗ всегда в основном календаре")
+        raise bad_request(request, "a class of RUZ is always in the main calendar",
+                          "пара из РУЗ всегда в основном календаре")
     if "required" in values:
         events.set_required(event_id, values["required"])
     if "hidden" in values:  # through the schedule: a correction of an interim assessment moves its Midterm
@@ -262,22 +282,24 @@ def _deadlines_state(request: web.Request) -> dict:
             "hseapp": {"login_needed": bool(hseapp.get("login_needed")), "error": hseapp.get("error")}}
 
 
-def _own_fields(values: dict, partial: bool) -> dict:
-    """title, due and category of an own deadline from the screen; every one of them, unless `partial`."""
+def _own_fields(request: web.Request, values: dict, some: bool) -> dict:
+    """title, due and category of an own deadline from the screen; every one of them, unless `some`."""
     fields = {}
-    if not partial or "title" in values:
+    if not some or "title" in values:
         title = values.get("title")
         if not isinstance(title, str) or not " ".join(title.split()) or len(title) > TITLE_LIMIT:
-            raise web.HTTPBadRequest(text=f"нужно название, до {TITLE_LIMIT} символов")
+            raise bad_request(request, f"a title is needed, up to {TITLE_LIMIT} characters",
+                              f"нужно название, до {TITLE_LIMIT} символов")
         fields["title"] = title
-    if not partial or "due" in values:
+    if not some or "due" in values:
         try:
             fields["due"] = dt.date.fromisoformat(values.get("due") if isinstance(values.get("due"), str) else "")
         except ValueError:
-            raise web.HTTPBadRequest(text="срок — дата вида 2026-10-22") from None
-    if not partial:
+            raise bad_request(request, "the due date is a date like 2026-10-22",
+                              "срок — дата вида 2026-10-22") from None
+    if not some:
         if values.get("category") not in CATEGORIES:
-            raise web.HTTPBadRequest(text="список: учёба (study) или личное (personal)")
+            raise bad_request(request, "the list: study or personal", "список: учёба (study) или личное (personal)")
         fields["category"] = values["category"]
     return fields
 
@@ -287,41 +309,42 @@ def _listed(request: web.Request):
     merged, item_uid = request.app[DEADLINES_KEY], request.match_info["uid"]
     d = merged.find(item_uid) or next((own for own in merged.todo.own() if own.key == item_uid), None)
     if d is None:
-        raise web.HTTPNotFound(text="этого дедлайна уже нет в списке")
+        raise web.HTTPNotFound(text=tr(language(request), "this deadline is off the list already",
+                                       "этого дедлайна уже нет в списке"))
     return d
 
 
 async def deadlines(request: web.Request) -> web.Response:
-    return web.json_response(_deadlines_state(request))
+    return respond(request, _deadlines_state(request))
 
 
 async def add_deadline(request: web.Request) -> web.Response:
     """{title, due, category}: a new own deadline."""
-    fields = _own_fields(await _json(request), partial=False)
+    fields = _own_fields(request, await _json(request), some=False)
     request.app[DEADLINES_KEY].add(fields["title"], fields["due"], fields["category"])
-    return web.json_response(_deadlines_state(request))
+    return respond(request, _deadlines_state(request))
 
 
 async def edit_deadline(request: web.Request) -> web.Response:
     """{title?, due?}: an own one changes; one from a source is hidden and an own copy takes its place (as in HA)."""
-    fields = _own_fields(await _json(request), partial=True)
+    fields = _own_fields(request, await _json(request), some=True)
     if not fields:
         raise web.HTTPBadRequest(text="expected {title?, due?}")
     request.app[DEADLINES_KEY].edit(_listed(request), fields.get("title"), fields.get("due"))
-    return web.json_response(_deadlines_state(request))
+    return respond(request, _deadlines_state(request))
 
 
 async def delete_deadline(request: web.Request) -> web.Response:
     """An own one is deleted, one from a source is hidden for good (as in HA)."""
     request.app[DEADLINES_KEY].remove(_listed(request))
-    return web.json_response(_deadlines_state(request))
+    return respond(request, _deadlines_state(request))
 
 
 async def unhide_deadline(request: web.Request) -> web.Response:
     """«Вернуть»: one hidden row less; the deadline is back if its source still has it."""
     if not request.app[DEADLINES_KEY].unhide(request.match_info["uid"]):
-        raise web.HTTPNotFound(text="такого скрытого дедлайна нет")
-    return web.json_response(_deadlines_state(request))
+        raise web.HTTPNotFound(text=tr(language(request), "no such hidden deadline", "такого скрытого дедлайна нет"))
+    return respond(request, _deadlines_state(request))
 
 
 # --- sheets -----------------------------------------------------------------------------------
@@ -334,7 +357,7 @@ def _sheets_state(request: web.Request) -> dict:
 
 async def sheets(request: web.Request) -> web.Response:
     """The Листочки screen: the sheets with their versions and the limits of reading them."""
-    return web.json_response(_sheets_state(request))
+    return respond(request, _sheets_state(request))
 
 
 async def update_sheets(request: web.Request) -> web.Response:
@@ -349,7 +372,7 @@ async def update_sheets(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text=str(e)) from None
     for name, value in checked.items():
         settings.set(name, value)
-    return web.json_response(_sheets_state(request))
+    return respond(request, _sheets_state(request))
 
 
 async def join_sheet(request: web.Request) -> web.Response:
@@ -364,8 +387,8 @@ async def join_sheet(request: web.Request) -> web.Response:
     try:
         await request.app[SHEETS_KEY].join(sheet_id, previous)
     except ValueError as e:
-        raise web.HTTPBadRequest(text=str(e)) from None
-    return web.json_response(_sheets_state(request))
+        raise web.HTTPBadRequest(text=reason(e, language(request))) from None
+    return respond(request, _sheets_state(request))
 
 
 # --- HSE App X ------------------------------------------------------------------------------
@@ -376,7 +399,7 @@ def _hseapp_state(request: web.Request) -> dict:
 
 
 async def hseapp(request: web.Request) -> web.Response:
-    return web.json_response(_hseapp_state(request))
+    return respond(request, _hseapp_state(request))
 
 
 async def update_hseapp(request: web.Request) -> web.Response:
@@ -385,7 +408,7 @@ async def update_hseapp(request: web.Request) -> web.Response:
     if set(values) != {"enabled"} or not isinstance(values["enabled"], bool):
         raise web.HTTPBadRequest(text="expected {enabled: true|false}")
     request.app[HSEAPP_KEY].set_enabled(values["enabled"])
-    return web.json_response(_hseapp_state(request))
+    return respond(request, _hseapp_state(request))
 
 
 async def hseapp_link(request: web.Request) -> web.Response:
@@ -394,36 +417,41 @@ async def hseapp_link(request: web.Request) -> web.Response:
     app_redirect = (await _json(request)).get("app", False)
     if not isinstance(app_redirect, bool):
         raise web.HTTPBadRequest(text="expected {app: true|false}")
-    return web.json_response({"url": request.app[HSEAPP_KEY].login_link(app=app_redirect)})
+    return respond(request, {"url": request.app[HSEAPP_KEY].login_link(app=app_redirect)})
 
 
 async def hseapp_login(request: web.Request) -> web.Response:
     """{url}: the return address pasted by hand, when the browser did not come back by itself."""
     returned = (await _json(request)).get("url")
     if not isinstance(returned, str) or not returned.strip():
-        raise web.HTTPBadRequest(text="вставьте адрес, на который вернулся браузер")
+        raise bad_request(request, "paste the address the browser came back to",
+                          "вставьте адрес, на который вернулся браузер")
     try:
         await request.app[HSEAPP_KEY].login(returned)
     except ValueError as e:
-        raise web.HTTPBadRequest(text=str(e)) from None
-    return web.json_response(_hseapp_state(request))
+        raise web.HTTPBadRequest(text=reason(e, language(request))) from None
+    return respond(request, _hseapp_state(request))
 
 
 async def hseapp_callback(request: web.Request) -> web.Response:
     """The browser after the HSE login (public, no initData: only the browser that opened the link knows its
     state). The address carries the code: it is not logged (the ports have no access log)."""
+    lang = language(request)
     try:
         await request.app[HSEAPP_KEY].login(str(request.rel_url))
     except ValueError as e:
-        reason = str(e).rstrip(".")
-        return page("Вход не удался", f"{reason[:1].upper()}{reason[1:]}.",
-                    "Вернитесь в Telegram и войдите ещё раз: Mini App, экран «HSE App X».", status=400)
-    return page("Вход в HSE App X выполнен", "Дедлайны обновятся в течение минуты.",
-                "Это окно можно закрыть и вернуться в Telegram.")
+        why = reason(e, lang).rstrip(".")
+        return page(lang, tr(lang, "The login failed", "Вход не удался"), f"{why[:1].upper()}{why[1:]}.",
+                    tr(lang, "Go back to Telegram and log in again: the Mini App, screen «HSE App X».",
+                       "Вернитесь в Telegram и войдите ещё раз: Mini App, экран «HSE App X»."), status=400)
+    return page(lang, tr(lang, "Logged in to HSE App X", "Вход в HSE App X выполнен"),
+                tr(lang, "The deadlines will be updated within a minute.", "Дедлайны обновятся в течение минуты."),
+                tr(lang, "This window can be closed: go back to Telegram.",
+                   "Это окно можно закрыть и вернуться в Telegram."))
 
 
 PAGE = """<!doctype html>
-<html lang="ru">
+<html lang="{lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -455,7 +483,7 @@ def _summaries_state(request: web.Request) -> dict:
 
 async def summaries(request: web.Request) -> web.Response:
     """The Сводки screen: the time of the daily summary, its chats and how the last one went."""
-    return web.json_response(_summaries_state(request))
+    return respond(request, _summaries_state(request))
 
 
 async def update_summaries(request: web.Request) -> web.Response:
@@ -468,7 +496,7 @@ async def update_summaries(request: web.Request) -> web.Response:
     except SettingsError as e:
         raise web.HTTPBadRequest(text=str(e)) from None
     request.app[SUMMARIES_KEY].reschedule()
-    return web.json_response(_summaries_state(request))
+    return respond(request, _summaries_state(request))
 
 
 # --- the twin's account ------------------------------------------------------------------------
@@ -484,36 +512,38 @@ async def twin_login(request: web.Request) -> web.Response:
         else:
             raise web.HTTPBadRequest(text="expected {phone}, {code} or {password}")
     except LoginError as e:
-        raise web.HTTPBadRequest(text=str(e)) from None
-    return web.json_response(twin.status())
+        raise web.HTTPBadRequest(text=reason(e, language(request))) from None
+    return respond(request, twin.status())
 
 
 async def twin_cancel(request: web.Request) -> web.Response:
     await request.app[TWIN_KEY].cancel_login()
-    return web.json_response(request.app[TWIN_KEY].status())
+    return respond(request, request.app[TWIN_KEY].status())
 
 
 async def twin_logout(request: web.Request) -> web.Response:
     try:
         await request.app[TWIN_KEY].logout()
     except LoginError as e:
-        raise web.HTTPBadRequest(text=str(e)) from None
-    return web.json_response(request.app[TWIN_KEY].status())
+        raise web.HTTPBadRequest(text=reason(e, language(request))) from None
+    return respond(request, request.app[TWIN_KEY].status())
 
 
 # --- general settings ---------------------------------------------------------------------------
 
 def _general_state(request: web.Request) -> dict:
     settings = request.app[SETTINGS_KEY]
-    return {**{name: settings.get(name) for name in GENERAL}, "batch_choices": list(BATCH_HOURS)}
+    return {**{name: settings.get(name) for name in GENERAL}, "batch_choices": list(BATCH_HOURS),
+            "languages": list(LANGUAGES)}
 
 
 async def general(request: web.Request) -> web.Response:
-    return web.json_response(_general_state(request))
+    return respond(request, _general_state(request))
 
 
 async def update_general(request: web.Request) -> web.Response:
-    """Any of batch_hours, news_ttl_hours, llm_prices; all are checked before any is saved."""
+    """Any of batch_hours, news_ttl_hours, llm_prices and the two languages; all are checked before any is
+    saved."""
     values = await _json(request)
     if not values or set(values) - set(GENERAL):
         raise web.HTTPBadRequest(text=f"expected some of {', '.join(GENERAL)}")
@@ -523,20 +553,20 @@ async def update_general(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text=str(e)) from None
     for name, value in checked.items():
         request.app[SETTINGS_KEY].set(name, value)
-    return web.json_response(_general_state(request))
+    return respond(request, _general_state(request))
 
 
 # --- LLM spending -----------------------------------------------------------------------------
 
 def _llm_state(request: web.Request) -> dict:
-    budget, inbox = request.app[BUDGET_KEY], request.app[INBOX_KEY]
+    budget, inbox, lang = request.app[BUDGET_KEY], request.app[INBOX_KEY], language(request)
     now = budget.now()  # one clock with the limit
 
     def chat_title(chat_id: int) -> str:
         if chat_id == MAILBOX:
-            return "Почта"
+            return tr(lang, "Mail", "Почта")
         chat = inbox.chat(chat_id)
-        return chat["title"] if chat else f"чат {chat_id}"
+        return chat["title"] if chat else tr(lang, f"chat {chat_id}", f"чат {chat_id}")
 
     periods = {}
     for name, totals in request.app[JOURNAL_KEY].usage(now).items():
@@ -556,7 +586,7 @@ def _llm_state(request: web.Request) -> dict:
 
 async def llm(request: web.Request) -> web.Response:
     """The «Расход LLM» screen."""
-    return web.json_response(_llm_state(request))
+    return respond(request, _llm_state(request))
 
 
 async def update_llm(request: web.Request) -> web.Response:
@@ -569,14 +599,14 @@ async def update_llm(request: web.Request) -> web.Response:
     except SettingsError as e:
         raise web.HTTPBadRequest(text=str(e)) from None
     request.app[BUDGET_KEY].limit_changed()
-    return web.json_response(_llm_state(request))
+    return respond(request, _llm_state(request))
 
 
 async def raise_llm(request: web.Request) -> web.Response:
     """One more daily limit until midnight, as the button in «Система»."""
     budget = request.app[BUDGET_KEY]
     budget.raise_today(budget.settings.get("llm_daily_limit_usd"))
-    return web.json_response(_llm_state(request))
+    return respond(request, _llm_state(request))
 
 
 # --- grades -----------------------------------------------------------------------------------
@@ -593,7 +623,7 @@ def _grades_state(request: web.Request) -> dict:
 
 async def grade_sheets(request: web.Request) -> web.Response:
     """The Оценки screen: the name, the sheets with what was read in them, the window of new grades."""
-    return web.json_response(_grades_state(request))
+    return respond(request, _grades_state(request))
 
 
 async def update_grades(request: web.Request) -> web.Response:
@@ -606,11 +636,11 @@ async def update_grades(request: web.Request) -> web.Response:
         request.app[GRADES_KEY].configure({GRADE_SETTINGS[key]: value for key, value in values.items()})
     except SettingsError as e:
         raise web.HTTPBadRequest(text=str(e)) from None
-    return web.json_response(_grades_state(request))
+    return respond(request, _grades_state(request))
 
 
-def page(title: str, text: str, hint: str, status: int = 200) -> web.Response:
-    body = PAGE.format(title=html.escape(title), text=html.escape(text), hint=html.escape(hint))
+def page(lang: str, title: str, text: str, hint: str, status: int = 200) -> web.Response:
+    body = PAGE.format(lang=lang, title=html.escape(title), text=html.escape(text), hint=html.escape(hint))
     return web.Response(text=body, status=status, content_type="text/html",
                         headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 

@@ -74,3 +74,12 @@ def test_bad_chat_settings(values):
     with pytest.raises(SettingsError):
         chats.update(-1001, {"study": True, **values})
     assert chats.get(-1001, "study") is False  # checked before anything is saved
+
+
+def test_languages(settings):
+    """р. 41: English by default, each its own, only English or Russian."""
+    assert settings.get("forum_language") == settings.get("miniapp_language") == "en"
+    assert settings.set("forum_language", "ru") == "ru" and settings.get("miniapp_language") == "en"
+    for wrong in ("de", "RU", "", None):
+        with pytest.raises(SettingsError):
+            settings.set("miniapp_language", wrong)
