@@ -152,6 +152,7 @@
       background: var(--tg-theme-secondary-bg-color, #f2f2f2);
     }
     label.field select:disabled { opacity: .6; }
+    .card label.field input { background: var(--tg-theme-bg-color, #fff); }
     #llm { display: flex; justify-content: space-between; gap: 8px; cursor: pointer; }
     #llm[hidden] { display: none; }
     .periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
@@ -205,10 +206,11 @@
       <button data-tab="subjects">Словарь</button>
       <button data-tab="hseapp">HSE App X</button>
       <button data-tab="llm">Расход LLM</button>
+      <button data-tab="general">Общие</button>
     </nav>
     <section id="tab-chats">
       <p class="hint">Чаты твинка и их настройки. Новый чат появляется выключенным.</p>
-      <div id="twin" class="card warn" hidden></div>
+      <div id="twin" class="card" hidden></div>
       <div id="mail" class="card" hidden></div>
       <input id="search" type="search" placeholder="Найти чат" hidden>
       <div id="chats"></div>
@@ -229,6 +231,7 @@
     </section>
     <section id="tab-hseapp" hidden></section>
     <section id="tab-llm" hidden></section>
+    <section id="tab-general" hidden></section>
   </div>
   <div id="chat" hidden></div>
   <div id="subject" hidden></div>
@@ -1140,6 +1143,113 @@
       return box;
     }
 
+    // --- the twin's account ----------------------------------------------------
+
+    async function twinStep(path, values = {}) {
+      try {
+        const state = await send(path, "POST", values);
+        renderTwin(state);
+        if (state.account) {  // logged in: its chats are listed now
+          chats = (await call("api/chats")).chats;
+          $("search").hidden = chats.length < 8;
+          renderList();
+        }
+      } catch (error) {
+        tg.showAlert(error.message);
+      }
+    }
+
+    function twinForm(label, input, button, cancel) {
+      const go = el("button", {type: "submit"}, button);
+      const form = el("form", {}, el("label", {className: "field"}, label, input), el("div", {className: "actions"}, go));
+      if (cancel) {
+        const stop = el("button", {type: "button", className: "danger"}, "Отмена");
+        stop.onclick = () => twinStep("api/twin/cancel");
+        form.lastChild.append(stop);
+      }
+      return form;
+    }
+
+    function renderTwin(t) {
+      const box = $("twin");
+      box.hidden = false;
+      if (t.account) {
+        const out = el("button", {className: "link"}, "Выйти");
+        out.onclick = () => tg.showConfirm("Выйти из аккаунта твинка? Чаты перестанут читаться, их настройки "
+          + "останутся.", (yes) => { if (yes) twinStep("api/twin/logout"); });
+        box.replaceChildren(el("div", {className: "row", style: "padding: 0"},
+          el("div", {className: "main"}, el("div", {className: "title"}, "Твинк: " + t.account.name
+            + (t.account.username ? " (@" + t.account.username + ")" : "")),
+            el("div", {className: t.error ? "hint warn" : "hint"}, t.error || "читает включённые чаты")),
+          out));
+        return;
+      }
+      let form;
+      if (t.login && t.login.step === "code") {
+        const code = el("input", {inputMode: "numeric", autocomplete: "one-time-code", placeholder: "12345"});
+        form = twinForm(`Код из Telegram твинка (${t.login.phone})`, code, "Войти", true);
+        form.onsubmit = (event) => { event.preventDefault(); twinStep("api/twin/login", {code: code.value}); };
+        box.replaceChildren(el("p", {className: "hint"}, "Код приходит в Telegram твинка или по SMS. Не пересылайте "
+          + "его в Telegram: тогда он перестаёт действовать."), form);
+      } else if (t.login && t.login.step === "password") {
+        const password = el("input", {type: "password", autocomplete: "current-password"});
+        form = twinForm("Облачный пароль твинка", password, "Войти", true);
+        form.onsubmit = (event) => { event.preventDefault(); twinStep("api/twin/login", {password: password.value}); };
+        box.replaceChildren(form);
+      } else {
+        const phone = el("input", {type: "tel", autocomplete: "tel", placeholder: "+7…"});
+        form = twinForm("Телефон твинка", phone, "Получить код", false);
+        form.onsubmit = (event) => { event.preventDefault(); twinStep("api/twin/login", {phone: phone.value}); };
+        box.replaceChildren(el("div", {className: "warn"}, "Твинк не читает чаты: " + (t.error || "нужен вход") + "."),
+          el("p", {className: "hint"}, "Отдельный аккаунт Telegram, не ваш основной и не бот."), form);
+      }
+    }
+
+    // --- general settings -----------------------------------------------------
+
+    const PRICE_FIELDS = [["input", "вход"], ["output", "выход"], ["long_input", "вход > 100K"],
+                          ["long_output", "выход > 100K"]];
+
+    async function loadGeneral() {
+      try {
+        renderGeneral(await call("api/general"));
+      } catch (error) {
+        $("tab-general").replaceChildren(el("p", {className: "hint"}, error.message));
+      }
+    }
+
+    async function changeGeneral(values) {
+      try {
+        renderGeneral(await send("api/general", "PATCH", values));
+      } catch (error) {
+        tg.showAlert(error.message);
+        loadGeneral();
+      }
+    }
+
+    function renderGeneral(data) {
+      const every = el("select", {}, ...data.batch_choices.map((n) =>
+        el("option", {value: n, selected: n === data.batch_hours}, `${n} ч`)));
+      every.onchange = () => changeGeneral({batch_hours: Number(every.value)});
+      const ttl = el("input", {type: "number", min: 1, max: 168, step: 1, value: data.news_ttl_hours});
+      ttl.onchange = () => changeGeneral({news_ttl_hours: Number(ttl.value)});
+      const parts = [el("p", {className: "hint"}, "Остальные настройки — на своих экранах: чаты, расход LLM, листочки, "
+        + "сводки, оценки, HSE App X. Секреты (токены, пароль почты, ссылка РУЗ) — в .env на сервере."),
+        el("div", {className: "list"},
+          settingRow("Разбор пачек", "каждые N часов, в часы суток, кратные N; у чата может быть свой", every),
+          settingRow("Новости живут, ч", "в форуме и в Tablo; неучебное старше этого разбирается без модели", ttl))];
+      for (const [model, price] of Object.entries(data.llm_prices)) {
+        parts.push(el("h3", {}, `${model} · $ за 1 млн токенов`));
+        parts.push(el("div", {className: "list"}, ...PRICE_FIELDS.map(([key, title]) => {
+          const input = el("input", {type: "number", min: 0, step: 0.01, value: price[key]});
+          input.onchange = () => changeGeneral({llm_prices: {...data.llm_prices,
+                                                             [model]: {...price, [key]: Number(input.value)}}});
+          return settingRow(title, "", input);
+        })));
+      }
+      $("tab-general").replaceChildren(...parts);
+    }
+
     // --- LLM spending ---------------------------------------------------------
 
     const TASKS = {batch: "Разбор пачек", image: "Картинки", pdf: "PDF целиком", summary: "Сводки",
@@ -1307,6 +1417,7 @@
       if (name === "subjects") loadSubjects();
       if (name === "hseapp") { hse.note = null; loadHseApp(); }
       if (name === "llm") loadLlm();
+      if (name === "general") loadGeneral();
     }
 
     // A screen asked for by the link the Mini App was opened with (a button under a post in the forum).
@@ -1326,10 +1437,7 @@
         showLlmLine(me.llm.spent_usd, me.llm.limit_usd, me.llm.runs_today);
         $("llm").hidden = false;
         $("tabs").hidden = false;
-        if (list.twin.login_needed || list.twin.error) {
-          $("twin").textContent = "Твинк не читает чаты: " + (list.twin.error || "нужен вход") + ".";
-          $("twin").hidden = false;
-        }
+        renderTwin(list.twin);
         const mail = list.mail || {};
         if (mail.configured) {  // collectors/mail.py: letters are read with the chats
           $("mail").textContent = mail.error ? "Почта не читается: " + mail.error + "."

@@ -73,6 +73,7 @@ class Service:
         self.chat_settings = ChatSettings(self.store)
         self.twin = Twin(env, self.inbox, self.chat_settings, session=twin_session(data_dir),
                          notify=self._to_system)
+        self.twin.notify_login = self._twin_notice
         self.news, self.deadlines = News(self.store), Deadlines(self.store)
         self.subjects = Subjects(self.store, self.llm)
         self.ruz = Ruz(env.ruz_ical_url, self.store)
@@ -138,6 +139,11 @@ class Service:
 
     def _to_system(self, text: str) -> None:
         self.forum.spawn(self.forum.post("system", text))
+
+    def _twin_notice(self, text: str) -> None:
+        """Twin.notify_login: the line gets the button that leads to the login on the Mini App's «Чаты» screen."""
+        button = self.forum.app_button("Войти в твинк", "chats")
+        self.forum.spawn(self.forum.post("system", text, buttons=[button] if button else None))
 
     def _hseapp_notice(self, text: str, login: bool) -> None:
         """HseApp.notify: a line for the System topic; one that asks for a login gets the button to the Mini App."""
@@ -206,7 +212,7 @@ class Service:
             for app, port in ((miniapp.create_app(self.env, self.budget, self.journal, self.inbox, self.chat_settings,
                                                   self.sources, self.subjects, self.schedule, self.hseapp,
                                                   self.merged, self.settings, self.sheet_topic,
-                                                  self.summary_topic, self.grades),
+                                                  self.summary_topic, self.grades, self.twin),
                                self.env.public_port),
                               (api.create_app(self.env, self.budget, self.sources, self.calendar, self.merged,
                                               self.grades, self.news, self.settings),
@@ -220,7 +226,7 @@ class Service:
             if not self.env.calendar_secret:
                 log.info("CALENDAR_SECRET is not set: the iCal feeds are off")
             await self.forum.post("system", "uni-master запущен.")
-            twin_on = await self.twin.start()  # without a login the service runs on, and the twin says so
+            await self.twin.start()  # without a login the service runs on, and the twin says so
             tasks.append(asyncio.create_task(self._prune()))
             tasks.append(asyncio.create_task(self.batches.run()))
             tasks.append(asyncio.create_task(self.ruz.run()))
@@ -230,16 +236,7 @@ class Service:
             tasks.append(asyncio.create_task(self.summary_topic.run()))
             tasks.append(asyncio.create_task(self.grade_sheets.run()))
 
-            # Telethon's own futures: waited on, never cancelled.
-            disconnected = {self.forum.client.disconnected: "the bot"}
-            if twin_on:
-                disconnected[self.twin.client.disconnected] = "the twin"
-            stopped = asyncio.ensure_future(stop.wait())
-            await asyncio.wait({*disconnected, stopped}, return_when=asyncio.FIRST_COMPLETED)
-            for future, who in disconnected.items():
-                if future.done():
-                    log.error("%s lost Telegram for good, exiting so Docker restarts the service", who)
-            stopped.cancel()
+            await self._watch(stop)
         finally:
             for task in tasks:
                 task.cancel()
@@ -249,6 +246,29 @@ class Service:
                 with contextlib.suppress(Exception):
                     await client.stop()
             self.store.close()
+
+    async def _watch(self, stop: asyncio.Event) -> None:
+        """Until a signal, or until the bot or the twin loses Telegram for good (Docker restarts the service then).
+        A login or a logout in the Mini App changes the twin's client: the new one is watched, a logout is no loss."""
+        stopped = asyncio.ensure_future(stop.wait())
+        try:
+            while not stopped.done():
+                self.twin.changed.clear()
+                # Telethon's own futures: waited on, never cancelled.
+                watched = {self.forum.client.disconnected: "the bot"}
+                if self.twin.client is not None:
+                    watched[self.twin.client.disconnected] = "the twin"
+                changed = asyncio.ensure_future(self.twin.changed.wait())
+                await asyncio.wait({*watched, stopped, changed}, return_when=asyncio.FIRST_COMPLETED)
+                changed.cancel()
+                if self.twin.changed.is_set():
+                    continue
+                lost = [who for future, who in watched.items() if future.done()]
+                if lost:
+                    log.error("%s lost Telegram for good, exiting so Docker restarts the service", " and ".join(lost))
+                    return
+        finally:
+            stopped.cancel()
 
     def _ruz_status(self) -> dict:
         """RUZ and the naming of its subjects, which waits for Haiku (§4.2)."""

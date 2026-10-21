@@ -3,7 +3,8 @@
 Every /app/api/ request carries Telegram's initData in `Authorization: tma <initData>`. It is signed with the bot
 token, and only the owner's Telegram id gets in (р. 16).
 
-Screens: the chats and their settings with the daily number of images read in them (р. 12), the course dictionary
+Screens: the twin's account with its login and logout and the chats with their settings and the daily number of
+images read in them (р. 12), the course dictionary
 with manual entries (р. 3, р. 33), the timetable's events from chats and corrections of classes with the main/optional
 switch and hiding (§6.5), the merged deadlines with the owner's own ones and the hidden ones (§5.4, §5.5: the same
 list and the same actions as HA's to-do lists), the HSE App X login (§5.2, р. 7), the sheets with their versions, the
@@ -11,6 +12,8 @@ limits of reading them and the joining of a sheet posted as new to an older one 
 of the daily one and its chats (§6.6), the grades: the name, the sheets and what was read in them (§6.7), the LLM
 spending (§7, р. 40): today, this week and this month by task and by chat, the cost of each of the last 30 days and
 the daily limit, which can be changed or raised for today. Tablo and HA show no spending: this screen is the one place.
+The general settings: the batches' N, how long news lives and the prices of the models. Every setting is here (р. 33);
+only the secrets of .env are not.
 
 The same port serves /hseapp/callback, where the browser comes back after the HSE login. It has no initData: the
 PKCE state of the login link is its protection, and it answers with a short page in Russian.
@@ -32,6 +35,7 @@ from .. import clock
 from ..collectors.grades import sheet_id
 from ..collectors.hseapp import CALLBACK_PATH, HseApp
 from ..collectors.inbox import MAILBOX, Inbox
+from ..collectors.telegram import LoginError, Twin
 from ..config import Env
 from ..llm.budget import SOFT_SHARE, Budget
 from ..llm.journal import Journal
@@ -40,7 +44,7 @@ from ..processing.merge import DeadlineList
 from ..processing.schedule import Schedule
 from ..processing.subjects import ABBR_CHARS, TITLE_CHARS, SubjectError, Subjects
 from ..processing.todo import CATEGORIES, uid
-from ..settings import SHEET_LABEL_CHARS, SPECS, ChatSettings, Settings, SettingsError
+from ..settings import BATCH_HOURS, SHEET_LABEL_CHARS, SPECS, ChatSettings, Settings, SettingsError
 from .api import SOURCES_KEY, Sources
 from .sheets import SheetTopic
 from .summaries import SummaryTopic
@@ -61,6 +65,8 @@ SETTINGS_KEY = web.AppKey("settings", Settings)
 SHEETS_KEY = web.AppKey("sheets", SheetTopic)
 SUMMARIES_KEY = web.AppKey("summaries", SummaryTopic)
 GRADES_KEY = web.AppKey("grades", Grades)
+TWIN_KEY = web.AppKey("twin", Twin)
+GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices")  # the settings of no other screen
 GRADE_SETTINGS = {"student": "grades_student", "sheets": "grades_sheets", "window_days": "grades_window_days"}
 PDF_LIMITS = ("pdf_pages", "pdf_tokens")
 TITLE_LIMIT = 200  # characters of an own deadline's title
@@ -465,6 +471,61 @@ async def update_summaries(request: web.Request) -> web.Response:
     return web.json_response(_summaries_state(request))
 
 
+# --- the twin's account ------------------------------------------------------------------------
+
+async def twin_login(request: web.Request) -> web.Response:
+    """{phone}: ask for a code; {code}, then {password} if the account has one: sign in. Answers the twin's status."""
+    values, twin = await _json(request), request.app[TWIN_KEY]
+    try:
+        if set(values) == {"phone"}:
+            await twin.send_code(str(values["phone"]))
+        elif set(values) in ({"code"}, {"password"}):
+            await twin.sign_in(code=values.get("code"), password=values.get("password"))
+        else:
+            raise web.HTTPBadRequest(text="expected {phone}, {code} or {password}")
+    except LoginError as e:
+        raise web.HTTPBadRequest(text=str(e)) from None
+    return web.json_response(twin.status())
+
+
+async def twin_cancel(request: web.Request) -> web.Response:
+    await request.app[TWIN_KEY].cancel_login()
+    return web.json_response(request.app[TWIN_KEY].status())
+
+
+async def twin_logout(request: web.Request) -> web.Response:
+    try:
+        await request.app[TWIN_KEY].logout()
+    except LoginError as e:
+        raise web.HTTPBadRequest(text=str(e)) from None
+    return web.json_response(request.app[TWIN_KEY].status())
+
+
+# --- general settings ---------------------------------------------------------------------------
+
+def _general_state(request: web.Request) -> dict:
+    settings = request.app[SETTINGS_KEY]
+    return {**{name: settings.get(name) for name in GENERAL}, "batch_choices": list(BATCH_HOURS)}
+
+
+async def general(request: web.Request) -> web.Response:
+    return web.json_response(_general_state(request))
+
+
+async def update_general(request: web.Request) -> web.Response:
+    """Any of batch_hours, news_ttl_hours, llm_prices; all are checked before any is saved."""
+    values = await _json(request)
+    if not values or set(values) - set(GENERAL):
+        raise web.HTTPBadRequest(text=f"expected some of {', '.join(GENERAL)}")
+    try:
+        checked = {name: SPECS[name][1](value) for name, value in values.items()}
+    except SettingsError as e:
+        raise web.HTTPBadRequest(text=str(e)) from None
+    for name, value in checked.items():
+        request.app[SETTINGS_KEY].set(name, value)
+    return web.json_response(_general_state(request))
+
+
 # --- LLM spending -----------------------------------------------------------------------------
 
 def _llm_state(request: web.Request) -> dict:
@@ -558,7 +619,7 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
                sources: Sources, dictionary: Subjects, timetable: Schedule, hse: HseApp,
                merged: DeadlineList, settings: Settings | None = None,
                sheet_topic: SheetTopic | None = None, summary_topic: SummaryTopic | None = None,
-               grade_list: Grades | None = None) -> web.Application:
+               grade_list: Grades | None = None, twin: Twin | None = None) -> web.Application:
     """The Mini App's port; without the settings and the sheets' topic the Листочки screen has no API, without the
     settings and the summaries' topic the Сводки screen has none, without the grades the Оценки screen has none."""
     app = web.Application(middlewares=[owner_only])
@@ -572,11 +633,18 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
     app.router.add_get("/app/api/chats", chats)
     app.router.add_patch("/app/api/chats/{chat_id}", update_chat)
     app.router.add_get("/app/api/chats/{chat_id}/senders", senders)
+    if twin is not None:
+        app[TWIN_KEY] = twin
+        app.router.add_post("/app/api/twin/login", twin_login)
+        app.router.add_post("/app/api/twin/cancel", twin_cancel)
+        app.router.add_post("/app/api/twin/logout", twin_logout)
     app.router.add_get("/app/api/llm", llm)
     app.router.add_post("/app/api/llm/raise", raise_llm)
     if settings is not None:
         app.router.add_patch("/app/api/images", update_images)
         app.router.add_patch("/app/api/llm", update_llm)
+        app.router.add_get("/app/api/general", general)
+        app.router.add_patch("/app/api/general", update_general)
     app.router.add_get("/app/api/subjects", subjects)
     app.router.add_put("/app/api/subjects", put_subject)
     app.router.add_delete("/app/api/subjects", delete_subject)

@@ -2,6 +2,7 @@
 
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 from uni_master.app import Service
 from uni_master.collectors.ruz import parse
@@ -180,3 +181,35 @@ async def test_hseapp_wiring(tmp_path):
         assert posts[-1] == ("system", "HSE App X снова доступен.", None)
     finally:
         service.store.close()
+
+
+async def test_watch_follows_the_twins_login_and_logout():
+    """A login in the Mini App is watched from then on, a logout is no loss, a lost connection ends the service."""
+    loop = asyncio.get_running_loop()
+    bot = SimpleNamespace(client=SimpleNamespace(disconnected=loop.create_future()))
+    twin = SimpleNamespace(client=None, changed=asyncio.Event())
+    service, stop = SimpleNamespace(forum=bot, twin=twin), asyncio.Event()
+    watch = asyncio.create_task(Service._watch(service, stop))
+    await asyncio.sleep(0)
+
+    first = SimpleNamespace(disconnected=loop.create_future())
+    twin.client = first
+    twin.changed.set()  # logged in
+    await asyncio.sleep(0.01)
+    twin.client = None
+    twin.changed.set()  # logged out: its client disconnects too, and that is no loss
+    first.disconnected.set_result(None)
+    await asyncio.sleep(0.01)
+    assert not watch.done()
+
+    second = SimpleNamespace(disconnected=loop.create_future())
+    twin.client = second
+    twin.changed.set()
+    await asyncio.sleep(0.01)
+    second.disconnected.set_result(None)  # lost for good
+    await asyncio.wait_for(watch, 1)
+
+    watch = asyncio.create_task(Service._watch(SimpleNamespace(forum=bot, twin=SimpleNamespace(
+        client=None, changed=asyncio.Event())), stop))
+    stop.set()
+    await asyncio.wait_for(watch, 1)

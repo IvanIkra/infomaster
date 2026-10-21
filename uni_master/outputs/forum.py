@@ -27,7 +27,7 @@ TOPICS = {"system": "Система", "news": "Новости", "deadlines": "Д
 COMMANDS = {"summary": "Сводка чата: /summary [чат] [3h | 2d | 20.10-22.10]"}
 RAISE_LIMIT = re.compile(rb"^llm:raise:(\d{4}-\d{2}-\d{2})$")  # the day is in the data: the button raises only that day
 # Mini App screens a post can open (see app_button) -> what the bot says above the Mini App's button
-SCREENS = {"hseapp": "Вход в HSE App X — в Mini App."}
+SCREENS = {"hseapp": "Вход в HSE App X — в Mini App.", "chats": "Вход твинка — в Mini App, экран «Чаты»."}
 
 
 def start_screen(text: str) -> str | None:

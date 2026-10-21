@@ -172,3 +172,116 @@ async def test_download(twin, tmp_path):
     twin.client.get_messages = AsyncMock(side_effect=errors.ChannelPrivateError(None))
     with pytest.raises(errors.ChannelPrivateError):  # closed to the twin: final, Files keeps it as the file's error
         await twin.download(CHANNEL, 5, path)
+
+
+class FakeClient:
+    """Telethon's client for the login: the code 12345, the cloud password pw when `password` is set."""
+    password = False
+    me = types.User(id=777, first_name="Twin", username="twin_acc")
+    made: list["FakeClient"] = []
+
+    def __init__(self, session, api_id, api_hash):
+        self.file = telegram.session_file(telegram.Path(session))
+        self.connected, self.handlers = False, []
+        FakeClient.made.append(self)
+
+    async def connect(self):
+        self.file.touch()
+        self.connected = True
+
+    async def disconnect(self):
+        self.connected = False
+
+    async def send_code_request(self, phone):
+        if phone == "+70000000000":
+            raise errors.PhoneNumberInvalidError(request=None)
+        return SimpleNamespace(phone_code_hash="hash")
+
+    async def sign_in(self, phone=None, code=None, phone_code_hash=None, password=None):
+        if password is None:
+            assert phone_code_hash == "hash"
+            if code != "12345":
+                raise errors.PhoneCodeInvalidError(request=None)
+            if self.password:
+                raise errors.SessionPasswordNeededError(request=None)
+        elif password != "pw":
+            raise errors.PasswordHashInvalidError(request=None)
+
+    async def get_me(self):
+        return self.me
+
+    async def log_out(self):
+        self.file.unlink()
+        self.connected = False
+
+    def add_event_handler(self, handler, event):
+        self.handlers.append(handler)
+
+    async def iter_dialogs(self):
+        return
+        yield
+
+
+@pytest.fixture
+def fake_client(monkeypatch):
+    FakeClient.made, FakeClient.password = [], False
+    monkeypatch.setattr(telegram, "TelegramClient", FakeClient)
+    return FakeClient
+
+
+async def test_login_and_logout(twin, fake_client):
+    twin.env = SimpleNamespace(api_id=1, api_hash="h", owner_id=42)
+    with pytest.raises(telegram.LoginError, match="сначала запросите код"):
+        await twin.sign_in(code="12345")
+    with pytest.raises(telegram.LoginError, match="не знает"):
+        await twin.send_code("+7 000 000-00-00")
+    await twin.send_code("+7 (916) 123-45-67")
+    assert twin.status()["login"] == {"step": "code", "phone": "+7916•••••67"}
+    with pytest.raises(telegram.LoginError, match="неверный код"):
+        await twin.sign_in(code="11111")
+    assert twin.client is None and twin.status()["login"]["step"] == "code"  # one more try with the same code
+
+    await twin.sign_in(code="1 2 3 4 5")
+    status = twin.status()
+    assert status["account"] == {"id": 777, "name": "Twin", "username": "twin_acc"} and status["login"] is None
+    assert status["login_needed"] is False and status["error"] is None and twin.changed.is_set()
+    assert twin.client.handlers and "Твинк вошёл: Twin" in twin.notices[-1]
+    assert telegram.session_file(twin.session).stat().st_mode & 0o777 == 0o600
+    with pytest.raises(telegram.LoginError, match="уже вошёл"):
+        await twin.send_code("+79161234567")
+
+    twin.changed.clear()
+    await twin.logout()
+    assert twin.client is None and not telegram.session_file(twin.session).exists() and twin.changed.is_set()
+    assert twin.status()["login_needed"] is True and twin.status()["account"] is None
+    assert "вышел из аккаунта Twin" in twin.notices[-1]
+    with pytest.raises(telegram.LoginError, match="и так не вошёл"):
+        await twin.logout()
+
+
+async def test_login_with_a_cloud_password(twin, fake_client):
+    twin.env = SimpleNamespace(api_id=1, api_hash="h", owner_id=42)
+    fake_client.password = True
+    await twin.send_code("+79161234567")
+    await twin.sign_in(code="12345")
+    assert twin.status()["login"]["step"] == "password" and twin.client is None
+    with pytest.raises(telegram.LoginError, match="неверный облачный пароль"):
+        await twin.sign_in(password="nope")
+    await twin.sign_in(password="pw")
+    assert twin.status()["account"]["name"] == "Twin"
+
+    # A new code drops the pending login; cancelling drops it too.
+    await twin.logout()
+    await twin.send_code("+79161234567")
+    await twin.send_code("+79161234567")
+    assert [c.connected for c in fake_client.made[-2:]] == [False, True]
+    await twin.cancel_login()
+    assert twin.status()["login"] is None and not fake_client.made[-1].connected
+
+
+async def test_the_owners_account_is_no_twin(twin, fake_client):
+    twin.env = SimpleNamespace(api_id=1, api_hash="h", owner_id=777)
+    await twin.send_code("+79161234567")
+    with pytest.raises(telegram.LoginError, match="это не твинк"):
+        await twin.sign_in(code="12345")
+    assert twin.client is None and not telegram.session_file(twin.session).exists()

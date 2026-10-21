@@ -4,6 +4,7 @@ import hmac
 import json
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlencode
 
 import pytest
@@ -100,6 +101,52 @@ async def test_miniapp_llm(aiohttp_client, budget, journal, store, schedule, mer
     assert body["daily_limit_usd"] == 0.75 and body["limit_usd"] == 0.75
     body = await (await client.post("/app/api/llm/raise", headers=owner())).json()
     assert body["limit_usd"] == 1.5 and body["raised_usd"] == 0.75 and body["level"] == "ok"
+
+
+
+async def test_miniapp_twin_login(aiohttp_client, budget, journal, store, schedule, merged, tmp_path, monkeypatch):
+    """Phone, code, logout from the «Чаты» screen; the twin's errors come back as 400 with their text."""
+    from test_telegram import FakeClient
+
+    from uni_master.collectors import telegram
+
+    FakeClient.made, FakeClient.password = [], False
+    monkeypatch.setattr(telegram, "TelegramClient", FakeClient)
+    twin = telegram.Twin(SimpleNamespace(api_id=1, api_hash="h", owner_id=OWNER), schedule.inbox, ChatSettings(store),
+                         tmp_path / "twin", lambda text: None)
+    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store),
+                                                     {**TWIN, "telegram": twin.status}, schedule.subjects, schedule,
+                                                     None, merged, twin=twin))
+    assert (await client.post("/app/api/twin/login", json={"phone": "+79161234567"})).status == 401
+    bad = await client.post("/app/api/twin/login", json={"code": "1"}, headers=owner())
+    assert bad.status == 400 and await bad.text() == "сначала запросите код"
+    assert (await client.post("/app/api/twin/login", json={"x": 1}, headers=owner())).status == 400
+    body = await (await client.post("/app/api/twin/login", json={"phone": "+79161234567"}, headers=owner())).json()
+    assert body["login"] == {"step": "code", "phone": "+7916•••••67"}
+    body = await (await client.post("/app/api/twin/login", json={"code": "12345"}, headers=owner())).json()
+    assert body["account"]["username"] == "twin_acc" and body["login_needed"] is False
+    chats = await (await client.get("/app/api/chats", headers=owner())).json()
+    assert chats["twin"]["account"]["name"] == "Twin"
+    body = await (await client.post("/app/api/twin/logout", headers=owner())).json()
+    assert body["account"] is None and body["login_needed"] is True
+    assert (await client.post("/app/api/twin/logout", headers=owner())).status == 400
+
+
+async def test_miniapp_general(aiohttp_client, budget, journal, store, schedule, merged):
+    settings = budget.settings
+    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN,
+                                                     schedule.subjects, schedule, None, merged, settings))
+    body = await (await client.get("/app/api/general", headers=owner())).json()
+    assert body["batch_hours"] == 3 and body["news_ttl_hours"] == 24 and 24 in body["batch_choices"]
+    prices = body["llm_prices"]
+    changed = {**prices, "claude-haiku-5-5": {**prices["claude-haiku-5-5"], "input": 0.2}}
+    body = await (await client.patch("/app/api/general", json={"batch_hours": 6, "llm_prices": changed},
+                                     headers=owner())).json()
+    assert body["batch_hours"] == 6 and settings.get("llm_prices")["claude-haiku-5-5"]["input"] == 0.2
+    bad = await client.patch("/app/api/general", json={"batch_hours": 2, "news_ttl_hours": 500}, headers=owner())
+    assert bad.status == 400 and settings.get("batch_hours") == 6  # nothing saved from a rejected request
+    assert (await client.patch("/app/api/general", json={"pdf_pages": 3}, headers=owner())).status == 400
+    assert (await client.patch("/app/api/general", json={}, headers=owner())).status == 400
 
 
 async def test_miniapp_chats(aiohttp_client, budget, journal, store, schedule, merged):
