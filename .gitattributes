@@ -1,0 +1,2 @@
+# iCal lines end in CRLF (RFC 5545): the RUZ fixture is kept byte for byte
+*.ics -text

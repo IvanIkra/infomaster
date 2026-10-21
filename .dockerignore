@@ -1,0 +1,5 @@
+*
+!pyproject.toml
+!uni_master
+**/__pycache__
+.DS_Store

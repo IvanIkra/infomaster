@@ -1,0 +1,57 @@
+# Production run on the Tablo host: docker compose up -d --build
+# No port is published on the host (§3). The Mini App goes out only through the Tailscale sidecar's Funnel;
+# Tablo reaches the internal port by service name over the shared network.
+# Bridge network with explicit DNS, as Tablo: the host's routing sends container traffic into AmneziaWG.
+services:
+  uni-master:
+    build: .
+    image: uni-master:latest
+    container_name: uni-master
+    restart: unless-stopped
+    dns:
+      - ${CONTAINER_DNS_1:?set CONTAINER_DNS_1 in .env}
+      - ${CONTAINER_DNS_2:?set CONTAINER_DNS_2 in .env}
+    env_file: .env
+    environment:
+      TZ: Europe/Moscow
+    volumes:
+      - ./data:/app/data
+    networks: [uni]
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "3"
+
+  # Personal tailnet, not the host's corporate one (р. 31). Userspace networking: no tun device, no routes and
+  # no DNS changes in the host or in other containers.
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: uni-master-tailscale
+    hostname: uni-master
+    restart: unless-stopped
+    dns:
+      - ${CONTAINER_DNS_1:?set CONTAINER_DNS_1 in .env}
+      - ${CONTAINER_DNS_2:?set CONTAINER_DNS_2 in .env}
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_HOSTNAME: uni-master
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "true"
+      TS_ACCEPT_DNS: "false"
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - ./data/tailscale:/var/lib/tailscale
+      - ./tailscale:/config:ro
+    networks: [uni]
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "3"
+
+networks:
+  uni:
+    name: uni-master  # Tablo joins it as an external network when it switches to us (stage 10)

@@ -1,0 +1,1349 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>uni-master</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      font: 16px/1.4 -apple-system, system-ui, sans-serif;
+      background: var(--tg-theme-bg-color, #fff);
+      color: var(--tg-theme-text-color, #000);
+    }
+    h2 { margin: 0 0 4px; }
+    h3 { margin: 20px 0 6px; font-size: 13px; text-transform: uppercase; color: var(--tg-theme-section-header-text-color, #888); }
+    .hint { color: var(--tg-theme-hint-color, #888); font-size: 14px; }
+    .card {
+      margin-top: 12px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
+    }
+    .warn { color: var(--tg-theme-destructive-text-color, #d33); }
+    input[type=search] {
+      box-sizing: border-box;
+      width: 100%;
+      margin-top: 12px;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 10px;
+      font: inherit;
+      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
+      color: inherit;
+    }
+    .list { border-radius: 12px; overflow: hidden; background: var(--tg-theme-secondary-bg-color, #f2f2f2); }
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--tg-theme-bg-color, #fff);
+    }
+    .row:last-child { border-bottom: 0; }
+    .row .main { flex: 1; min-width: 0; cursor: pointer; }
+    .row .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    select { font: inherit; color: inherit; background: transparent; border: 0; text-align: right; }
+    .switch { position: relative; width: 44px; height: 26px; flex: none; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch span {
+      position: absolute;
+      inset: 0;
+      border-radius: 13px;
+      background: var(--tg-theme-hint-color, #bbb);
+      transition: background .15s;
+    }
+    .switch span::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform .15s;
+    }
+    .switch input:checked + span { background: var(--tg-theme-button-color, #2481cc); }
+    .switch input:checked + span::after { transform: translateX(18px); }
+    .tabs { display: flex; gap: 6px; margin-top: 12px; overflow-x: auto; }
+    .tabs button {
+      flex: 1 0 auto;
+      padding: 8px 10px;
+      white-space: nowrap;
+      border: 0;
+      border-radius: 10px;
+      font: inherit;
+      font-size: 15px;
+      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
+      color: inherit;
+    }
+    .tabs button.on {
+      background: var(--tg-theme-button-color, #2481cc);
+      color: var(--tg-theme-button-text-color, #fff);
+    }
+    .list + .list { margin-top: 8px; }
+    .badge { font-size: 13px; color: var(--tg-theme-link-color, #2481cc); }
+    .struck { text-decoration: line-through; }
+    .faded { opacity: .5; }
+    label.field { display: block; margin-top: 12px; }
+    label.field input {
+      box-sizing: border-box;
+      width: 100%;
+      margin-top: 4px;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 10px;
+      font: inherit;
+      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
+      color: inherit;
+    }
+    label.field input:read-only { opacity: .6; }
+    .actions { display: flex; gap: 8px; margin-top: 16px; }
+    .actions button {
+      flex: 1;
+      padding: 10px 0;
+      border: 0;
+      border-radius: 10px;
+      font: inherit;
+      background: var(--tg-theme-button-color, #2481cc);
+      color: var(--tg-theme-button-text-color, #fff);
+    }
+    .actions button.danger {
+      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
+      color: var(--tg-theme-destructive-text-color, #d33);
+    }
+    a { color: var(--tg-theme-link-color, #2481cc); }
+    .actions button:disabled { opacity: .5; }
+    details.card summary { cursor: pointer; color: var(--tg-theme-link-color, #2481cc); }
+    textarea {
+      box-sizing: border-box;
+      width: 100%;
+      margin-top: 8px;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 10px;
+      font: 14px/1.4 ui-monospace, monospace;
+      background: var(--tg-theme-bg-color, #fff);
+      color: inherit;
+      resize: vertical;
+    }
+    .ok { color: var(--tg-theme-link-color, #2481cc); }
+    .row button.small {
+      flex: none;
+      padding: 6px 10px;
+      border: 0;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 14px;
+      background: var(--tg-theme-bg-color, #fff);
+      color: var(--tg-theme-link-color, #2481cc);
+    }
+    label.field select {
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      margin-top: 4px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      text-align: left;
+      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
+    }
+    label.field select:disabled { opacity: .6; }
+    #llm { display: flex; justify-content: space-between; gap: 8px; cursor: pointer; }
+    #llm[hidden] { display: none; }
+    .periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+    .periods button {
+      padding: 10px;
+      border: 2px solid transparent;
+      border-radius: 12px;
+      font: inherit;
+      text-align: left;
+      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
+      color: inherit;
+    }
+    .periods button.on { border-color: var(--tg-theme-button-color, #2481cc); }
+    .periods .sum { font-size: 20px; font-weight: 600; }
+    .periods .hint { font-size: 12px; }
+    .chart { display: block; width: 100%; height: 120px; }
+    .chart .bar { fill: var(--tg-theme-button-color, #2481cc); opacity: .45; }
+    .chart .bar.today { opacity: 1; }
+    .chart .bar.stopped { fill: var(--tg-theme-destructive-text-color, #d33); opacity: 1; }
+    .chart .bar.picked { opacity: 1; }
+    .chart .limit { stroke: var(--tg-theme-destructive-text-color, #d33); stroke-dasharray: 4 3; stroke-width: 1; }
+    .chart .tap { fill: transparent; cursor: pointer; }
+    .share { height: 4px; margin-top: 4px; border-radius: 2px; background: var(--tg-theme-bg-color, #fff); }
+    .share i { display: block; height: 100%; border-radius: 2px; background: var(--tg-theme-button-color, #2481cc); }
+    .money { white-space: nowrap; text-align: right; }
+    .row input[type=number] {
+      width: 80px;
+      padding: 4px 8px;
+      border: 0;
+      border-radius: 8px;
+      font: inherit;
+      text-align: right;
+      background: var(--tg-theme-bg-color, #fff);
+      color: inherit;
+    }
+    .row button.link { border: 0; padding: 0; font: inherit; background: none; color: var(--tg-theme-link-color, #2481cc); }
+  </style>
+</head>
+<body>
+  <div id="home">
+    <h2 id="title">uni-master</h2>
+    <p id="state" class="hint">Загрузка…</p>
+    <div id="llm" class="card" hidden></div>
+    <nav id="tabs" class="tabs" hidden>
+      <button data-tab="chats" class="on">Чаты</button>
+      <button data-tab="schedule">Расписание</button>
+      <button data-tab="deadlines">Дедлайны</button>
+      <button data-tab="sheets">Листочки</button>
+      <button data-tab="grades">Оценки</button>
+      <button data-tab="summaries">Сводки</button>
+      <button data-tab="subjects">Словарь</button>
+      <button data-tab="hseapp">HSE App X</button>
+      <button data-tab="llm">Расход LLM</button>
+    </nav>
+    <section id="tab-chats">
+      <p class="hint">Чаты твинка и их настройки. Новый чат появляется выключенным.</p>
+      <div id="twin" class="card warn" hidden></div>
+      <div id="mail" class="card" hidden></div>
+      <input id="search" type="search" placeholder="Найти чат" hidden>
+      <div id="chats"></div>
+      <div id="images"></div>
+    </section>
+    <section id="tab-schedule" hidden></section>
+    <section id="tab-deadlines" hidden></section>
+    <section id="tab-sheets" hidden></section>
+    <section id="tab-grades" hidden></section>
+    <section id="tab-summaries" hidden></section>
+    <section id="tab-subjects" hidden>
+      <p class="hint">Как курсы называются в расписании, ленте и дедлайнах. Ручные записи Haiku не меняет;
+        удалённую запись Haiku назовёт заново.</p>
+      <div id="subjects-error" class="card warn" hidden></div>
+      <input id="subject-search" type="search" placeholder="Найти курс">
+      <div class="actions"><button id="subject-add">Добавить запись</button></div>
+      <div id="subjects"></div>
+    </section>
+    <section id="tab-hseapp" hidden></section>
+    <section id="tab-llm" hidden></section>
+  </div>
+  <div id="chat" hidden></div>
+  <div id="subject" hidden></div>
+  <div id="deadline" hidden></div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    const $ = (id) => document.getElementById(id);
+    const KINDS = {user: "личный", bot: "бот", group: "группа", supergroup: "супергруппа", forum: "форум",
+                   channel: "канал"};
+    // The settings of a chat (§5.1), in the order of the screen.
+    const FLAGS = [
+      ["study", "Учебный", "ранг новостей, дедлайны"],
+      ["urgent", "Срочно", "закреп, PDF или сообщение важного человека — разбор сразу"],
+      ["summary", "Сводка", "включать в ежедневную сводку"],
+      ["images", "Картинки", "фото и скриншоты читает Haiku, в пределах числа картинок в день"],
+      ["pdf_content", "PDF целиком", "листочки: краткое содержание, дедлайны со всех страниц, что изменилось"],
+    ];
+    const BATCH_HOURS = [1, 2, 3, 4, 6, 8, 12, 24];
+    const WEEKDAYS = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+    const TYPES = {Lecture: "лекция", Seminar: "семинар", Consultation: "консультация", Event: "событие",
+                   "Interim assessment": "рубежный контроль", Exam: "экзамен", Lab: "лабораторная", Class: "занятие"};
+    let chats = [];
+    let dictionary = {subjects: [], error: null, title_chars: 13, abbr_chars: 6};
+    let opened = null;  // the detail view the back button closes
+
+    async function call(path, options = {}) {
+      const response = await fetch(path, {...options, headers: {...options.headers,
+        Authorization: "tma " + tg.initData}});
+      if (response.status === 401) throw new Error("Откройте приложение из бота.");
+      if (response.status === 403) throw new Error("Нет доступа.");
+      if (!response.ok) throw new Error(await response.text() || "Ошибка " + response.status);
+      return response.json();
+    }
+
+    function send(path, method, values) {
+      return call(path, {method, body: JSON.stringify(values), headers: {"Content-Type": "application/json"}});
+    }
+
+    async function save(chat, values) {
+      try {
+        chat.settings = await send("api/chats/" + chat.id, "PATCH", values);
+      } catch (error) {
+        tg.showAlert(error.message);
+      }
+      return chat.settings;
+    }
+
+    function el(tag, props = {}, ...children) {
+      const node = Object.assign(document.createElement(tag), props);
+      node.append(...children);
+      return node;
+    }
+
+    function toggle(checked, onchange) {
+      const input = el("input", {type: "checkbox", checked});
+      input.onchange = () => onchange(input.checked);
+      return el("label", {className: "switch"}, input, el("span"));
+    }
+
+    function settingRow(title, hint, control) {
+      return el("div", {className: "row"},
+        el("div", {className: "main"}, el("div", {}, title), hint ? el("div", {className: "hint"}, hint) : ""),
+        control);
+    }
+
+    // --- the list -------------------------------------------------------------
+
+    function renderList() {
+      const query = $("search").value.trim().toLowerCase();
+      const shown = chats.filter((chat) => chat.title.toLowerCase().includes(query));
+      const box = $("chats");
+      box.replaceChildren();
+      for (const [title, enabled] of [["Включены", true], ["Выключены", false]]) {
+        const part = shown.filter((chat) => chat.settings.enabled === enabled);
+        if (!part.length) continue;
+        box.append(el("h3", {}, `${title} · ${part.length}`), el("div", {className: "list"}, ...part.map(chatRow)));
+      }
+      if (!shown.length) box.append(el("p", {className: "hint"}, chats.length ? "Ничего не нашлось." :
+        "Чатов пока нет: они появятся, когда твинк войдёт в Telegram."));
+    }
+
+    function chatRow(chat) {
+      const facts = [KINDS[chat.kind] || chat.kind];
+      if (chat.settings.study) facts.push("учебный");
+      if (chat.settings.filter === "important") facts.push("только важное");
+      if (chat.messages) facts.push(`сообщений: ${chat.messages}`);
+      const main = el("div", {className: "main"}, el("div", {className: "title"}, chat.title),
+        el("div", {className: "hint"}, facts.join(" · ")));
+      main.onclick = () => openChat(chat);
+      return el("div", {className: "row"}, main,
+        toggle(chat.settings.enabled, async (on) => { await save(chat, {enabled: on}); renderList(); }));
+    }
+
+    // The daily number of images read in chats with «Картинки» (р. 12), under the list.
+    function renderImages(state) {
+      if (!state || state.daily === undefined) return;
+      const input = el("input", {type: "number", value: state.daily, min: 0, max: 500, step: 1, inputMode: "numeric"});
+      input.style.width = "90px";
+      input.style.textAlign = "right";
+      input.onchange = async () => {
+        try {
+          renderImages(await send("api/images", "PATCH", {daily: Number(input.value)}));
+        } catch (error) {
+          tg.showAlert(error.message);
+          input.value = state.daily;
+        }
+      };
+      const parts = [el("h3", {}, "Картинки"),
+        el("p", {className: "hint"}, "В чатах с «Картинки» фото и скриншоты читает Haiku, прежде чем их разберут. "
+          + "Выше 80 % лимита LLM и сверх числа в день картинки не читаются."),
+        el("div", {className: "list"}, settingRow("В день", `сегодня прочитано: ${state.today}`, input))];
+      if (state.error) parts.splice(2, 0, el("div", {className: "card warn"}, "Чтение картинок не удалось: " + state.error));
+      $("images").replaceChildren(...parts);
+    }
+
+    // --- one chat -------------------------------------------------------------
+
+    function openView(view) {
+      $("home").hidden = true;
+      $(view).hidden = false;
+      opened = view;
+      tg.BackButton.show();
+      window.scrollTo(0, 0);
+    }
+
+    function back() {
+      if (opened) $(opened).hidden = true;
+      opened = null;
+      $("home").hidden = false;
+      tg.BackButton.hide();
+      renderList();
+      renderSubjects();
+      if (!$("tab-summaries").hidden) loadSummaries();  // a chat's «Сводка» may have changed
+    }
+
+    async function openChat(chat) {
+      openView("chat");
+      renderChat(chat, null);
+      try {
+        renderChat(chat, await call(`api/chats/${chat.id}/senders`));
+      } catch (error) {
+        tg.showAlert(error.message);
+      }
+    }
+
+    function renderChat(chat, senders) {
+      const s = chat.settings;
+      const rerender = async (values) => { await save(chat, values); renderChat(chat, senders); };
+
+      const filter = el("select", {}, el("option", {value: "all"}, "все сообщения"),
+        el("option", {value: "important"}, "только важное"));
+      filter.value = s.filter;
+      filter.onchange = () => rerender({filter: filter.value});
+
+      const batch = el("select", {}, el("option", {value: ""}, "общий"),
+        ...BATCH_HOURS.map((h) => el("option", {value: h}, `каждые ${h} ч`)));
+      batch.value = s.batch_hours ?? "";
+      batch.onchange = () => rerender({batch_hours: batch.value ? Number(batch.value) : null});
+
+      const settings = el("div", {className: "list"},
+        settingRow("Читать чат", "сообщения попадают в базу", toggle(s.enabled, (on) => rerender({enabled: on}))),
+        ...FLAGS.map(([name, title, hint]) => settingRow(title, hint,
+          toggle(s[name], (on) => rerender({[name]: on})))),
+        settingRow("Фильтр", "важное: люди из списка, закрепы, файлы, даты и ответы на них", filter),
+        settingRow("Разбор", "как часто разбирать пачку", batch));
+
+      const people = el("div", {className: "list"});
+      if (senders === null) {
+        people.append(el("div", {className: "row hint"}, "Загрузка…"));
+      } else if (!senders.length) {
+        people.append(el("div", {className: "row hint"}, "Пока никто не писал: список соберётся из сообщений."));
+      }
+      for (const sender of senders || []) {
+        const chosen = s.people.includes(sender.id);
+        people.append(settingRow(sender.name || `id ${sender.id}`,
+          sender.messages ? `сообщений: ${sender.messages}` : "ещё не писал",
+          toggle(chosen, (on) => rerender({people: on ? [...s.people, sender.id] :
+            s.people.filter((id) => id !== sender.id)}))));
+      }
+
+      $("chat").replaceChildren(
+        el("h2", {}, chat.title),
+        el("p", {className: "hint"}, [KINDS[chat.kind] || chat.kind, chat.username ? "@" + chat.username : ""]
+          .filter(Boolean).join(" · ")),
+        settings,
+        el("h3", {}, "Важные люди"),
+        el("p", {className: "hint"}, "Для фильтра «только важное» и для «срочно»: староста, преподаватели."),
+        people);
+    }
+
+    // --- the timetable ------------------------------------------------------
+
+    function when(start, end) {
+      const day = new Date(start.slice(0, 10) + "T00:00:00");
+      let text = `${WEEKDAYS[day.getDay()]} ${start.slice(8, 10)}.${start.slice(5, 7)} ${start.slice(11, 16)}`;
+      if (end && end.slice(0, 10) === start.slice(0, 10)) text += "–" + end.slice(11, 16);
+      return text;
+    }
+
+    function room(value) {
+      if (!value) return "";
+      return /^https?:\/\//.test(value) ? "ссылка" : value === "online" ? "онлайн" : value;
+    }
+
+    async function loadSchedule() {
+      try {
+        renderSchedule(await call("api/schedule"));
+      } catch (error) {
+        $("tab-schedule").replaceChildren(el("p", {className: "hint"}, error.message));
+      }
+    }
+
+    async function changeEvent(event, values) {
+      try {
+        renderSchedule(await send("api/events/" + event.id, "PATCH", values));
+      } catch (error) {
+        tg.showAlert(error.message);
+        loadSchedule();
+      }
+    }
+
+    function renderSchedule(data) {
+      const box = $("tab-schedule");
+      const ruz = data.ruz;
+      const parts = [el("p", {className: "hint"}, "События из чатов и правки пар с сегодняшнего дня. Основной "
+        + "календарь — где нужно быть, необязательный — куда можно прийти; скрытое пропадает из лент.")];
+      if (ruz.error) {
+        parts.push(el("div", {className: "card warn"}, "РУЗ: " + ruz.error));
+      } else {
+        parts.push(el("div", {className: "card"}, `РУЗ: ${ruz.classes} пар` +
+          (ruz.ok_at ? `, обновлено ${when(ruz.ok_at)}` : "")));
+      }
+      if (ruz.subjects_error) {
+        parts.push(el("div", {className: "card warn"}, "Названия предметов ждут Haiku: " + ruz.subjects_error));
+      }
+      if (!data.calendar) {
+        parts.push(el("div", {className: "card warn"}, "Ленты iCal выключены: задайте CALENDAR_SECRET в .env."));
+      }
+      if (!data.events.length) {
+        parts.push(el("p", {className: "hint"}, "Впереди нет событий из чатов и правок пар."));
+      }
+      for (const event of data.events) parts.push(eventCard(event));
+      box.replaceChildren(...parts);
+    }
+
+    function eventCard(event) {
+      const facts = [];
+      if (event.correction) {
+        facts.push(event.cancelled ? `отмена: ${when(event.class.start, event.class.end)}` :
+          `${when(event.class.start, event.class.end)} → ${when(event.start, event.end)}`);
+      } else {
+        facts.push(when(event.start, event.end));
+      }
+      if (room(event.room)) facts.push(room(event.room));
+      facts.push(TYPES[event.type] || event.type.toLowerCase());
+      if (event.cancelled && !event.correction) facts.push("отменено");
+      const source = event.link ? el("a", {href: event.link}, event.chat || "сообщение") : (event.chat || "");
+      if (event.link) {
+        source.onclick = (click) => {  // a t.me link opens in Telegram itself, not in a browser
+          click.preventDefault();
+          if (event.link.startsWith("https://t.me/")) tg.openTelegramLink(event.link); else tg.openLink(event.link);
+        };
+      }
+      const title = el("div", {className: "title" + (event.cancelled ? " struck" : "")},
+        (event.correction ? "Пара: " : "") + event.title);
+      const main = el("div", {className: "main" + (event.hidden ? " faded" : "")}, title,
+        el("div", {className: "hint"}, facts.join(" · ")), el("div", {className: "hint"}, source));
+      const card = el("div", {className: "list"}, el("div", {className: "row"}, main));
+      if (event.correction) {
+        card.append(settingRow("Применять правку", "выключите, если модель ошиблась: пара будет как в РУЗ",
+          toggle(!event.hidden, (on) => changeEvent(event, {hidden: !on}))));
+        return card;
+      }
+      if (!event.cancelled) {
+        card.append(settingRow("Основной календарь", event.required ? "нужно быть" : "можно прийти",
+          toggle(event.required, (on) => changeEvent(event, {required: on}))));
+      }
+      card.append(settingRow("В календарях", event.hidden ? "скрыто" : "",
+        toggle(!event.hidden, (on) => changeEvent(event, {hidden: !on}))));
+      return card;
+    }
+
+    // --- deadlines -----------------------------------------------------------
+
+    const SOURCES = {hseapp: "HSE App X", ical: "РУЗ", mail: "почта", tg: "чат", ha: "свой"};
+    const CATEGORIES = {study: "учёба", personal: "личное"};
+    let deadlineState = null;
+
+    function dayLabel(iso) {
+      const date = new Date(iso + "T00:00:00");
+      return `${WEEKDAYS[date.getDay()]} ${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+    }
+
+    // The mark of the pinned list in the forum; `today` is the service's, a Moscow date.
+    function dueMark(iso, today) {
+      const days = Math.round((new Date(iso + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000);
+      if (days < 0) return `просрочен (${dayLabel(iso)})`;
+      if (days === 0) return "сегодня";
+      if (days === 1) return "завтра";
+      return dayLabel(iso);
+    }
+
+    async function loadDeadlines() {
+      try {
+        renderDeadlines(await call("api/deadlines"));
+      } catch (error) {
+        $("tab-deadlines").replaceChildren(el("p", {className: "hint"}, error.message));
+      }
+    }
+
+    async function changeDeadlines(path, method, values) {
+      try {
+        renderDeadlines(await send(path, method, values));
+        return true;
+      } catch (error) {
+        tg.showAlert(error.message);
+        return false;
+      }
+    }
+
+    function renderDeadlines(data) {
+      deadlineState = data;
+      const parts = [el("p", {className: "hint"}, "Все дедлайны после склейки: тот же список видят Tablo, списки дел "
+        + "HA и закреп в теме «Дедлайны». Скрытый не вернётся, даже если источник пришлёт его снова.")];
+      if (data.hseapp.login_needed) {
+        parts.push(el("div", {className: "card warn"}, "HSE App X: нужен вход, дедлайны оттуда не обновляются "
+          + "(экран «HSE App X»)."));
+      }
+      parts.push(el("h3", {}, `В списке · ${data.items.length}`), data.items.length ?
+        el("div", {className: "list"}, ...data.items.map(deadlineRow)) : el("p", {className: "hint"}, "Дедлайнов нет."));
+      parts.push(el("h3", {}, `Свои · ${data.own.length}`));
+      if (data.own.length) parts.push(el("div", {className: "list"}, ...data.own.map(ownRow)));
+      const add = el("button", {}, "Добавить свой");
+      add.onclick = () => openDeadline(null);
+      parts.push(el("div", {className: "actions"}, add));
+      if (data.hidden.length) {
+        parts.push(el("h3", {}, `Скрытые · ${data.hidden.length}`),
+          el("div", {className: "list"}, ...data.hidden.map(hiddenRow)));
+      }
+      $("tab-deadlines").replaceChildren(...parts);
+    }
+
+    function deadlineRow(d) {
+      const facts = [dueMark(d.due, deadlineState.today), SOURCES[d.source] || d.source];
+      if (d.course) facts.push(d.course);
+      if (d.category === "personal") facts.push(CATEGORIES.personal);
+      const main = el("div", {className: "main"}, el("div", {className: "title"}, d.title),
+        el("div", {className: "hint" + (d.overdue ? " warn" : "")}, facts.join(" · ")));
+      const row = el("div", {className: "row"}, main);
+      if (d.source === "ha") {
+        main.onclick = () => openDeadline(deadlineState.own.find((own) => own.uid === d.uid) || d);
+        return row;
+      }
+      const hide = el("button", {className: "small"}, "Скрыть");
+      hide.onclick = () => tg.showConfirm(`Скрыть «${d.title}»? Он не вернётся, даже если источник пришлёт его `
+        + "снова. Вернуть можно ниже, в «Скрытых».", (yes) => {
+        if (yes) changeDeadlines("api/deadlines/" + encodeURIComponent(d.uid), "DELETE");
+      });
+      row.append(hide);
+      return row;
+    }
+
+    function ownRow(d) {
+      const main = el("div", {className: "main"}, el("div", {className: "title"}, d.title),
+        el("div", {className: "hint"}, `${dueMark(d.due, deadlineState.today)} · ${CATEGORIES[d.category]}`));
+      main.onclick = () => openDeadline(d);
+      return el("div", {className: "row"}, main);
+    }
+
+    function hiddenRow(h) {
+      const main = el("div", {className: "main faded"}, el("div", {className: "title"}, h.title),
+        el("div", {className: "hint"}, `${dayLabel(h.due)} · ${SOURCES[h.source] || h.source}`));
+      const restore = el("button", {className: "small"}, "Вернуть");
+      restore.onclick = () => changeDeadlines("api/hidden/" + encodeURIComponent(h.uid), "DELETE");
+      return el("div", {className: "row"}, main, restore);
+    }
+
+    function openDeadline(d) {
+      openView("deadline");
+      const fresh = !d;
+      d = d || {title: "", due: deadlineState.today, category: "study"};
+      const title = el("input", {value: d.title, maxLength: 200, placeholder: "Записаться на майнор"});
+      const due = el("input", {type: "date", value: d.due});
+      const category = el("select", {disabled: !fresh}, el("option", {value: "study"}, "учёба"),
+        el("option", {value: "personal"}, "личное"));
+      category.value = d.category;
+      const saveButton = el("button", {}, "Сохранить");
+      saveButton.onclick = async () => {
+        const ok = fresh ?
+          await changeDeadlines("api/deadlines", "POST", {title: title.value, due: due.value, category: category.value}) :
+          await changeDeadlines("api/deadlines/" + encodeURIComponent(d.uid), "PATCH",
+            {title: title.value, due: due.value});
+        if (ok) back();
+      };
+      const actions = el("div", {className: "actions"}, saveButton);
+      if (!fresh) {
+        const removeButton = el("button", {className: "danger"}, "Удалить");
+        removeButton.onclick = () => tg.showConfirm("Удалить свой дедлайн?", async (yes) => {
+          if (yes && await changeDeadlines("api/deadlines/" + encodeURIComponent(d.uid), "DELETE")) back();
+        });
+        actions.append(removeButton);
+      }
+      $("deadline").replaceChildren(
+        el("h2", {}, fresh ? "Свой дедлайн" : d.title),
+        el("p", {className: "hint"}, "Виден в Tablo, в списке дел HA и в закрепе темы «Дедлайны». Через 30 дней "
+          + "после срока удаляется сам."),
+        el("label", {className: "field"}, "Что сделать", title),
+        el("label", {className: "field"}, "Срок", due),
+        el("label", {className: "field"}, "Список", category),
+        actions);
+    }
+
+    // --- summaries ------------------------------------------------------------
+
+    async function loadSummaries() {
+      try {
+        renderSummaries(await call("api/summaries"));
+      } catch (error) {
+        $("tab-summaries").replaceChildren(el("p", {className: "hint"}, error.message));
+      }
+    }
+
+    function renderSummaries(data) {
+      const time = el("input", {type: "time", value: data.time, step: 60});
+      time.onchange = async () => {
+        try {
+          renderSummaries(await send("api/summaries", "PATCH", {time: time.value}));
+        } catch (error) {
+          tg.showAlert(error.message);
+          loadSummaries();
+        }
+      };
+      const parts = [el("p", {className: "hint"}, "Ежедневная сводка приходит в тему «Сводки»: по каждому чату — "
+        + "что в нём было с прошлой сводки. Сводку любого включённого чата можно попросить у бота: /summary "
+        + "[чат] [3h | 2d | 20.10-22.10].")];
+      if (data.status.error) {
+        parts.push(el("div", {className: "card warn"}, "Последняя сводка: " + data.status.error));
+      }
+      parts.push(el("div", {className: "list"}, settingRow("Время", "по Москве", time)));
+      const done = data.status.ok_at ? `последняя собрана ${data.status.ok_at.slice(8, 10)}.`
+        + `${data.status.ok_at.slice(5, 7)} в ${data.status.ok_at.slice(11, 16)}` : "";
+      parts.push(el("h3", {}, `Чаты в сводке · ${data.chats.length}`));
+      if (done) parts.push(el("p", {className: "hint"}, done[0].toUpperCase() + done.slice(1) + "."));
+      if (!data.chats.length) {
+        parts.push(el("p", {className: "hint"}, "Пока ни одного: включите «Сводку» в настройках чата."));
+      } else {
+        parts.push(el("div", {className: "list"}, ...data.chats.map((item) => {
+          const main = el("div", {className: "main"}, el("div", {className: "title"}, item.title));
+          const chat = chats.find((c) => c.id === item.id);
+          if (chat) main.onclick = () => openChat(chat);
+          return el("div", {className: "row"}, main);
+        })));
+        parts.push(el("p", {className: "hint"}, "Убрать чат из сводки — переключатель «Сводка» в его настройках."));
+      }
+      $("tab-summaries").replaceChildren(...parts);
+    }
+
+    // --- sheets ---------------------------------------------------------------
+
+    async function loadSheets() {
+      try {
+        renderSheets(await call("api/sheets"));
+      } catch (error) {
+        $("tab-sheets").replaceChildren(el("p", {className: "hint"}, error.message));
+      }
+    }
+
+    async function changeSheets(path, method, values) {
+      try {
+        renderSheets(await send(path, method, values));
+      } catch (error) {
+        tg.showAlert(error.message);
+        loadSheets();
+      }
+    }
+
+    function sheetTitle(sheet) {
+      return (sheet.title || sheet.course || "Листок") + (sheet.number ? ` · листок ${sheet.number}` : "");
+    }
+
+    function renderSheets(data) {
+      const parts = [el("p", {className: "hint"}, "PDF с заданиями из чатов: бот присылает их в тему «Листочки». "
+        + "Новая версия заменяет файл в старом сообщении. Если версию не узнали, её можно присоединить к старому "
+        + "листку здесь.")];
+      if (data.status.error) {
+        parts.push(el("div", {className: "card warn"}, "Чтение PDF не удалось: " + data.status.error));
+      }
+      if (data.status.waiting) {
+        parts.push(el("div", {className: "card"}, `Ждут отправки в форум: ${data.status.waiting}.`));
+      }
+      parts.push(el("h3", {}, "Чтение PDF целиком"),
+        el("p", {className: "hint"}, "Для чатов с «PDF целиком»: сколько читать из одного файла, что наступит раньше."),
+        el("div", {className: "list"},
+          settingRow("Страниц", "", limitInput(data.limits.pdf_pages, 1, 50, "pdf_pages")),
+          settingRow("Токенов", "скан — около 3000 на страницу", limitInput(data.limits.pdf_tokens, 1000, 200000,
+            "pdf_tokens"))));
+      parts.push(el("h3", {}, `Листочки · ${data.sheets.length}`));
+      if (!data.sheets.length) parts.push(el("p", {className: "hint"}, "Листочков пока нет."));
+      const older = data.sheets.filter((sheet) => sheet.status === "posted");
+      for (const sheet of data.sheets) parts.push(sheetCard(sheet, older));
+      $("tab-sheets").replaceChildren(...parts);
+    }
+
+    function limitInput(value, min, max, name) {
+      const input = el("input", {type: "number", value, min, max, step: 1, inputMode: "numeric"});
+      input.style.width = "90px";
+      input.style.textAlign = "right";
+      input.onchange = () => changeSheets("api/sheets", "PATCH", {[name]: Number(input.value)});
+      return input;
+    }
+
+    function sheetCard(sheet, older) {
+      const facts = [sheet.name];
+      if (sheet.due) facts.push("срок " + dayLabel(sheet.due));
+      if (sheet.versions > 1) facts.push(`версий: ${sheet.versions}`);
+      const where = [sheet.chat, sheet.created_at.slice(8, 10) + "." + sheet.created_at.slice(5, 7)];
+      const main = el("div", {className: "main" + (sheet.status === "failed" ? " faded" : "")},
+        el("div", {className: "title"}, sheetTitle(sheet)), el("div", {className: "hint"}, facts.join(" · ")),
+        el("div", {className: "hint"}, where.filter(Boolean).join(" · ")));
+      if (sheet.summary) main.append(el("div", {className: "hint"}, sheet.summary));
+      if (sheet.status === "failed") main.append(el("div", {className: "hint warn"}, "Не отправлен: " + sheet.error));
+      if (sheet.status === "new") main.append(el("div", {className: "hint"}, "Ждёт отправки в форум."));
+      const card = el("div", {className: "list"}, el("div", {className: "row"}, main));
+      const others = older.filter((other) => other.first !== sheet.first && other.created_at <= sheet.created_at);
+      if (sheet.status === "posted" && sheet.versions === 1 && sheet.file && others.length) {
+        const select = el("select", {}, el("option", {value: ""}, "нет"),
+          ...others.map((other) => el("option", {value: other.id},
+            `${sheetTitle(other)} · ${other.name} · ${other.chat || ""}`)));
+        select.onchange = () => {
+          if (!select.value) return;
+          const other = others.find((o) => String(o.id) === select.value);
+          tg.showConfirm(`Это новая версия «${sheetTitle(other)}»? Файл заменит старый в его сообщении, а `
+            + "отдельное сообщение этого листка удалится.", (yes) => {
+            if (yes) changeSheets(`api/sheets/${sheet.id}/join`, "POST", {previous: other.id});
+            else select.value = "";
+          });
+        };
+        card.append(settingRow("Обновление листка", "если это новая версия уже присланного", select));
+      }
+      return card;
+    }
+
+    // --- grades ---------------------------------------------------------------
+
+    let grades = null;
+    const draft = {url: "", label: ""};  // the sheet being added: kept across renders
+
+    async function loadGrades() {
+      try {
+        grades = await call("api/grades");
+        renderGrades();
+      } catch (error) {
+        $("tab-grades").replaceChildren(el("p", {className: "hint"}, error.message));
+      }
+    }
+
+    async function changeGrades(values) {
+      try {
+        grades = await send("api/grades", "PATCH", values);
+        renderGrades();
+        return true;
+      } catch (error) {
+        tg.showAlert(error.message);
+        loadGrades();
+        return false;
+      }
+    }
+
+    // The service reads the sheets at once after a change; their state comes a few seconds later.
+    function rereadGrades() {
+      setTimeout(() => { if (!$("tab-grades").hidden) loadGrades(); }, 5000);
+    }
+
+    function gradeMark(value) {
+      const rounded = Math.round(value * 10) / 10;
+      return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+    }
+
+    function sheetsOf(data) {
+      return data.sheets.map((sheet) => ({url: sheet.url, label: sheet.label}));
+    }
+
+    function renderGrades() {
+      const data = grades;
+      const student = el("input", {value: data.student, placeholder: "Фамилия Имя"});
+      student.style.width = "180px";
+      student.style.textAlign = "right";
+      student.onchange = () => {
+        const value = student.value.trim();
+        if (!data.student || !data.sheets.length) {
+          changeGrades({student: value}).then((ok) => ok && rereadGrades());
+          return;
+        }
+        tg.showConfirm("Сменить ФИО? Таблицы прочитаются заново: первое чтение — без сообщений о новых оценках.",
+          (yes) => {
+            if (yes) changeGrades({student: value}).then((ok) => ok && rereadGrades());
+            else student.value = data.student;
+          });
+      };
+      const windowDays = el("input", {type: "number", value: data.window_days, min: 1, max: 60, step: 1,
+        inputMode: "numeric"});
+      windowDays.style.width = "70px";
+      windowDays.style.textAlign = "right";
+      windowDays.onchange = () => changeGrades({window_days: Number(windowDays.value)});
+      const parts = [el("p", {className: "hint"}, "Таблицы преподавателей в Google, открытые по ссылке. Раз в 30 "
+        + "минут сервис ищет в них свою строку по ФИО; Haiku видит верх вкладки и эту строку и сама находит шапку. Новая или "
+        + "изменённая оценка приходит в тему «Оценки». Первое чтение таблицы — снимок, без сообщений.")];
+      if (!data.llm) parts.push(el("div", {className: "card warn"}, "Нет ключа Haiku: вкладки не размечаются."));
+      parts.push(el("div", {className: "list"},
+        settingRow("ФИО", "как в таблицах: «Иванов Иван» найдёт «ИВАНОВ Иван Петрович»", student),
+        settingRow("Оценка новая", "дней: столько её отдаёт API для Tablo", windowDays)));
+      parts.push(el("h3", {}, `Таблицы · ${data.sheets.length}`));
+      if (!data.student && data.sheets.length) {
+        parts.push(el("p", {className: "hint warn"}, "Без ФИО таблицы не читаются."));
+      }
+      for (const sheet of data.sheets) parts.push(gradeSheetCard(sheet, data));
+      parts.push(addSheetCard(data));
+      $("tab-grades").replaceChildren(...parts);
+    }
+
+    function gradeSheetCard(sheet, data) {
+      const name = sheet.title || sheet.label || "Таблица";
+      const facts = [];
+      if (sheet.label) facts.push("курс " + sheet.label);
+      if (sheet.ok_at) facts.push(`вкладок: ${sheet.tabs}, оценок: ${sheet.items}, прочитана ${when(sheet.ok_at)}`);
+      else if (!sheet.error) facts.push("ещё не прочитана");
+      const link = el("a", {href: sheet.url, target: "_blank"}, name);
+      link.onclick = (event) => { event.preventDefault(); tg.openLink(sheet.url); };
+      const main = el("div", {className: "main"}, el("div", {className: "title"}, link),
+        el("div", {className: "hint"}, facts.join(" · ")));
+      if (sheet.error) main.append(el("div", {className: "hint warn"}, "Не читается: " + sheet.error));
+      if (sheet.unread && sheet.unread.length) {
+        main.append(el("div", {className: "hint warn"}, "Haiku не смогла разметить вкладки: " + sheet.unread.join(", ")
+          + ". Они пропускаются, пока у них не изменится шапка."));
+      }
+      const remove = el("button", {className: "small"}, "Убрать");
+      remove.onclick = () => tg.showConfirm(`Убрать «${name}»? Её оценки забудутся; если добавить снова, первое `
+        + "чтение будет снимком.", (yes) => {
+        if (yes) changeGrades({sheets: sheetsOf(data).filter((s) => s.url !== sheet.url)});
+      });
+      const card = el("div", {className: "list"}, el("div", {className: "row"}, main, remove));
+      for (const grade of sheet.grades) {
+        const value = gradeMark(grade.value) + (grade.bonus ? ` ${grade.bonus > 0 ? "+" : ""}${grade.bonus}` : "");
+        const points = grade.max !== 10 ? `${grade.raw} из ${grade.max}` : "";
+        card.append(el("div", {className: "row"},
+          el("div", {className: "main"}, el("div", {className: "title"}, grade.label),
+            points ? el("div", {className: "hint"}, points) : ""),
+          grade.new ? el("span", {className: "badge"}, "новая") : "",
+          el("b", {}, value)));
+      }
+      return card;
+    }
+
+    function addSheetCard(data) {
+      const url = el("input", {value: draft.url, placeholder: "https://docs.google.com/spreadsheets/d/…",
+        autocomplete: "off", spellcheck: false});
+      url.oninput = () => { draft.url = url.value; };
+      const label = el("input", {value: draft.label, maxLength: data.label_chars, placeholder: "DM"});
+      label.oninput = () => { draft.label = label.value; };
+      const add = el("button", {}, "Добавить таблицу");
+      add.onclick = async () => {
+        if (await changeGrades({sheets: [...sheetsOf(data), {url: draft.url, label: draft.label}]})) {
+          draft.url = draft.label = "";
+          renderGrades();
+          rereadGrades();
+        }
+      };
+      return el("div", {className: "card"},
+        el("label", {className: "field"}, "Ссылка на таблицу (доступ — всем, у кого есть ссылка)", url),
+        el("label", {className: "field"}, `Курс — перед каждой оценкой, до ${data.label_chars} символов; `
+          + "пусто — начало названия таблицы", label),
+        el("div", {className: "actions"}, add));
+    }
+
+    // --- the dictionary -----------------------------------------------------
+
+    async function loadSubjects() {
+      try {
+        dictionary = await call("api/subjects");
+        renderSubjects();
+      } catch (error) {
+        $("subjects").replaceChildren(el("p", {className: "hint"}, error.message));
+      }
+    }
+
+    function renderSubjects() {
+      $("subjects-error").hidden = !dictionary.error;
+      $("subjects-error").textContent = dictionary.error ? "Haiku не ответила: " + dictionary.error +
+        ". Пока названия — как у источника." : "";
+      const query = $("subject-search").value.trim().toLowerCase();
+      const shown = dictionary.subjects.filter((s) =>
+        [s.name, s.title, s.abbr].some((text) => text.toLowerCase().includes(query)));
+      const rows = shown.map((subject) => {
+        const main = el("div", {className: "main"}, el("div", {className: "title"}, subject.name),
+          el("div", {className: "hint"}, `${subject.title} · ${subject.abbr}`));
+        main.onclick = () => openSubject(subject);
+        return el("div", {className: "row"}, main,
+          el("span", {className: "badge"}, subject.manual ? "вручную" : "Haiku"));
+      });
+      $("subjects").replaceChildren(rows.length ? el("div", {className: "list"}, ...rows) :
+        el("p", {className: "hint"}, dictionary.subjects.length ? "Ничего не нашлось." :
+          "Словарь пуст: курсы появятся из РУЗ и из дедлайнов."));
+    }
+
+    function openSubject(subject) {
+      openView("subject");
+      const fresh = !subject;
+      subject = subject || {name: "", title: "", abbr: "", manual: true};
+      const name = el("input", {value: subject.name, readOnly: !fresh, placeholder: "Математический анализ"});
+      const title = el("input", {value: subject.title, maxLength: 40, placeholder: "Calculus"});
+      const abbr = el("input", {value: subject.abbr, maxLength: dictionary.abbr_chars, placeholder: "Calc"});
+      const saveButton = el("button", {}, "Сохранить");
+      saveButton.onclick = async () => {
+        try {
+          await send("api/subjects", "PUT", {name: name.value, title: title.value, abbr: abbr.value});
+          await loadSubjects();
+          back();
+        } catch (error) {
+          tg.showAlert(error.message);
+        }
+      };
+      const actions = el("div", {className: "actions"}, saveButton);
+      if (!fresh) {
+        const removeButton = el("button", {className: "danger"}, "Удалить");
+        removeButton.onclick = () => tg.showConfirm(subject.manual ? "Удалить запись? Haiku назовёт курс заново." :
+          "Удалить ответ Haiku? Курс будет назван заново.", async (yes) => {
+          if (!yes) return;
+          try {
+            await send("api/subjects", "DELETE", {name: subject.name});
+            await loadSubjects();
+            back();
+          } catch (error) {
+            tg.showAlert(error.message);
+          }
+        });
+        actions.append(removeButton);
+      }
+      $("subject").replaceChildren(
+        el("h2", {}, fresh ? "Новая запись" : subject.name),
+        el("p", {className: "hint"}, subject.manual ? "Запись задана вручную." :
+          "Сейчас это ответ Haiku; после сохранения запись станет ручной."),
+        el("label", {className: "field"}, "Название, как у источника", name),
+        el("label", {className: "field"}, `По-английски, для расписания (в Tablo влезает ${dictionary.title_chars})`,
+          title),
+        el("label", {className: "field"}, `Сокращение для дедлайнов, до ${dictionary.abbr_chars} символов`, abbr),
+        actions);
+    }
+
+    // --- HSE App X ------------------------------------------------------------
+
+    // Login links are made ahead: Telegram opens a link only right in a tap, not after a request. Each link holds
+    // a PKCE state and the service keeps the last five, so links are made on opening the screen and after a tap,
+    // never while the screen waits for the login to come back.
+    const hse = {state: null, link: null, appLink: null, watch: null, note: null, fallback: false, pasted: ""};
+
+    async function loadHseApp() {
+      stopHseWatch();
+      hse.link = hse.appLink = null;
+      try {
+        hse.state = await call("api/hseapp");
+      } catch (error) {
+        $("tab-hseapp").replaceChildren(el("p", {className: "hint"}, error.message));
+        return;
+      }
+      renderHseApp();
+      if (hse.state.status.enabled) prepareHseLinks();
+    }
+
+    // The link back to the service always, the one with the app's address once its section is open.
+    async function prepareHseLinks() {
+      try {
+        if (!hse.link) hse.link = await hseLink(false);
+        if (hse.fallback && !hse.appLink) hse.appLink = await hseLink(true);
+      } catch (error) {
+        hse.note = {ok: false, text: error.message};
+      }
+      renderHseApp();
+    }
+
+    async function hseLink(app) {
+      return (await send("api/hseapp/link", "POST", {app})).url;
+    }
+
+    function stopHseWatch() {
+      clearInterval(hse.watch);
+      hse.watch = null;
+    }
+
+    // After a tap on a login link: the state every 3 s until the login is back from the browser, 5 minutes at most.
+    function watchHseLogin() {
+      stopHseWatch();
+      const started = Date.now();
+      hse.watch = setInterval(async () => {
+        if (Date.now() - started > 5 * 60 * 1000 || $("tab-hseapp").hidden) return stopHseWatch();
+        try {
+          const state = await call("api/hseapp");
+          const changed = JSON.stringify(state) !== JSON.stringify(hse.state);
+          if (state.status.logged_in && changed) {
+            stopHseWatch();
+            if (!hse.state.status.logged_in) hse.note = {ok: true, text: LOGGED_IN};
+          }
+          hse.state = state;
+          if (changed) renderHseApp();  // not on every tick: a half-pasted address must stay
+        } catch (error) {
+          stopHseWatch();
+        }
+      }, 3000);
+    }
+
+    const LOGGED_IN = "Вход выполнен. Дедлайны обновятся в течение минуты.";
+    const LOGIN_ERROR = "login needed: ";  // the status error when the session ended (collectors/hseapp.py)
+
+    function openHseLink(app) {
+      tg.openLink(app ? hse.appLink : hse.link);
+      if (app) hse.appLink = null; else hse.link = null;  // used: a fresh one for the next tap
+      hse.note = {ok: true, text: "Вход открыт в браузере. После него вернитесь сюда: экран обновится сам."};
+      watchHseLogin();
+      prepareHseLinks();
+    }
+
+    async function changeHseApp(values) {
+      hse.note = null;
+      try {
+        hse.state = await send("api/hseapp", "PATCH", values);
+      } catch (error) {
+        tg.showAlert(error.message);
+      }
+      renderHseApp();
+      if (hse.state.status.enabled) prepareHseLinks();
+    }
+
+    function hseCards(s) {
+      const cards = [];
+      if (!s.enabled) {
+        cards.push(el("div", {className: "card"}, "Опрос выключен: дедлайны из HSE App X не обновляются."));
+      } else if (s.logged_in) {
+        cards.push(el("div", {className: "card"}, `Вход выполнен. Активных дедлайнов: ${s.items}, `
+          + `выполненных: ${s.done}` + (s.ok_at ? `. Обновлено ${when(s.ok_at)}.` : ". Опрос — вот-вот.")));
+      }
+      const ended = (s.error || "").startsWith(LOGIN_ERROR);  // Keycloak ended the session: said in the card below
+      if (s.enabled && !s.logged_in) {
+        const why = ended ? `Вход больше не действует (${s.error.slice(LOGIN_ERROR.length)}): дедлайны`
+          : "Нужен вход: без него дедлайны";
+        cards.push(el("div", {className: "card warn"}, why + " из HSE App X не обновляются"
+          + (s.items || s.done ? " — в списке последнее полученное." : ".")));
+      }
+      if (s.error && s.enabled && !ended) {
+        cards.push(el("div", {className: "card warn"}, "Последняя ошибка: " + s.error));
+      }
+      if (s.labels_error) {
+        cards.push(el("div", {className: "card warn"}, "Английские названия ждут Haiku: " + s.labels_error
+          + ". Пока у новых дедлайнов русские названия."));
+      }
+      return cards;
+    }
+
+    function renderHseApp() {
+      const s = hse.state.status;
+      const parts = [el("p", {className: "hint"}, "Дедлайны из приложения ВШЭ. Войти нужно один раз: дальше "
+        + "сервис сам продлевает вход при каждом опросе, раз в 15 минут."), ...hseCards(s),
+        el("div", {className: "list"}, settingRow("Опрашивать HSE App X",
+          "только один клиент на вход: в Tablo HSE App X должен быть выключен",
+          toggle(s.enabled, (on) => changeHseApp({enabled: on}))))];
+      if (s.enabled) {
+        const login = el("button", {disabled: !hse.link}, s.logged_in ? "Войти заново" : "Войти");
+        login.onclick = () => openHseLink(false);
+        parts.push(el("div", {className: "actions"}, login));
+      }
+      if (hse.note) parts.push(el("p", {className: hse.note.ok ? "ok" : "warn"}, hse.note.text));
+      if (s.enabled) parts.push(hseFallback());
+      $("tab-hseapp").replaceChildren(...parts);
+    }
+
+    function hseFallback() {
+      const box = el("details", {className: "card", open: hse.fallback}, el("summary", {}, "Браузер не вернулся"));
+      box.ontoggle = () => {
+        if (box.open === hse.fallback) return;  // set by the render, not by a tap
+        hse.fallback = box.open;
+        if (box.open) prepareHseLinks();
+      };
+      const appLogin = el("button", {disabled: !hse.appLink}, "Войти с адресом приложения");
+      appLogin.onclick = () => openHseLink(true);
+      const pasted = el("textarea", {rows: 3, value: hse.pasted, autocomplete: "off", spellcheck: false,
+        placeholder: "https://…/hseapp/callback?state=…&code=…"});
+      pasted.oninput = () => { hse.pasted = pasted.value; };
+      const saveLogin = el("button", {}, "Сохранить вход");
+      saveLogin.onclick = async () => {
+        try {
+          hse.state = await send("api/hseapp/login", "POST", {url: hse.pasted});
+          hse.note = {ok: true, text: LOGGED_IN};
+          hse.pasted = "";
+          hse.fallback = false;
+          stopHseWatch();
+        } catch (error) {
+          hse.note = {ok: false, text: error.message};
+        }
+        renderHseApp();
+      };
+      box.append(
+        el("p", {className: "hint"}, `После входа браузер сам возвращается на ${hse.state.callback} и пишет `
+          + "«Вход выполнен». Если эта страница не открылась, скопируйте её адрес из адресной строки целиком "
+          + "(в нём есть code=) и вставьте ниже в течение минуты."),
+        el("p", {className: "hint"}, "Если ВШЭ не пускает с этим адресом, войдите с адресом приложения: после "
+          + "входа браузер не сможет открыть ru.hse.hseappx://… — этот адрес и нужно скопировать (Safari его "
+          + "теряет, нужен Chrome)."),
+        el("div", {className: "actions"}, appLogin), pasted, el("div", {className: "actions"}, saveLogin));
+      return box;
+    }
+
+    // --- LLM spending ---------------------------------------------------------
+
+    const TASKS = {batch: "Разбор пачек", image: "Картинки", pdf: "PDF целиком", summary: "Сводки",
+                   subjects: "Словарь", grades: "Оценки", hseapp_labels: "Метки HSE App X"};
+    const PERIODS = [["today", "Сегодня"], ["week", "Неделя"], ["month", "Месяц"]];
+    const llmView = {data: null, period: "today", day: null};
+    const SVG = "http://www.w3.org/2000/svg";
+
+    function usd(value) {
+      return "$" + (value >= 10 ? value.toFixed(0) : value >= 0.1 || !value ? value.toFixed(2) : value.toFixed(3));
+    }
+
+    function runs(n) {
+      const last = n % 10, tens = n % 100;
+      const word = last === 1 && tens !== 11 ? "вызов"
+        : last >= 2 && last <= 4 && (tens < 12 || tens > 14) ? "вызова" : "вызовов";
+      return `${n} ${word}`;
+    }
+
+    function shortDay(iso) {
+      const date = new Date(iso + "T12:00:00");
+      return `${WEEKDAYS[date.getDay()]} ${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+    }
+
+    async function loadLlm() {
+      try {
+        renderLlm(await call("api/llm"));
+      } catch (error) {
+        $("tab-llm").replaceChildren(el("p", {className: "hint"}, error.message));
+      }
+    }
+
+    async function changeLlm(path, method, values) {
+      try {
+        renderLlm(await send(path, method, values));
+      } catch (error) {
+        tg.showAlert(error.message);
+        loadLlm();
+      }
+    }
+
+    function svg(tag, attrs) {
+      const node = document.createElementNS(SVG, tag);
+      for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+      return node;
+    }
+
+    function chart(data) {
+      const width = 300, height = 120, top = 8, bottom = 16, step = width / data.days.length;
+      const peak = Math.max(data.daily_limit_usd, ...data.days.map((d) => d.cost_usd)) * 1.1;
+      const y = (value) => top + (height - top - bottom) * (1 - value / peak);
+      const picture = svg("svg", {viewBox: `0 0 ${width} ${height}`, class: "chart", preserveAspectRatio: "none"});
+      const last = data.days.length - 1;
+      data.days.forEach((day, i) => {
+        const classes = ["bar", i === last ? "today" : "", day.stopped ? "stopped" : "",
+                         day.day === llmView.day ? "picked" : ""].filter(Boolean).join(" ");
+        const bar = Math.max(day.cost_usd ? 1.5 : 0, y(0) - y(day.cost_usd));
+        picture.append(svg("rect", {class: classes, x: i * step + 1, y: y(0) - bar, width: step - 2, height: bar,
+                                    rx: 1.5}));
+        const tap = svg("rect", {class: "tap", x: i * step, y: 0, width: step, height});
+        tap.onclick = () => { llmView.day = llmView.day === day.day ? null : day.day; renderLlm(data); };
+        picture.append(tap);
+      });
+      picture.append(svg("line", {class: "limit", x1: 0, x2: width, y1: y(data.daily_limit_usd),
+                                  y2: y(data.daily_limit_usd)}));
+      for (const i of [0, Math.floor(last / 2), last]) {
+        const label = svg("text", {x: i * step + step / 2, y: height - 3, "font-size": 9, fill: "currentColor",
+                                   opacity: .6, "text-anchor": i === 0 ? "start" : i === last ? "end" : "middle"});
+        label.textContent = i === last ? "сегодня" : data.days[i].day.slice(8, 10) + "." + data.days[i].day.slice(5, 7);
+        picture.append(label);
+      }
+      return picture;
+    }
+
+    function costRow(title, hint, cost, total) {
+      const share = total ? Math.round(cost / total * 100) : 0;
+      return el("div", {className: "row"},
+        el("div", {className: "main"}, el("div", {className: "title"}, title),
+          el("div", {className: "hint"}, hint),
+          el("div", {className: "share"}, el("i", {style: `width: ${share}%`}))),
+        el("div", {className: "money"}, usd(cost), el("div", {className: "hint"}, share + " %")));
+    }
+
+    function showLlmLine(spent, limit, count) {
+      $("llm").replaceChildren(el("span", {}, `LLM сегодня: ${usd(spent)} из ${usd(limit)}, ${runs(count)}`),
+        el("span", {className: "hint"}, "›"));
+    }
+
+    function renderLlm(data) {
+      llmView.data = data;
+      showLlmLine(data.spent_usd, data.limit_usd, data.periods.today.runs);
+      const period = data.periods[llmView.period];
+      const parts = [el("p", {className: "hint"}, "Все вызовы Haiku, неудачные тоже. Сутки — по Москве, неделя "
+        + "с понедельника. Выше 80 % лимита отключаются картинки, PDF целиком и ежедневная сводка; на 100 % вызовы "
+        + "стоят до полуночи.")];
+      if (data.level !== "ok") {
+        parts.push(el("div", {className: "card warn"}, data.level === "hard"
+          ? "Лимит на сегодня исчерпан: вызовы стоят до полуночи, сообщения ждут в очереди."
+          : "Больше 80 % лимита: картинки, PDF целиком и ежедневная сводка отключены до полуночи."));
+      }
+      const share = Math.round(data.spent_usd / data.limit_usd * 100);
+      const subtitles = {today: `${share} % лимита`, week: runs(data.periods.week.runs),
+                         month: `прогноз ${usd(data.month_forecast_usd)}`};
+      parts.push(el("div", {className: "periods"}, ...PERIODS.map(([name, title]) => {
+        const button = el("button", {className: name === llmView.period ? "on" : ""},
+          el("div", {className: "hint"}, title), el("div", {className: "sum"}, usd(data.periods[name].cost_usd)),
+          el("div", {className: "hint"}, subtitles[name]));
+        button.onclick = () => { llmView.period = name; renderLlm(data); };
+        return button;
+      })));
+
+      parts.push(el("h3", {}, `${data.days.length} дней`));
+      parts.push(el("div", {className: "card"}, chart(data), el("div", {className: "hint"}, (() => {
+        const day = data.days.find((d) => d.day === llmView.day);
+        if (!day) return `Пунктир — лимит ${usd(data.daily_limit_usd)} в день, красные дни упёрлись в лимит. `
+          + "Нажмите на столбик.";
+        return `${shortDay(day.day)}: ${usd(day.cost_usd)}, ${runs(day.runs)}`
+          + (day.failed ? `, неудачных ${day.failed}` : "") + (day.stopped ? ", лимит исчерпан" : "");
+      })())));
+
+      const title = PERIODS.find(([name]) => name === llmView.period)[1].toLowerCase();
+      parts.push(el("h3", {}, `По задачам · ${title}`));
+      if (!period.runs) {
+        parts.push(el("p", {className: "hint"}, "Вызовов не было."));
+      } else {
+        parts.push(el("div", {className: "list"}, ...period.by_task.map((row) => costRow(TASKS[row.task] || row.task,
+          runs(row.runs) + (row.failed ? `, неудачных ${row.failed}` : ""), row.cost_usd, period.cost_usd))));
+        parts.push(el("h3", {}, `По чатам · ${title}`));
+        const chatted = period.by_chat.reduce((sum, row) => sum + row.cost_usd, 0);
+        const rows = period.by_chat.map((row) => costRow(row.title, runs(row.runs), row.cost_usd, period.cost_usd));
+        if (period.cost_usd - chatted > 0.0005) {
+          rows.push(costRow("Без чата", "словарь, оценки, метки HSE App X", period.cost_usd - chatted,
+                            period.cost_usd));
+        }
+        parts.push(el("div", {className: "list"}, ...rows));
+      }
+
+      parts.push(el("h3", {}, "Лимит"));
+      const limit = el("input", {type: "number", min: 0.05, step: 0.05, value: data.daily_limit_usd});
+      limit.onchange = () => changeLlm("api/llm", "PATCH", {daily_limit_usd: Number(limit.value)});
+      const raise = el("button", {className: "link"}, `+${usd(data.daily_limit_usd)}`);
+      raise.onclick = () => tg.showConfirm(`Поднять лимит на сегодня до ${usd(data.limit_usd + data.daily_limit_usd)}?`,
+        (yes) => { if (yes) changeLlm("api/llm/raise", "POST", {}); });
+      parts.push(el("div", {className: "list"},
+        settingRow("В день, $", "каждые сутки по Москве", limit),
+        settingRow("Поднять на сегодня", data.raised_usd
+          ? `сегодня уже поднят на ${usd(data.raised_usd)}, до полуночи` : "до полуночи, как кнопка в «Системе»",
+          raise)));
+      $("tab-llm").replaceChildren(...parts);
+    }
+
+    // --- start ----------------------------------------------------------------
+
+    function showTab(name) {
+      for (const button of $("tabs").querySelectorAll("button")) {
+        button.classList.toggle("on", button.dataset.tab === name);
+        $("tab-" + button.dataset.tab).hidden = button.dataset.tab !== name;
+      }
+      if (name !== "hseapp") stopHseWatch();
+      if (name === "schedule") loadSchedule();
+      if (name === "deadlines") loadDeadlines();
+      if (name === "sheets") loadSheets();
+      if (name === "grades") loadGrades();
+      if (name === "summaries") loadSummaries();
+      if (name === "subjects") loadSubjects();
+      if (name === "hseapp") { hse.note = null; loadHseApp(); }
+      if (name === "llm") loadLlm();
+    }
+
+    // A screen asked for by the link the Mini App was opened with (a button under a post in the forum).
+    const startScreen = new URLSearchParams(location.search).get("screen") || tg.initDataUnsafe.start_param;
+
+    tg.BackButton.onClick(back);
+    $("search").oninput = renderList;
+    $("subject-search").oninput = renderSubjects;
+    $("subject-add").onclick = () => openSubject(null);
+    for (const button of $("tabs").querySelectorAll("button")) button.onclick = () => showTab(button.dataset.tab);
+    $("llm").onclick = () => showTab("llm");
+
+    Promise.all([call("api/me"), call("api/chats")])
+      .then(([me, list]) => {
+        $("title").textContent = "Привет, " + me.first_name;
+        $("state").hidden = true;
+        showLlmLine(me.llm.spent_usd, me.llm.limit_usd, me.llm.runs_today);
+        $("llm").hidden = false;
+        $("tabs").hidden = false;
+        if (list.twin.login_needed || list.twin.error) {
+          $("twin").textContent = "Твинк не читает чаты: " + (list.twin.error || "нужен вход") + ".";
+          $("twin").hidden = false;
+        }
+        const mail = list.mail || {};
+        if (mail.configured) {  // collectors/mail.py: letters are read with the chats
+          $("mail").textContent = mail.error ? "Почта не читается: " + mail.error + "."
+            : `Почта: писем за 14 дней — ${mail.letters}` + (mail.ok_at ? `, проверена ${mail.ok_at.slice(11, 16)}` : "");
+          $("mail").classList.toggle("warn", Boolean(mail.error));
+          $("mail").hidden = false;
+        }
+        chats = list.chats;
+        $("search").hidden = chats.length < 8;
+        renderList();
+        renderImages(list.images);
+        if (startScreen && $("tab-" + startScreen)) showTab(startScreen);
+      })
+      .catch((error) => { $("state").textContent = error.message; });
+  </script>
+</body>
+</html>

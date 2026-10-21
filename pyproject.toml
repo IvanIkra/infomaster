@@ -1,0 +1,37 @@
+[project]
+name = "uni-master"
+version = "0.1.0"
+description = "Study chats, mail and university sources processed for Tablo, a Telegram forum and a Mini App"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.10",
+    "anthropic>=1.15",
+    "icalendar>=6",
+    "openpyxl>=3.1",  # teachers' grade sheets as xlsx
+    "pypdf>=5",  # text of PDFs, pages for the model: MIT, unlike PyMuPDF
+    "telethon>=1.45",  # layer 229: KeyboardInlineButton with a button type
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-aiohttp>=1.0", "ruff>=0.15"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["uni_master*"]
+
+[tool.setuptools.package-data]
+"uni_master.outputs" = ["miniapp/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]

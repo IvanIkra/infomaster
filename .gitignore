@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# Secrets (§10)
+.env
+
+# Runtime state: SQLite, the twin and bot sessions, HSE App X tokens
+data/
+*.session
+*.session-journal
