@@ -24,8 +24,8 @@ services:
         max-size: 5m
         max-file: "3"
 
-  # Personal tailnet, not the host's corporate one (р. 31). Userspace networking: no tun device, no routes and
-  # no DNS changes in the host or in other containers.
+  # Its own node in the personal tailnet, tagged, the only one allowed Funnel (р. 31). Userspace networking:
+  # no tun device, no routes and no DNS changes in the host or in other containers.
   tailscale:
     image: tailscale/tailscale:stable
     container_name: uni-master-tailscale
