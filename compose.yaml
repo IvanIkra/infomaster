@@ -31,7 +31,7 @@ services:
   tailscale:
     image: tailscale/tailscale:stable
     container_name: infomaster-tailscale
-    hostname: infomaster
+    hostname: infomaster-tailscale  # not "infomaster": inside the sidecar that name would be itself, not the service
     restart: unless-stopped
     dns:
       - ${CONTAINER_DNS_1:?set CONTAINER_DNS_1 in .env}
@@ -43,6 +43,9 @@ services:
       TS_USERSPACE: "true"
       TS_ACCEPT_DNS: "false"
       TS_SERVE_CONFIG: /config/serve.json
+      # Control over 443 straight away, as the host's tailscaled ends up: on the direct path port 80 goes
+      # through the ISP's proxy, and the long-poll to the control server dies after two minutes
+      TS_FORCE_NOISE_443: "true"
     volumes:
       - ./data/tailscale:/var/lib/tailscale
       - ./tailscale:/config:ro
