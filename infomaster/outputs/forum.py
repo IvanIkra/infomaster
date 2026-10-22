@@ -32,8 +32,8 @@ COMMANDS = {"summary": Phrase("Chat summary: /summary [chat] [3h | 2d | 20.10-22
 RAISE_LIMIT = re.compile(rb"^llm:raise:(\d{4}-\d{2}-\d{2})$")  # the day is in the data: the button raises only that day
 # Mini App screens a post can open (see app_button) -> what the bot says above the Mini App's button
 SCREENS = {"hseapp": Phrase("The HSE App X login is in the Mini App.", "Вход в HSE App X — в Mini App."),
-           "chats": Phrase("The twin's login is in the Mini App, screen «Chats».",
-                           "Вход твинка — в Mini App, экран «Чаты».")}
+           "chats": Phrase("The twin's login is in the Mini App, Settings → Twin and chats.",
+                           "Вход твинка — в Mini App, Настройки → Твинк и чаты.")}
 
 
 def start_screen(text: str) -> str | None:

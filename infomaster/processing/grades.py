@@ -21,6 +21,12 @@ sheet removed in the settings, or a new name, drops its grades, so the next read
 
 The «Оценки» topic posts the events (outputs/grades.py); the API gives the newest event of each work within
 grades_window_days, newest first (Tablo's §3.7).
+
+The owner's hand (р. 44). Every read keeps a view of each tab for the Mini App: the own row's cells under their headers
+and the works laid out in them, never another student's row. The owner may lay out a tab themselves: that layout stands
+over Haiku's, whatever the header does, until given back. The owner adds grades by hand and changes a sheet's grade:
+a changed one stands until the sheet itself changes that grade. Both go to the API with the sheets' new grades, not to
+the «Оценки» topic: the owner made them.
 """
 
 import datetime as dt
@@ -33,6 +39,7 @@ from typing import Any
 
 from .. import clock
 from ..collectors.grades import Read, Sheet, TabView, sheet_id, short_course, text
+from ..i18n import Phrase
 from ..llm.client import BadAnswer, Haiku
 from ..settings import SPECS, Settings, SettingsError
 from ..store import Store
@@ -42,6 +49,9 @@ log = logging.getLogger(__name__)
 LABEL_BUDGET = 23       # characters of "<course> <work>": the grades block of Tablo (§3.7)
 MIN_BUDGET = 8
 LAYOUT_VERSION = 3      # bump when the prompt changes, to drop the cached layouts
+VIEW = "grades.view:"   # + the sheet's id: what its last read found in each tab, for the Mini App
+OWN_LAYOUT = "grades.own_layout:"  # + the sheet's id, "|", the tab: the owner's layout of a tab
+HEADER_GUESS = 3        # top rows that head a column for the Mini App when no layout names the header
 MAX_TOKENS = 4000
 TOKENS_PER_WORK = 60    # {"column", "label", "max", "bonus_column"}: a tab of dates must not cut the answer
 SETTINGS = ("grades_student", "grades_sheets", "grades_window_days")
@@ -111,8 +121,8 @@ def budget(course: str) -> int:
     return max(MIN_BUDGET, LABEL_BUDGET - len(course) - 1)
 
 
-def layout_key(sid: str, view: TabView, label_budget: int) -> str:
-    payload = json.dumps([sid, view.tab, LAYOUT_VERSION], ensure_ascii=False)
+def layout_key(sid: str, tab: str, label_budget: int) -> str:
+    payload = json.dumps([sid, tab, LAYOUT_VERSION], ensure_ascii=False)
     return f"grades.layout:{hashlib.sha256(payload.encode()).hexdigest()[:24]}:{label_budget}"
 
 
@@ -135,6 +145,35 @@ def number(value) -> float | None:
         return float(str(value).strip().replace(",", "."))
     except ValueError:
         return None
+
+
+def columns(view: TabView, header_rows: list[int]) -> list[dict]:
+    """The own row's cells left to right, each under its header."""
+    rows = header_rows or [row for row, _ in view.rows][:HEADER_GUESS]
+    return [{"column": col, "header": view.column_header(col, rows), "value": text(value)}
+            for col, value in view.mine.items()]
+
+
+def works(items: list[dict], cells: list[dict]) -> list[dict]:
+    """The works of a layout over the own row's cells: the points there and the grade on 0-10."""
+    by_column = {cell["column"]: cell for cell in cells}
+    listed = []
+    for it in items:
+        cell = by_column.get(it.get("column"), {})
+        raw, maximum = number(cell.get("value")), number(it.get("max")) or 10.0
+        listed.append({"column": it.get("column"), "label": it.get("label") or "", "max": maximum,
+                       "bonus_column": it.get("bonus_column"), "header": cell.get("header", ""), "raw": raw,
+                       "value": round(raw / maximum * 10, 2) if raw is not None and maximum > 0 else None})
+    return listed
+
+
+def describe(view: TabView, spec: dict) -> dict:
+    """A tab as the Mini App shows it."""
+    header_rows = spec.get("header_rows") or []
+    cells = columns(view, header_rows)
+    return {"tab": view.tab, "own_row": view.own_row, "skip": bool(spec.get("skip")), "reason": spec.get("reason"),
+            "by": "you" if spec.get("by") == "you" else "failed" if spec.get("failed") else "haiku",
+            "header_rows": header_rows, "columns": cells, "works": works(spec.get("items") or [], cells)}
 
 
 @dataclass(frozen=True)
@@ -186,14 +225,16 @@ class Grades:
         could not be laid out: nothing is recorded then. A sheet the settings dropped while it was read, or read
         with a name the settings no longer have, records nothing either."""
         items: list[Item] = []
-        unread = []
+        unread, tabs = [], []
         for view in sheet.views:
             spec = await self.layout(sheet.id, view, budget(sheet.course))
             if spec.get("failed"):
                 unread.append(view.tab)
             items += extract(sheet.id, sheet.course, view, spec, len(items))
+            tabs.append(describe(view, spec))
         if not self._current(sheet):
             return Read(False, 0)
+        self.store.put_json(VIEW + sheet.id, {"course": sheet.course, "tabs": tabs})
         first = self.record(sheet.id, sheet.title, items)
         return Read(first, self.db.execute("select count(*) n from grade_items where sheet_id = ? and not gone",
                                            (sheet.id,)).fetchone()["n"], tuple(unread))
@@ -203,9 +244,12 @@ class Grades:
             sheet.id in {sheet_id(s["url"]) for s in self.settings.get("grades_sheets")}
 
     async def layout(self, sid: str, view: TabView, label_budget: int) -> dict:
-        """The cached layout while the rows it watches have the same text, else Haiku's; the spec's header_rows are
-        rows of the view."""
-        key = layout_key(sid, view, label_budget)
+        """The owner's layout of the tab; else the cached one while the rows it watches have the same text, else
+        Haiku's. The spec's header_rows are rows of the view."""
+        own = self.store.get_json(f"{OWN_LAYOUT}{sid}|{view.tab}")
+        if own is not None:
+            return own
+        key = layout_key(sid, view.tab, label_budget)
         cached = self.store.get_json(key)
         if cached is not None and view.header(cached["watch"]) == cached["header"]:
             return cached["spec"]
@@ -257,6 +301,8 @@ class Grades:
                     (item.key, sid, item.tab, item.header, item.label, item.value, item.raw, item.max, item.bonus,
                      item.position))
                 changed = old is None or old["value"] != item.value or (old["bonus"] or 0) != (item.bonus or 0)
+                if changed:  # the sheet changed the grade: the owner's change of it is over
+                    db.execute("delete from own_grades where key = ?", (item.key,))
                 if changed and not first:
                     db.execute("insert into grade_events(key, sheet_id, label, value, raw, max, bonus, previous, "
                                "seen_at) values(?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -291,22 +337,135 @@ class Grades:
     # --- the API, the status and the Mini App -----------------------------------------------------
 
     def new(self) -> list[dict]:
-        """The newest event of each work within the window, newest first (Tablo's §3.7)."""
+        """The newest event of each work within the window, newest first (Tablo's §3.7); the owner's grades of the
+        window among them, a changed one in place of the sheet's."""
         ids = {sheet_id(s["url"]) for s in self.settings.get("grades_sheets")}
+        since = self._since()
         rows = self.db.execute(
             "select * from grade_events where id in (select max(id) from grade_events where seen_at >= ? group by key) "
-            "order by seen_at desc, id desc", (self._since(),))
-        return [{"key": row["key"], "label": row["label"], "value": row["value"], "bonus": row["bonus"],
-                 "seen_at": row["seen_at"]} for row in rows if row["sheet_id"] in ids]
+            "order by seen_at desc, id desc", (since,))
+        listed = [{"key": row["key"], "label": row["label"], "value": row["value"], "bonus": row["bonus"],
+                   "seen_at": row["seen_at"]} for row in rows if row["sheet_id"] in ids]
+        own = [row for row in self.db.execute("select * from own_grades where created_at >= ?", (since,))
+               if row["sheet_id"] is None or row["sheet_id"] in ids]
+        changed = {row["key"] for row in own}
+        listed = [item for item in listed if item["key"] not in changed]
+        listed += [{"key": row["key"] or f"own-{row['id']}", "label": self._label(row), "value": row["value"],
+                    "bonus": None, "seen_at": row["created_at"]} for row in own]
+        return sorted(listed, key=lambda item: item["seen_at"], reverse=True)
 
     def items(self, sid: str) -> list[dict]:
-        """The grades of a sheet in sheet order, the new ones marked."""
+        """The grades of a sheet in sheet order, the new ones marked, the owner's changes in place (`id`: the work's
+        key)."""
+        since = self._since()
         fresh = {row["key"] for row in self.db.execute(
-            "select distinct key from grade_events where sheet_id = ? and seen_at >= ?", (sid, self._since()))}
-        return [{"label": row["label"], "value": row["value"], "raw": row["raw"], "max": row["max"],
-                 "bonus": row["bonus"], "new": row["key"] in fresh}
-                for row in self.db.execute(
-                    "select * from grade_items where sheet_id = ? and not gone order by position", (sid,))]
+            "select distinct key from grade_events where sheet_id = ? and seen_at >= ?", (sid, since))}
+        changed = {row["key"]: row for row in self.db.execute("select * from own_grades where sheet_id = ?", (sid,))}
+        listed = []
+        for row in self.db.execute("select * from grade_items where sheet_id = ? and not gone order by position",
+                                   (sid,)):
+            mine = changed.get(row["key"])
+            listed.append({"id": row["key"], "label": mine["label"] if mine else row["label"],
+                           "value": mine["value"] if mine else row["value"], "raw": row["raw"], "max": row["max"],
+                           "bonus": row["bonus"], "edited": mine is not None, "sheet_value": row["value"],
+                           "new": row["key"] in fresh or (mine is not None and mine["created_at"] >= since)})
+        return listed
+
+    # --- the owner's grades (р. 44) ------------------------------------------------------------
+
+    def _label(self, row) -> str:
+        return f"{row['course']} {row['label']}" if row["key"] is None and row["course"] else row["label"]
+
+    def manual(self) -> list[dict]:
+        """The grades added by hand, in the order they came (`id`: own-<n>)."""
+        since = self._since()
+        return [{"id": f"own-{row['id']}", "course": row["course"], "label": row["label"], "value": row["value"],
+                 "new": row["created_at"] >= since}
+                for row in self.db.execute("select * from own_grades where key is null order by id")]
+
+    def add_grade(self, course: str, label: str, value: float) -> int:
+        with self.db:
+            return self.db.execute("insert into own_grades(course, label, value, created_at) values(?, ?, ?, ?)",
+                                   (course, label, value, clock.local_iso(self.now()))).lastrowid
+
+    def change_grade(self, grade_id: str, label: str | None, value: float, course: str | None = None) -> bool:
+        """A grade added by hand (own-<n>) changed, or a sheet's (by its work's key) changed by the owner. False for
+        no such grade."""
+        now = clock.local_iso(self.now())
+        with self.db:
+            if grade_id.startswith("own-") and grade_id[4:].isdigit():
+                row = self.db.execute("select * from own_grades where id = ? and key is null",
+                                      (int(grade_id[4:]),)).fetchone()
+                if row is None:
+                    return False
+                self.db.execute("update own_grades set course = ?, label = ?, value = ?, created_at = ? where id = ?",
+                                (course or row["course"], label or row["label"], value, now, row["id"]))
+                return True
+            item = self.db.execute("select * from grade_items where key = ? and not gone", (grade_id,)).fetchone()
+            if item is None:
+                return False
+            self.db.execute(
+                "insert into own_grades(key, sheet_id, label, value, sheet_value, created_at) values(?, ?, ?, ?, ?, ?) "
+                "on conflict(key) do update set label = excluded.label, value = excluded.value, "
+                "created_at = excluded.created_at",
+                (grade_id, item["sheet_id"], label or item["label"], value, item["value"], now))
+            return True
+
+    def drop_grade(self, grade_id: str) -> bool:
+        """A grade added by hand deleted, or the owner's change of a sheet's grade undone."""
+        with self.db:
+            if grade_id.startswith("own-") and grade_id[4:].isdigit():
+                return self.db.execute("delete from own_grades where id = ? and key is null",
+                                       (int(grade_id[4:]),)).rowcount > 0
+            return self.db.execute("delete from own_grades where key = ?", (grade_id,)).rowcount > 0
+
+    # --- the owner's view and layout of a sheet (р. 44) ---------------------------------------------
+
+    def view(self, sid: str) -> dict:
+        """What the last read found in each tab: {course, tabs}; no tabs before the first read."""
+        return self.store.get_json(VIEW + sid) or {"course": "", "tabs": []}
+
+    def set_layout(self, sid: str, tab: str, skip: bool, items: list[dict]) -> dict | None:
+        """The owner's layout of a tab (`items`: column, label, max, bonus_column), over Haiku's from now on; the
+        grades follow at the next read, which comes at once. The tab as the view has it now; None for a tab the last
+        read did not find. ValueError (with a Phrase) for a column the own row does not have, or a label too long."""
+        view = self.view(sid)
+        found = next((t for t in view["tabs"] if t["tab"] == tab), None)
+        if found is None:
+            return None
+        cells = {cell["column"] for cell in found["columns"]}
+        limit = budget(view["course"])
+        for it in items:
+            if it["column"] not in cells or (it["bonus_column"] is not None and it["bonus_column"] not in cells):
+                raise ValueError(Phrase("no such column in the own row", "в своей строке нет такой колонки"))
+            if not it["label"] or len(it["label"]) > limit:
+                raise ValueError(Phrase(f"a label is needed, up to {limit} characters",
+                                        f"нужно название, до {limit} символов"))
+        spec = {"skip": skip, "reason": "laid out by hand", "header_rows": found["header_rows"], "items": items,
+                "by": "you"}
+        self.store.put_json(f"{OWN_LAYOUT}{sid}|{tab}", spec)
+        found.update(skip=skip, reason=spec["reason"], by="you", works=works(items, found["columns"]))
+        self.store.put_json(VIEW + sid, view)
+        if self.wake is not None:
+            self.wake()
+        return found
+
+    def clear_layout(self, sid: str, tab: str) -> dict | None:
+        """The tab given back to Haiku: its layout as Haiku left it applies again. The tab as the view has it now."""
+        view = self.view(sid)
+        found = next((t for t in view["tabs"] if t["tab"] == tab), None)
+        if found is None:
+            return None
+        self.store.delete_json(f"{OWN_LAYOUT}{sid}|{tab}")
+        cached = self.store.get_json(layout_key(sid, tab, budget(view["course"])))
+        spec = cached["spec"] if cached else {"skip": False, "reason": None, "items": []}
+        found.update(skip=bool(spec.get("skip")), reason=spec.get("reason"),
+                     by="failed" if spec.get("failed") else "haiku", works=works(spec.get("items") or [],
+                                                                                found["columns"]))
+        self.store.put_json(VIEW + sid, view)
+        if self.wake is not None:
+            self.wake()
+        return found
 
     def status(self) -> dict:
         return {"llm": self.llm.available if self.llm is not None else False, "new": len(self.new())}
@@ -333,8 +492,14 @@ class Grades:
             self.wake()
 
     def forget(self, sids: set[str]) -> None:
+        """A sheet's grades, the owner's changes of them, its view and the owner's layouts of it."""
         with self.db:
             for table in ("grade_items", "grade_events", "grade_sheets"):
                 self.db.executemany(f"delete from {table} where sheet_id = ?", [(sid,) for sid in sids])
+            for sid in sids:
+                self.db.execute("delete from own_grades where sheet_id = ?", (sid,))
+                prefix = f"{OWN_LAYOUT}{sid}|"  # by the start of the key, not LIKE: an id may have "_" in it
+                self.db.execute("delete from kv where key = ? or substr(key, 1, ?) = ?",
+                                (VIEW + sid, len(prefix), prefix))
         if sids:
             log.info("grades of %d sheet(s) forgotten", len(sids))

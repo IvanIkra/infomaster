@@ -8,7 +8,8 @@ captions are in the forum's language (р. 41), and so are the summary and the ch
 
 The sheets are posted after every batch run, oldest first; one that fails stays waiting for the next run. The owner's
 joining of two sheets in the Mini App goes through here too, under the same lock: the newer sheet's own post is
-deleted, and the older one's message takes its file.
+deleted, and the older one's message takes its file. So does the owner's change of a sheet, which edits the caption of
+its message, and an own sheet (р. 44): posted at once, deleted with its messages.
 """
 
 import asyncio
@@ -19,6 +20,7 @@ import re
 from collections.abc import Callable
 
 from .. import clock
+from ..collectors.files import OWN_CHAT
 from ..collectors.inbox import Inbox
 from ..processing.sheets import Sheets
 from ..store import Store
@@ -67,6 +69,37 @@ class SheetTopic:
                     log.warning("cannot delete the post of sheet %d: %s", sheet_id, e)
                 with self.db:
                     self.db.execute("delete from bot_posts where kind = 'sheet' and msg_id = ?", (own_post,))
+
+    async def edit(self, sheet_id: int, fields: dict) -> dict | None:
+        """The Mini App: the owner's change of a sheet; a posted one gets its caption anew. None for no such
+        sheet."""
+        async with self._lock:
+            sheet = self.sheets.edit(sheet_id, fields)
+            first = self.sheets.first(sheet) if sheet is not None else None
+            if sheet is not None and sheet["status"] == "posted" and first["post_id"] is not None:
+                await self.forum.edit(first["post_id"], self.caption(sheet, first), html=True)
+            return sheet
+
+    async def remove(self, sheet_id: int) -> bool:
+        """The Mini App: an own sheet deleted, with its messages. False when it is no own sheet."""
+        async with self._lock:
+            chain = self.sheets.remove_own(sheet_id)
+            if chain is None:
+                return False
+            ids = [sheet["id"] for sheet in chain]
+            marks = ", ".join("?" * len(ids))
+            posts = sorted({sheet["post_id"] for sheet in chain if sheet["post_id"] is not None} | {
+                row["msg_id"] for row in self.db.execute(
+                    f"select msg_id from bot_posts where kind in ('sheet', 'sheet_update') and ref in ({marks})", ids)})
+            if posts:
+                try:
+                    await self.forum.delete(posts)
+                except Exception as e:
+                    log.warning("cannot delete the posts of sheet %d: %s", sheet_id, e)
+            with self.db:
+                self.db.execute(f"delete from bot_posts where kind in ('sheet', 'sheet_update') and ref in ({marks})",
+                                ids)
+            return True
 
     # --- posting ------------------------------------------------------------------------------
 
@@ -122,5 +155,7 @@ class SheetTopic:
         return "\n".join(line for line in lines if line)
 
     def _source(self, sheet: dict) -> str:
+        if sheet["chat_id"] == OWN_CHAT:
+            return self.forum.tr("added by hand", "добавлен вручную")
         return source(self.inbox, {"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]]},
                       self.forum.lang)

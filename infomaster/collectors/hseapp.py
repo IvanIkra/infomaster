@@ -376,14 +376,14 @@ class HseApp:
                 reason = self.error.removeprefix(LOGIN_ERROR) if (self.error or "").startswith(LOGIN_ERROR) else ""
                 why = f" ({reason})" if reason else ""
                 text = Phrase(f"The HSE App X login is no longer valid{why}: its deadlines are not updated.\n"
-                              "Log in again with the button below or in the Mini App, screen «HSE App X».",
+                              "Log in again with the button below or in the Mini App, Settings → HSE App X.",
                               f"Вход в HSE App X больше не действует{why}: дедлайны оттуда не обновляются.\n"
-                              "Войти заново — кнопкой ниже или в Mini App, экран «HSE App X».")
+                              "Войти заново — кнопкой ниже или в Mini App, Настройки → HSE App X.")
             else:
                 text = Phrase("An HSE App X login is needed: without it no deadlines come from there.\n"
-                              "Log in with the button below or in the Mini App, screen «HSE App X».",
+                              "Log in with the button below or in the Mini App, Settings → HSE App X.",
                               "Нужен вход в HSE App X: без него дедлайны оттуда не приходят.\n"
-                              "Войти — кнопкой ниже или в Mini App, экран «HSE App X».")
+                              "Войти — кнопкой ниже или в Mini App, Настройки → HSE App X.")
             self._notify(text, login=True)
         elif told and (logged_in or not enabled):
             self.store.put_json(TOLD_KEY, False)

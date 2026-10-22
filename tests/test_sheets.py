@@ -434,3 +434,52 @@ async def test_miniapp_screen(aiohttp_client, batches, llm, sheets, topic, budge
     assert (await client.post("/app/api/sheets/9/join", json={"previous": 1}, headers=owner)).status == 400
     state = await (await client.post("/app/api/sheets/2/join", json={"previous": 1}, headers=owner)).json()
     assert [(s["id"], s["first"], s["versions"]) for s in state["sheets"]] == [(2, 1, 2)]
+
+
+async def test_owner_changes_and_adds_sheets(aiohttp_client, batches, llm, sheets, topic, forum, budget, journal,
+                                            store, schedule, merged):
+    """The owner's change of a sheet edits its caption; an own sheet is posted at once and deleted with its message
+    (р. 44)."""
+    from aiohttp import FormData
+
+    await found(batches, llm, 1, SHEET3)
+    await topic.publish()
+    post = sheets.get(1)["post_id"]
+    hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
+    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, sheets.inbox, sheets.chat_settings,
+                                                     {"sheets": sheets.status}, schedule.subjects, schedule, hse,
+                                                     merged, sheets.settings, topic))
+    owner = {"Authorization": "tma " + init_data()}
+
+    change = {"course": "Линейная алгебра", "number": " 3b ", "due": "2026-11-02", "summary": "Series, 6 tasks."}
+    [listed] = (await (await client.patch("/app/api/sheets/1", json=change, headers=owner)).json())["sheets"]
+    assert (listed["number"], listed["due"], listed["summary"]) == ("3b", "2026-11-02", "Series, 6 tasks.")
+    caption = forum.messages[post][1]
+    assert post in forum.edited and "листок 3b" in caption and "Series, 6 tasks." in caption and "02.11" in caption
+    state = await (await client.patch("/app/api/sheets/1", json={"due": "", "summary": ""}, headers=owner)).json()
+    assert (state["sheets"][0]["due"], state["sheets"][0]["summary"]) == (None, None)
+    for bad in ({}, {"number": 5}, {"due": "2.11"}, {"oops": 1}, {"summary": "x" * 601}):
+        assert (await client.patch("/app/api/sheets/1", json=bad, headers=owner)).status == 400
+    assert (await client.patch("/app/api/sheets/99", json={"number": "1"}, headers=owner)).status == 404
+
+    form = FormData()
+    form.add_field("file", SHEET3_FIXED, filename="mine.pdf", content_type="application/pdf")
+    form.add_field("course", "Calculus")
+    form.add_field("number", "7")
+    state = await (await client.post("/app/api/sheets", data=form, headers=owner)).json()
+    [mine] = [s for s in state["sheets"] if s["own"]]
+    assert (mine["name"], mine["number"], mine["status"], mine["chat"], mine["due"]) == (
+        "mine.pdf", "7", "posted", None, None)
+    own_post = sheets.get(mine["id"])["post_id"]
+    assert "добавлен вручную" in forum.messages[own_post][1] and forum.files[own_post][0] == SHEET3_FIXED
+
+    assert (await client.delete("/app/api/sheets/1", headers=owner)).status == 404  # a chat's: not the owner's
+    state = await (await client.delete(f"/app/api/sheets/{mine['id']}", headers=owner)).json()
+    assert [s["id"] for s in state["sheets"]] == [1] and own_post in forum.deleted and sheets.get(mine["id"]) is None
+
+    form = FormData()
+    form.add_field("file", b"hello", filename="no.pdf", content_type="application/pdf")
+    assert (await client.post("/app/api/sheets", data=form, headers=owner)).status == 400
+    form = FormData()
+    form.add_field("course", "Calculus")
+    assert (await client.post("/app/api/sheets", data=form, headers=owner)).status == 400

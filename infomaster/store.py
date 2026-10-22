@@ -241,6 +241,16 @@ create table if not exists grade_events (       -- new and changed grades: the �
     post_id integer             -- the bot's message in «Оценки»; null while it waits
 );
 create index if not exists grade_events_seen on grade_events(seen_at);
+create table if not exists own_grades (         -- the owner's grades (р. 44): added by hand, or a sheet's changed
+    id integer primary key,
+    key text unique,            -- the sheet's work it changes (grade_items.key); null for one added by hand
+    sheet_id text,              -- of that work
+    course text,                -- of one added by hand: in front of its label for Tablo
+    label text not null,        -- a sheet's: whole, "DM HW 1"; one added by hand: the work, "Essay"
+    value real not null,        -- 0-10
+    sheet_value real,           -- the sheet's grade when it was changed: once the sheet changes it, the sheet wins
+    created_at text not null    -- or changed: new for Tablo from then
+);
 """
 
 # (table, column, definition): columns added to a table that an earlier stage created already.
@@ -273,6 +283,10 @@ class Store:
     def get_json(self, key: str, default=None):
         row = self.db.execute("select value from kv where key = ?", (key,)).fetchone()
         return json.loads(row["value"]) if row else default
+
+    def delete_json(self, key: str) -> None:
+        with self.db:
+            self.db.execute("delete from kv where key = ?", (key,))
 
     def put_json(self, key: str, value) -> None:
         with self.db:

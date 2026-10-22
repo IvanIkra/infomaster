@@ -2,241 +2,445 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>infomaster</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
+    /* Telegram's theme (--tg-theme-*), dark first; the fallbacks are for a browser outside Telegram. */
+    :root {
+      --bg: var(--tg-theme-secondary-bg-color, #000);
+      --surface: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #1c1c1e));
+      --text: var(--tg-theme-text-color, #fff);
+      --hint: var(--tg-theme-hint-color, #8d8d93);
+      --accent: var(--tg-theme-button-color, #3e88f7);
+      --on-accent: var(--tg-theme-button-text-color, #fff);
+      --link: var(--tg-theme-link-color, #3e88f7);
+      --header: var(--tg-theme-section-header-text-color, #8d8d93);
+      --danger: var(--tg-theme-destructive-text-color, #eb5545);
+      --sep: var(--tg-theme-section-separator-color, #38383a);
+      --press: rgba(128, 128, 128, .14);
+      --field: rgba(128, 128, 128, .16);
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: var(--tg-theme-secondary-bg-color, #f2f2f7);
+        --surface: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #fff));
+        --text: var(--tg-theme-text-color, #000);
+        --hint: var(--tg-theme-hint-color, #8a8a8e);
+        --accent: var(--tg-theme-button-color, #2481cc);
+        --link: var(--tg-theme-link-color, #2481cc);
+        --header: var(--tg-theme-section-header-text-color, #6d6d72);
+        --danger: var(--tg-theme-destructive-text-color, #e53935);
+        --sep: var(--tg-theme-section-separator-color, #d1d1d6);
+      }
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { background: var(--bg); }
     body {
-      margin: 0;
-      padding: 16px;
-      font: 16px/1.4 -apple-system, system-ui, sans-serif;
-      background: var(--tg-theme-bg-color, #fff);
-      color: var(--tg-theme-text-color, #000);
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 0 16px calc(96px + env(safe-area-inset-bottom));
+      font: 17px/1.3 -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      color: var(--text);
     }
-    h2 { margin: 0 0 4px; }
-    h3 { margin: 20px 0 6px; font-size: 13px; text-transform: uppercase; color: var(--tg-theme-section-header-text-color, #888); }
-    .hint { color: var(--tg-theme-hint-color, #888); font-size: 14px; }
-    .card {
-      margin-top: 12px;
-      padding: 12px 16px;
-      border-radius: 12px;
-      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
+    body.inner { padding-bottom: calc(32px + env(safe-area-inset-bottom)); }
+    input, select, textarea, button { font: inherit; color: inherit; }
+    a { color: var(--link); text-decoration: none; }
+    [hidden] { display: none !important; }
+
+    /* --- titles ------------------------------------------------------------- */
+
+    .large { margin: 0; padding: 22px 4px 2px; font-size: 32px; font-weight: 700; letter-spacing: -.02em; }
+    .title { margin: 0; padding: 18px 4px 2px; font-size: 22px; font-weight: 600; letter-spacing: -.01em;
+             overflow-wrap: anywhere; }
+    .subtitle { margin: 0 4px 6px; color: var(--hint); font-size: 15px; }
+    h3 {
+      margin: 26px 16px 7px;
+      font-size: 13px;
+      font-weight: 400;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+      color: var(--header);
     }
-    .warn { color: var(--tg-theme-destructive-text-color, #d33); }
-    input[type=search] {
-      box-sizing: border-box;
-      width: 100%;
-      margin-top: 12px;
-      padding: 8px 12px;
-      border: 0;
-      border-radius: 10px;
-      font: inherit;
-      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
-      color: inherit;
-    }
-    .list { border-radius: 12px; overflow: hidden; background: var(--tg-theme-secondary-bg-color, #f2f2f2); }
+    .foot { margin: 7px 16px 0; color: var(--hint); font-size: 13px; line-height: 1.38; }
+    .empty { padding: 40px 24px; text-align: center; color: var(--hint); font-size: 15px; line-height: 1.4; }
+
+    /* --- lists -------------------------------------------------------------- */
+
+    .list { margin-top: 10px; overflow: hidden; border-radius: 12px; background: var(--surface); }
+    h3 + .list { margin-top: 0; }
     .row {
+      position: relative;
       display: flex;
       align-items: center;
       gap: 12px;
+      min-height: 46px;
       padding: 10px 16px;
-      border-bottom: 1px solid var(--tg-theme-bg-color, #fff);
     }
-    .row:last-child { border-bottom: 0; }
-    .row .main { flex: 1; min-width: 0; cursor: pointer; }
-    .row .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    select { font: inherit; color: inherit; background: transparent; border: 0; text-align: right; }
-    .switch { position: relative; width: 44px; height: 26px; flex: none; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .switch span {
+    .row:not(:last-child)::after {
+      content: "";
       position: absolute;
-      inset: 0;
-      border-radius: 13px;
-      background: var(--tg-theme-hint-color, #bbb);
-      transition: background .15s;
+      right: 0;
+      bottom: 0;
+      left: 16px;
+      height: 1px;
+      background: var(--sep);
+      transform: scaleY(.5);
+      transform-origin: bottom;
     }
+    .row.lead:not(:last-child)::after { left: 58px; }
+    .row.tap { cursor: pointer; transition: background .15s; }
+    .row.tap:active { background: var(--press); }
+    .row .main { flex: 1; min-width: 0; }
+    .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .name.wrap { white-space: normal; overflow-wrap: anywhere; }
+    .row .sub { margin-top: 2px; color: var(--hint); font-size: 14px; line-height: 1.3; overflow-wrap: anywhere; }
+    .row .value { flex: none; max-width: 50%; color: var(--hint); font-size: 16px; text-align: right;
+                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .chev { flex: none; width: 8px; height: 13px; margin-left: -4px; color: var(--hint); opacity: .55; }
+    .row.button { justify-content: center; color: var(--link); cursor: pointer; }
+    .row.button.danger { color: var(--danger); }
+    .row.button.left { justify-content: flex-start; }
+    .row.button[aria-disabled=true] { opacity: .4; pointer-events: none; }
+    .row.button .icon { width: 22px; height: 22px; }
+    .late { color: var(--danger) !important; }
+    .soon { color: var(--link) !important; }
+    .warn { color: var(--danger); }
+    .struck { text-decoration: line-through; }
+    .faded { opacity: .45; }
+    .badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 0 6px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 18px;
+      vertical-align: 2px;
+      color: var(--on-accent);
+      background: var(--accent);
+    }
+
+    /* A square icon at the start of a row, as in Telegram's settings. */
+    .tile {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      color: #fff;
+      background: var(--c, #8e8e93);
+    }
+    .tile .icon { width: 19px; height: 19px; }
+    .icon { display: inline-grid; flex: none; width: 24px; height: 24px; }
+    .icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.9;
+                stroke-linecap: round; stroke-linejoin: round; }
+    .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+
+    /* Something to see to: a line in the colour of trouble on a card. */
+    .notice { display: flex; gap: 10px; margin-top: 10px; padding: 12px 16px; border-radius: 12px;
+              background: var(--surface); font-size: 15px; line-height: 1.35; }
+    .notice .dot { margin-top: 6px; }
+    .notice.tap { cursor: pointer; }
+    .notice .main { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .notice .chev { flex: none; align-self: center; width: 8px; height: 13px; color: var(--hint); opacity: .55; }
+
+    /* --- controls ----------------------------------------------------------- */
+
+    .switch { position: relative; flex: none; width: 51px; height: 31px; cursor: pointer; }
+    .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .switch span { position: absolute; inset: 0; border-radius: 16px; background: var(--field); transition: background .2s; }
     .switch span::after {
       content: "";
       position: absolute;
-      top: 3px;
-      left: 3px;
-      width: 20px;
-      height: 20px;
+      top: 2px;
+      left: 2px;
+      width: 27px;
+      height: 27px;
       border-radius: 50%;
       background: #fff;
-      transition: transform .15s;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, .22);
+      transition: transform .22s cubic-bezier(.3, 1.2, .5, 1);
     }
-    .switch input:checked + span { background: var(--tg-theme-button-color, #2481cc); }
-    .switch input:checked + span::after { transform: translateX(18px); }
-    .tabs { display: flex; gap: 6px; margin-top: 12px; overflow-x: auto; }
-    .tabs button {
-      flex: 1 0 auto;
-      padding: 8px 10px;
-      white-space: nowrap;
+    .switch input:checked + span { background: var(--accent); }
+    .switch input:checked + span::after { transform: translateX(20px); }
+
+    select {
+      flex: none;
+      max-width: 55%;
+      padding: 4px 18px 4px 0;
       border: 0;
-      border-radius: 10px;
-      font: inherit;
-      font-size: 15px;
-      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
-      color: inherit;
+      text-align: right;
+      text-overflow: ellipsis;
+      color: var(--hint);
+      background: none;
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
     }
-    .tabs button.on {
-      background: var(--tg-theme-button-color, #2481cc);
-      color: var(--tg-theme-button-text-color, #fff);
+    .select { position: relative; flex: none; display: flex; }
+    .select::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      right: 2px;
+      width: 7px;
+      height: 7px;
+      margin-top: -6px;
+      border-right: 1.6px solid var(--hint);
+      border-bottom: 1.6px solid var(--hint);
+      transform: rotate(45deg);
+      pointer-events: none;
     }
-    .list + .list { margin-top: 8px; }
-    .badge { font-size: 13px; color: var(--tg-theme-link-color, #2481cc); }
-    .struck { text-decoration: line-through; }
-    .faded { opacity: .5; }
-    label.field { display: block; margin-top: 12px; }
-    label.field input {
-      box-sizing: border-box;
-      width: 100%;
-      margin-top: 4px;
-      padding: 8px 12px;
+    .row input:not([type=checkbox]) {
+      flex: none;
+      width: 96px;
+      padding: 4px 0;
       border: 0;
-      border-radius: 10px;
-      font: inherit;
-      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
-      color: inherit;
+      text-align: right;
+      color: var(--hint);
+      background: none;
+      outline: none;
     }
-    label.field input:read-only { opacity: .6; }
-    .actions { display: flex; gap: 8px; margin-top: 16px; }
-    .actions button {
-      flex: 1;
-      padding: 10px 0;
-      border: 0;
-      border-radius: 10px;
-      font: inherit;
-      background: var(--tg-theme-button-color, #2481cc);
-      color: var(--tg-theme-button-text-color, #fff);
-    }
-    .actions button.danger {
-      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
-      color: var(--tg-theme-destructive-text-color, #d33);
-    }
-    a { color: var(--tg-theme-link-color, #2481cc); }
-    .actions button:disabled { opacity: .5; }
-    details.card summary { cursor: pointer; color: var(--tg-theme-link-color, #2481cc); }
+    .row input:focus { color: var(--text); }
+    .row input.grow { flex: 1; width: auto; min-width: 0; text-align: left; color: var(--text); }
+    .row input[type=date], .row input[type=time] { width: auto; min-height: 30px; }
+    .row .name input { width: 100%; padding: 2px 0; text-align: left; color: var(--text); }
+    .select { max-width: 60%; }
+    .select select { max-width: 100%; }
+    .row input:read-only { color: var(--hint); }
     textarea {
-      box-sizing: border-box;
-      width: 100%;
-      margin-top: 8px;
-      padding: 8px 12px;
+      flex: 1;
+      min-height: 72px;
+      padding: 0;
       border: 0;
-      border-radius: 10px;
-      font: 14px/1.4 ui-monospace, monospace;
-      background: var(--tg-theme-bg-color, #fff);
-      color: inherit;
+      outline: none;
+      font: 14px/1.4 ui-monospace, "SF Mono", Menlo, monospace;
+      background: none;
       resize: vertical;
     }
-    .ok { color: var(--tg-theme-link-color, #2481cc); }
+    .search {
+      display: block;
+      width: 100%;
+      margin-top: 12px;
+      padding: 9px 12px;
+      border: 0;
+      border-radius: 10px;
+      outline: none;
+      background: var(--field);
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .primary {
+      display: block;
+      width: 100%;
+      height: 50px;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 12px;
+      font-weight: 600;
+      color: var(--on-accent);
+      background: var(--accent);
+      cursor: pointer;
+    }
+    .primary:active { opacity: .85; }
     .row button.small {
       flex: none;
-      padding: 6px 10px;
+      padding: 0;
       border: 0;
-      border-radius: 8px;
-      font: inherit;
+      font-size: 16px;
+      color: var(--link);
+      background: none;
+      cursor: pointer;
+    }
+
+    .backlink { margin: 0; padding: 14px 4px 0; border: 0; font-size: 17px; color: var(--link); background: none;
+                cursor: pointer; }
+
+    .segmented {
+      display: flex;
+      margin-top: 14px;
+      padding: 2px;
+      border-radius: 9px;
+      background: var(--field);
+    }
+    .segmented button {
+      flex: 1;
+      padding: 6px 0;
+      border: 0;
+      border-radius: 7px;
       font-size: 14px;
-      background: var(--tg-theme-bg-color, #fff);
-      color: var(--tg-theme-link-color, #2481cc);
+      font-weight: 500;
+      background: none;
+      cursor: pointer;
     }
-    label.field select {
-      display: block;
-      box-sizing: border-box;
-      width: 100%;
-      margin-top: 4px;
-      padding: 8px 12px;
-      border-radius: 10px;
-      text-align: left;
-      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
+    .segmented button.on { background: var(--surface); box-shadow: 0 2px 6px rgba(0, 0, 0, .18); }
+
+    /* --- the tab bar -------------------------------------------------------- */
+
+    #tabbar {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: center;
+      padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+      background: var(--surface);
+      box-shadow: 0 -.5px 0 var(--sep);
     }
-    label.field select:disabled { opacity: .6; }
-    .card label.field input { background: var(--tg-theme-bg-color, #fff); }
-    #llm { display: flex; justify-content: space-between; gap: 8px; cursor: pointer; }
-    #llm[hidden] { display: none; }
-    .periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
-    .periods button {
-      padding: 10px;
-      border: 2px solid transparent;
-      border-radius: 12px;
-      font: inherit;
-      text-align: left;
-      background: var(--tg-theme-secondary-bg-color, #f2f2f2);
-      color: inherit;
-    }
-    .periods button.on { border-color: var(--tg-theme-button-color, #2481cc); }
-    .periods .sum { font-size: 20px; font-weight: 600; }
-    .periods .hint { font-size: 12px; }
-    .chart { display: block; width: 100%; height: 120px; }
-    .chart .bar { fill: var(--tg-theme-button-color, #2481cc); opacity: .45; }
-    .chart .bar.today { opacity: 1; }
-    .chart .bar.stopped { fill: var(--tg-theme-destructive-text-color, #d33); opacity: 1; }
-    .chart .bar.picked { opacity: 1; }
-    .chart .limit { stroke: var(--tg-theme-destructive-text-color, #d33); stroke-dasharray: 4 3; stroke-width: 1; }
-    .chart .tap { fill: transparent; cursor: pointer; }
-    .share { height: 4px; margin-top: 4px; border-radius: 2px; background: var(--tg-theme-bg-color, #fff); }
-    .share i { display: block; height: 100%; border-radius: 2px; background: var(--tg-theme-button-color, #2481cc); }
-    .money { white-space: nowrap; text-align: right; }
-    .row input[type=number] {
-      width: 80px;
-      padding: 4px 8px;
+    #tabbar button {
+      flex: 1;
+      max-width: 140px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 2px 0;
       border: 0;
-      border-radius: 8px;
-      font: inherit;
-      text-align: right;
-      background: var(--tg-theme-bg-color, #fff);
-      color: inherit;
+      font-size: 10.5px;
+      font-weight: 500;
+      color: var(--hint);
+      background: none;
+      cursor: pointer;
     }
-    .row button.link { border: 0; padding: 0; font: inherit; background: none; color: var(--tg-theme-link-color, #2481cc); }
+    #tabbar button .icon { width: 27px; height: 27px; }
+    #tabbar button.on { color: var(--link); }
+
+    /* --- LLM spending ------------------------------------------------------- */
+
+    .meter { height: 4px; margin-top: 8px; border-radius: 2px; overflow: hidden; background: var(--field); }
+    .meter i { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
+    .meter.full i { background: var(--danger); }
+    .periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+    .periods button {
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 12px;
+      text-align: left;
+      background: var(--surface);
+      cursor: pointer;
+    }
+    .periods button.on { box-shadow: inset 0 0 0 2px var(--accent); }
+    .periods .label, .periods .note { font-size: 12px; color: var(--hint); }
+    .periods .sum { margin: 2px 0; font-size: 21px; font-weight: 600; }
+    .chart { display: block; width: 100%; height: 120px; }
+    .chart .bar { fill: var(--accent); opacity: .4; }
+    .chart .bar.today, .chart .bar.picked { opacity: 1; }
+    .chart .bar.stopped { fill: var(--danger); opacity: 1; }
+    .chart .limit { stroke: var(--danger); stroke-dasharray: 4 3; stroke-width: 1; }
+    .chart .tap { fill: transparent; cursor: pointer; }
+    .chart-box { padding: 14px 16px 12px; }
+    .chart-box .sub { margin-top: 6px; color: var(--hint); font-size: 14px; }
+    .money { flex: none; text-align: right; }
+    .money .sub { text-align: right; }
+
+    /* --- screens' heads, the timetable, the cards -------------------------- */
+
+    .head { display: flex; align-items: flex-end; gap: 12px; }
+    .head .large { flex: 1; min-width: 0; }
+    .head-action {
+      flex: none;
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      margin-bottom: 2px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      color: var(--link);
+      background: var(--surface);
+      cursor: pointer;
+    }
+    .head-action .icon { width: 22px; height: 22px; }
+    .row.timed:not(:last-child)::after { left: 76px; }
+    .time { flex: none; display: flex; flex-direction: column; width: 48px; font-variant-numeric: tabular-nums; }
+    .time b { font-size: 16px; font-weight: 600; }
+    .time span { font-size: 13px; color: var(--hint); }
+    .row.gone .time, .row.gone .name { opacity: .5; }
+    .tag { font-weight: 500; }
+    .tag.moved { color: var(--link); }
+    .tag.off { color: var(--danger); }
+    .grade { color: var(--text); font-variant-numeric: tabular-nums; }
+    .row.fact .name { color: var(--hint); }
+    .row.fact .value { max-width: 68%; color: var(--text); white-space: normal; overflow-wrap: anywhere; }
+    .text { padding: 12px 16px; font-size: 15px; line-height: 1.4; }
+    .row.field .label { flex: none; width: 92px; color: var(--hint); }
+    .row.field .grow { flex: 1; min-width: 0; }
+    .row.field .select { flex: 1; max-width: none; }
+    .row.field select { width: 100%; text-align: left; color: var(--text); }
+    .row.field input[type=file] { font-size: 14px; color: var(--hint); }
+    .row.more .name { color: var(--link); font-size: 15px; }
+    textarea.prose { font: 16px/1.4 inherit; font-family: inherit; min-height: 96px; }
+    .badge.muted { color: var(--hint); background: var(--field); }
+    body.locked { overflow: hidden; }
+    .card {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0);
+      transition: background .2s;
+    }
+    .card.open { background: rgba(0, 0, 0, .5); }
+    .card-panel {
+      width: 100%;
+      max-width: 640px;
+      max-height: 88vh;
+      overflow-y: auto;
+      padding: 8px 16px calc(24px + env(safe-area-inset-bottom));
+      border-radius: 16px 16px 0 0;
+      background: var(--bg);
+      box-shadow: 0 -1px 0 var(--sep);
+      transform: translateY(100%);
+      transition: transform .24s cubic-bezier(.2, .9, .3, 1);
+    }
+    .card.open .card-panel { transform: none; }
+    .grip { width: 36px; height: 5px; margin: 0 auto 4px; border-radius: 3px; background: var(--sep); }
+    .card-head h2 { margin: 12px 4px 2px; font-size: 21px; font-weight: 600; overflow-wrap: anywhere; }
+    .card-head p { margin: 0 4px; font-size: 15px; color: var(--hint); }
+    #tabbar button { position: relative; }
+    #tabbar .count {
+      position: absolute;
+      top: 0;
+      left: calc(50% + 6px);
+      min-width: 18px;
+      padding: 0 5px;
+      border-radius: 9px;
+      font-size: 11.5px;
+      font-weight: 600;
+      line-height: 18px;
+      color: #fff;
+      background: var(--danger);
+    }
+
+    #screen > * { animation: in .18s ease-out; }
+    @keyframes in { from { opacity: 0; } }
   </style>
 </head>
 <body>
-  <div id="home">
-    <h2 id="title">infomaster</h2>
-    <p id="state" class="hint">…</p>
-    <div id="llm" class="card" hidden></div>
-    <nav id="tabs" class="tabs" hidden></nav>
-    <section id="tab-chats">
-      <p id="chats-hint" class="hint"></p>
-      <div id="twin" class="card" hidden></div>
-      <div id="mail" class="card" hidden></div>
-      <input id="search" type="search" hidden>
-      <div id="chats"></div>
-      <div id="images"></div>
-    </section>
-    <section id="tab-schedule" hidden></section>
-    <section id="tab-deadlines" hidden></section>
-    <section id="tab-sheets" hidden></section>
-    <section id="tab-grades" hidden></section>
-    <section id="tab-summaries" hidden></section>
-    <section id="tab-subjects" hidden>
-      <p id="subjects-hint" class="hint"></p>
-      <div id="subjects-error" class="card warn" hidden></div>
-      <input id="subject-search" type="search">
-      <div class="actions"><button id="subject-add"></button></div>
-      <div id="subjects"></div>
-    </section>
-    <section id="tab-hseapp" hidden></section>
-    <section id="tab-llm" hidden></section>
-    <section id="tab-general" hidden></section>
-  </div>
-  <div id="chat" hidden></div>
-  <div id="subject" hidden></div>
-  <div id="deadline" hidden></div>
+  <main id="screen"><p class="empty">…</p></main>
+  <nav id="tabbar" hidden></nav>
 
   <script>
     const tg = window.Telegram.WebApp;
     tg.ready();
+    tg.expand();
+    try {  // the bars in the colour of the page (Bot API 6.1+)
+      tg.setHeaderColor("secondary_bg_color");
+      if (tg.themeParams.secondary_bg_color) tg.setBackgroundColor(tg.themeParams.secondary_bg_color);
+    } catch (error) { /* an older client keeps its own colours */ }
     const $ = (id) => document.getElementById(id);
     // The Mini App's language (р. 41): English until /api/me tells the setting; every text is L(english, russian).
     let lang = "en";
     const L = (en, ru) => lang === "ru" ? ru : en;
     const LANGUAGE_NAMES = {en: "English", ru: "Русский"};  // each in its own language
-    const TABS = [["chats", "Chats", "Чаты"], ["schedule", "Timetable", "Расписание"], ["deadlines", "Deadlines", "Дедлайны"],
-                  ["sheets", "Sheets", "Листочки"], ["grades", "Grades", "Оценки"], ["summaries", "Summaries", "Сводки"],
-                  ["subjects", "Dictionary", "Словарь"], ["hseapp", "HSE App X", "HSE App X"],
-                  ["llm", "LLM spending", "Расход LLM"], ["general", "General", "Общие"]];
     const KINDS = () => L({user: "private", bot: "bot", group: "group", supergroup: "supergroup", forum: "forum",
                            channel: "channel"},
                           {user: "личный", bot: "бот", group: "группа", supergroup: "супергруппа", forum: "форум",
@@ -257,9 +461,12 @@
     const WEEKDAYS = () => L(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], ["вс", "пн", "вт", "ср", "чт", "пт", "сб"]);
     const TYPES_RU = {Lecture: "лекция", Seminar: "семинар", Consultation: "консультация", Event: "событие",
                       "Interim assessment": "рубежный контроль", Exam: "экзамен", Lab: "лабораторная", Class: "занятие"};
-    let chats = [];
-    let dictionary = {subjects: [], error: null, title_chars: 13, abbr_chars: 6};
-    let opened = null;  // the detail view the back button closes
+    const SOURCES = () => L({hseapp: "HSE App X", ical: "RUZ", mail: "mail", tg: "chat", ha: "own"},
+                            {hseapp: "HSE App X", ical: "РУЗ", mail: "почта", tg: "чат", ha: "свой"});
+    const CATEGORIES = () => L({study: "study", personal: "personal"}, {study: "учёба", personal: "личное"});
+    let me = null;
+
+    // --- talking to the service ----------------------------------------------
 
     async function call(path, options = {}) {
       const response = await fetch(path, {...options, headers: {...options.headers,
@@ -274,190 +481,173 @@
       return call(path, {method, body: JSON.stringify(values), headers: {"Content-Type": "application/json"}});
     }
 
-    async function save(chat, values) {
-      try {
-        chat.settings = await send("api/chats/" + chat.id, "PATCH", values);
-      } catch (error) {
-        tg.showAlert(error.message);
-      }
-      return chat.settings;
+    // What the screens show, by the API path; emptied on every move between screens, so a screen shows fresh data
+    // and an action keeps its answer here for the redraw.
+    let cache = {};
+
+    async function get(path) {
+      if (!(path in cache)) cache[path] = call(path);
+      return cache[path];
     }
+
+    // A screen without its API (the service runs without that part) shows the rest.
+    function maybe(path) {
+      return get(path).catch(() => null);
+    }
+
+    // An action: the request, its answer kept for `path`, the screen drawn anew; an error is said in a popup.
+    async function act(path, method, values, keep = path) {
+      try {
+        const answer = await send(path, method, values);
+        if (keep) cache[keep] = Promise.resolve(answer);
+        redraw();
+        return answer;
+      } catch (error) {
+        tell(error.message);
+        redraw();
+        return null;
+      }
+    }
+
+    // --- Telegram's dialogs, with the browser's outside Telegram ---------------
+
+    // Named apart from the browser's alert and confirm, which they fall back on outside Telegram.
+    function tell(text) {
+      try { tg.showAlert(text); } catch (error) { window.alert(text); }
+    }
+
+    function askYes(text) {
+      return new Promise((resolve) => {
+        try { tg.showConfirm(text, resolve); } catch (error) { resolve(window.confirm(text)); }
+      });
+    }
+
+    function haptic() {
+      try { tg.HapticFeedback.selectionChanged(); } catch (error) { /* no haptics */ }
+    }
+
+    // --- building blocks -------------------------------------------------------
 
     function el(tag, props = {}, ...children) {
       const node = Object.assign(document.createElement(tag), props);
-      node.append(...children);
+      node.append(...children.filter((child) => child !== null && child !== undefined && child !== false));
+      return node;
+    }
+
+    const ICONS = {
+      home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+      deadlines: '<path d="m9 11 3 3L21 5"/><path d="M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/>',
+      schedule: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+      image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4-4L6 21"/>',
+      study: '<path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2zM22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/>',
+      settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+      chats: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+      hse: '<path d="M22 10 12 5 2 10l10 5 10-5Z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>',
+      grades: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
+      mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m21 7-9 6-9-6"/>',
+      book: '<path d="M4 19.5V5a2 2 0 0 1 2-2h14v16H6.5A2.5 2.5 0 0 0 4 21.5 2.5 2.5 0 0 0 6.5 24"/><path d="M8 7h8"/>',
+      summary: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+      sheet: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
+      clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+      plus: '<path d="M12 5v14M5 12h14"/>',
+      chev: '<path d="m1 1 6 5.5L1 12" stroke-width="2"/>',
+    };
+
+    function icon(name, className = "") {
+      const node = el("span", {className: "icon " + className});
+      node.innerHTML = name === "chev" ? `<svg viewBox="0 0 8 13">${ICONS.chev}</svg>`
+        : `<svg viewBox="0 0 24 24">${ICONS[name]}</svg>`;
+      return node;
+    }
+
+    function tile(name, color) {
+      const node = el("span", {className: "tile"}, icon(name));
+      node.style.setProperty("--c", color);
       return node;
     }
 
     function toggle(checked, onchange) {
       const input = el("input", {type: "checkbox", checked});
-      input.onchange = () => onchange(input.checked);
+      input.onchange = () => { haptic(); onchange(input.checked); };
       return el("label", {className: "switch"}, input, el("span"));
     }
 
-    function settingRow(title, hint, control) {
-      return el("div", {className: "row"},
-        el("div", {className: "main"}, el("div", {}, title), hint ? el("div", {className: "hint"}, hint) : ""),
-        control);
+    function selectOf(options, value, onchange) {
+      const select = el("select", {}, ...options.map(([v, text]) => el("option", {value: v}, text)));
+      select.value = value;
+      select.onchange = () => onchange(select.value);
+      return el("span", {className: "select"}, select);
     }
 
-    // The texts of the page itself: the tabs, the hints and fields of the screens that are not drawn by a render.
-    function applyLanguage() {
-      document.documentElement.lang = lang;
-      $("tabs").replaceChildren(...TABS.map(([name, en, ru]) => {
-        const button = el("button", {}, L(en, ru));
-        button.dataset.tab = name;
-        button.onclick = () => showTab(name);
-        return button;
-      }));
-      $("chats-hint").textContent = L("The twin's chats and their settings. A new chat comes switched off.",
-        "Чаты твинка и их настройки. Новый чат появляется выключенным.");
-      $("search").placeholder = L("Find a chat", "Найти чат");
-      $("subjects-hint").textContent = L("How the courses are named in the timetable, the feed and the deadlines. "
-        + "Haiku never changes a manual entry; a deleted entry Haiku names again.",
-        "Как курсы называются в расписании, ленте и дедлайнах. Ручные записи Haiku не меняет; удалённую запись Haiku "
-        + "назовёт заново.");
-      $("subject-search").placeholder = L("Find a course", "Найти курс");
-      $("subject-add").textContent = L("Add an entry", "Добавить запись");
+    function numberInput(value, attrs, onchange) {
+      const input = el("input", {type: "number", value, step: 1, ...attrs,
+        inputMode: attrs.step && attrs.step < 1 ? "decimal" : "numeric"});
+      input.onchange = () => onchange(Number(input.value));
+      return input;
     }
 
-    // --- the list -------------------------------------------------------------
+    // A row of a list: a title with a line under it, something on the right; with `go` the whole row is a button.
+    function row({title, sub, value, control, go, lead, className = "", wrap = false}) {
+      const main = el("div", {className: "main"}, el("div", {className: "name" + (wrap ? " wrap" : "")}, title),
+        sub ? el("div", {className: "sub"}, sub) : null);
+      const node = el("div", {className: "row" + (go ? " tap" : "") + (lead ? " lead" : "") + " " + className},
+        lead || null, main, value !== undefined && value !== null && value !== ""
+          ? el("span", {className: "value"}, value) : null, control || null, go ? icon("chev", "chev") : null);
+      if (go) node.onclick = go;
+      return node;
+    }
 
-    function renderList() {
-      const query = $("search").value.trim().toLowerCase();
-      const shown = chats.filter((chat) => chat.title.toLowerCase().includes(query));
-      const box = $("chats");
-      box.replaceChildren();
-      for (const [title, enabled] of [[L("On", "Включены"), true], [L("Off", "Выключены"), false]]) {
-        const part = shown.filter((chat) => chat.settings.enabled === enabled);
-        if (!part.length) continue;
-        box.append(el("h3", {}, `${title} · ${part.length}`), el("div", {className: "list"}, ...part.map(chatRow)));
+    // A row that is a button: centred link text, or red for a deletion.
+    function button(text, onclick, {danger = false, plus = false, disabled = false} = {}) {
+      const node = el("div", {className: "row button" + (danger ? " danger" : "") + (plus ? " left" : ""),
+        role: "button"}, plus ? icon("plus") : null, el("span", {}, text));
+      if (disabled) node.setAttribute("aria-disabled", "true");
+      node.onclick = onclick;
+      return node;
+    }
+
+    // A section of a screen: a header, its rows on a card, a footnote under them.
+    function section(header, rows, foot) {
+      const shown = rows.filter(Boolean);
+      return [header ? el("h3", {}, header) : null, shown.length ? el("div", {className: "list"}, ...shown) : null,
+        foot ? el("p", {className: "foot"}, foot) : null].filter(Boolean);
+    }
+
+    function notice(text, go) {
+      const node = el("div", {className: "notice" + (go ? " tap" : "")}, el("span", {className: "dot"}),
+        el("div", {className: "main"}, text), go ? icon("chev", "chev") : null);
+      if (go) node.onclick = go;
+      return node;
+    }
+
+    const empty = (text) => el("p", {className: "empty"}, text);
+
+    // The big primary action: Telegram's main button in Telegram, a button at the end of the screen elsewhere.
+    let mainAction = null;
+
+    function primary(text, onclick) {
+      if (tg.initData && tg.MainButton) {
+        mainAction = async () => { tg.MainButton.showProgress(); try { await onclick(); } finally { tg.MainButton.hideProgress(); } };
+        tg.MainButton.setText(text);
+        tg.MainButton.onClick(mainAction);
+        tg.MainButton.show();
+        return null;
       }
-      if (!shown.length) box.append(el("p", {className: "hint"}, chats.length ? L("Nothing found.", "Ничего не нашлось.") :
-        L("No chats yet: they come when the twin logs in to Telegram.",
-          "Чатов пока нет: они появятся, когда твинк войдёт в Telegram.")));
+      const node = el("button", {className: "primary"}, text);
+      node.onclick = onclick;
+      return node;
     }
 
-    function chatRow(chat) {
-      const facts = [KINDS()[chat.kind] || chat.kind];
-      if (chat.settings.study) facts.push(L("study", "учебный"));
-      if (chat.settings.filter === "important") facts.push(L("important only", "только важное"));
-      if (chat.messages) facts.push(L("messages: ", "сообщений: ") + chat.messages);
-      const main = el("div", {className: "main"}, el("div", {className: "title"}, chat.title),
-        el("div", {className: "hint"}, facts.join(" · ")));
-      main.onclick = () => openChat(chat);
-      return el("div", {className: "row"}, main,
-        toggle(chat.settings.enabled, async (on) => { await save(chat, {enabled: on}); renderList(); }));
-    }
-
-    // The daily number of images read in chats with «Images» (р. 12), under the list.
-    function renderImages(state) {
-      if (!state || state.daily === undefined) return;
-      const input = el("input", {type: "number", value: state.daily, min: 0, max: 500, step: 1, inputMode: "numeric"});
-      input.style.width = "90px";
-      input.style.textAlign = "right";
-      input.onchange = async () => {
-        try {
-          renderImages(await send("api/images", "PATCH", {daily: Number(input.value)}));
-        } catch (error) {
-          tg.showAlert(error.message);
-          input.value = state.daily;
-        }
-      };
-      const parts = [el("h3", {}, L("Images", "Картинки")),
-        el("p", {className: "hint"}, L("In chats with «Images» Haiku reads photos and screenshots before they are "
-          + "parsed. Above 80 % of the LLM limit and past the number a day images are not read.",
-          "В чатах с «Картинки» фото и скриншоты читает Haiku, прежде чем их разберут. "
-          + "Выше 80 % лимита LLM и сверх числа в день картинки не читаются.")),
-        el("div", {className: "list"}, settingRow(L("A day", "В день"),
-          L("read today: ", "сегодня прочитано: ") + state.today, input))];
-      if (state.error) {
-        parts.splice(2, 0, el("div", {className: "card warn"},
-          L("Reading images failed: ", "Чтение картинок не удалось: ") + state.error));
-      }
-      $("images").replaceChildren(...parts);
-    }
-
-    // --- one chat -------------------------------------------------------------
-
-    function openView(view) {
-      $("home").hidden = true;
-      $(view).hidden = false;
-      opened = view;
-      tg.BackButton.show();
-      window.scrollTo(0, 0);
-    }
-
-    function back() {
-      if (opened) $(opened).hidden = true;
-      opened = null;
-      $("home").hidden = false;
-      tg.BackButton.hide();
-      renderList();
-      renderSubjects();
-      if (!$("tab-summaries").hidden) loadSummaries();  // a chat's «Summary» may have changed
-    }
-
-    async function openChat(chat) {
-      openView("chat");
-      renderChat(chat, null);
-      try {
-        renderChat(chat, await call(`api/chats/${chat.id}/senders`));
-      } catch (error) {
-        tg.showAlert(error.message);
+    function clearPrimary() {
+      if (mainAction) {
+        tg.MainButton.offClick(mainAction);
+        tg.MainButton.hide();
+        mainAction = null;
       }
     }
 
-    function renderChat(chat, senders) {
-      const s = chat.settings;
-      const rerender = async (values) => { await save(chat, values); renderChat(chat, senders); };
-
-      const filter = el("select", {}, el("option", {value: "all"}, L("all messages", "все сообщения")),
-        el("option", {value: "important"}, L("important only", "только важное")));
-      filter.value = s.filter;
-      filter.onchange = () => rerender({filter: filter.value});
-
-      const batch = el("select", {}, el("option", {value: ""}, L("general", "общий")),
-        ...BATCH_HOURS.map((h) => el("option", {value: h}, L(`every ${h} h`, `каждые ${h} ч`))));
-      batch.value = s.batch_hours ?? "";
-      batch.onchange = () => rerender({batch_hours: batch.value ? Number(batch.value) : null});
-
-      const settings = el("div", {className: "list"},
-        settingRow(L("Read the chat", "Читать чат"), L("its messages go to the base", "сообщения попадают в базу"),
-          toggle(s.enabled, (on) => rerender({enabled: on}))),
-        ...FLAGS().map(([name, title, hint]) => settingRow(title, hint,
-          toggle(s[name], (on) => rerender({[name]: on})))),
-        settingRow(L("Filter", "Фильтр"), L("important: the listed people, pins, files, dates and the replies to them",
-          "важное: люди из списка, закрепы, файлы, даты и ответы на них"), filter),
-        settingRow(L("Parsing", "Разбор"), L("how often its batch is parsed", "как часто разбирать пачку"), batch));
-
-      const people = el("div", {className: "list"});
-      if (senders === null) {
-        people.append(el("div", {className: "row hint"}, L("Loading…", "Загрузка…")));
-      } else if (!senders.length) {
-        people.append(el("div", {className: "row hint"}, L("Nobody has written yet: the list comes from the messages.",
-          "Пока никто не писал: список соберётся из сообщений.")));
-      }
-      for (const sender of senders || []) {
-        const chosen = s.people.includes(sender.id);
-        people.append(settingRow(sender.name || `id ${sender.id}`,
-          sender.messages ? L("messages: ", "сообщений: ") + sender.messages : L("has not written yet", "ещё не писал"),
-          toggle(chosen, (on) => rerender({people: on ? [...s.people, sender.id] :
-            s.people.filter((id) => id !== sender.id)}))));
-      }
-
-      $("chat").replaceChildren(
-        el("h2", {}, chat.title),
-        el("p", {className: "hint"}, [KINDS()[chat.kind] || chat.kind, chat.username ? "@" + chat.username : ""]
-          .filter(Boolean).join(" · ")),
-        settings,
-        el("h3", {}, L("Important people", "Важные люди")),
-        el("p", {className: "hint"}, L("For the «important only» filter and for «Urgent»: the group head, the teachers.",
-          "Для фильтра «только важное» и для «срочно»: староста, преподаватели.")),
-        people);
-    }
-
-    // --- the timetable ------------------------------------------------------
+    // --- dates -----------------------------------------------------------------
 
     function when(start, end) {
       const day = new Date(start.slice(0, 10) + "T00:00:00");
@@ -466,413 +656,54 @@
       return text;
     }
 
-    function room(value) {
-      if (!value) return "";
-      return /^https?:\/\//.test(value) ? L("link", "ссылка") : value === "online" ? L("online", "онлайн") : value;
+    function hours(start, end) {
+      let text = start.slice(11, 16);
+      if (end && end.slice(0, 10) === start.slice(0, 10)) text += "–" + end.slice(11, 16);
+      return text;
     }
-
-    async function loadSchedule() {
-      try {
-        renderSchedule(await call("api/schedule"));
-      } catch (error) {
-        $("tab-schedule").replaceChildren(el("p", {className: "hint"}, error.message));
-      }
-    }
-
-    async function changeEvent(event, values) {
-      try {
-        renderSchedule(await send("api/events/" + event.id, "PATCH", values));
-      } catch (error) {
-        tg.showAlert(error.message);
-        loadSchedule();
-      }
-    }
-
-    function renderSchedule(data) {
-      const box = $("tab-schedule");
-      const ruz = data.ruz;
-      const parts = [el("p", {className: "hint"}, L("Events from the chats and corrections of classes from today on. "
-        + "The main calendar is where to be, the optional one where one may come; what is hidden leaves the feeds.",
-        "События из чатов и правки пар с сегодняшнего дня. Основной календарь — где нужно быть, необязательный — куда "
-        + "можно прийти; скрытое пропадает из лент."))];
-      if (ruz.error) {
-        parts.push(el("div", {className: "card warn"}, L("RUZ: ", "РУЗ: ") + ruz.error));
-      } else {
-        parts.push(el("div", {className: "card"}, L(`RUZ: ${ruz.classes} classes`, `РУЗ: ${ruz.classes} пар`) +
-          (ruz.ok_at ? L(", updated ", ", обновлено ") + when(ruz.ok_at) : "")));
-      }
-      if (ruz.subjects_error) {
-        parts.push(el("div", {className: "card warn"}, L("The course titles wait for Haiku: ",
-          "Названия предметов ждут Haiku: ") + ruz.subjects_error));
-      }
-      if (!data.calendar) {
-        parts.push(el("div", {className: "card warn"}, L("The iCal feeds are off: set CALENDAR_SECRET or CALENDAR_PUBLIC_SECRET in .env.",
-          "Ленты iCal выключены: задайте CALENDAR_SECRET или CALENDAR_PUBLIC_SECRET в .env.")));
-      }
-      if (!data.events.length) {
-        parts.push(el("p", {className: "hint"}, L("No events from the chats or corrections of classes ahead.",
-          "Впереди нет событий из чатов и правок пар.")));
-      }
-      for (const event of data.events) parts.push(eventCard(event));
-      box.replaceChildren(...parts);
-    }
-
-    function eventCard(event) {
-      const facts = [];
-      if (event.correction) {
-        facts.push(event.cancelled ? L("cancelled: ", "отмена: ") + when(event.class.start, event.class.end) :
-          `${when(event.class.start, event.class.end)} → ${when(event.start, event.end)}`);
-      } else {
-        facts.push(when(event.start, event.end));
-      }
-      if (room(event.room)) facts.push(room(event.room));
-      facts.push(L(event.type.toLowerCase(), TYPES_RU[event.type] || event.type.toLowerCase()));
-      if (event.cancelled && !event.correction) facts.push(L("cancelled", "отменено"));
-      const source = event.link ? el("a", {href: event.link}, event.chat || L("message", "сообщение")) : (event.chat || "");
-      if (event.link) {
-        source.onclick = (click) => {  // a t.me link opens in Telegram itself, not in a browser
-          click.preventDefault();
-          if (event.link.startsWith("https://t.me/")) tg.openTelegramLink(event.link); else tg.openLink(event.link);
-        };
-      }
-      const title = el("div", {className: "title" + (event.cancelled ? " struck" : "")},
-        (event.correction ? L("Class: ", "Пара: ") : "") + event.title);
-      const main = el("div", {className: "main" + (event.hidden ? " faded" : "")}, title,
-        el("div", {className: "hint"}, facts.join(" · ")), el("div", {className: "hint"}, source));
-      const card = el("div", {className: "list"}, el("div", {className: "row"}, main));
-      if (event.correction) {
-        card.append(settingRow(L("Apply the correction", "Применять правку"),
-          L("switch it off if the model was wrong: the class is as RUZ has it",
-            "выключите, если модель ошиблась: пара будет как в РУЗ"),
-          toggle(!event.hidden, (on) => changeEvent(event, {hidden: !on}))));
-        return card;
-      }
-      if (!event.cancelled) {
-        card.append(settingRow(L("Main calendar", "Основной календарь"),
-          event.required ? L("must be there", "нужно быть") : L("may come", "можно прийти"),
-          toggle(event.required, (on) => changeEvent(event, {required: on}))));
-      }
-      card.append(settingRow(L("In the calendars", "В календарях"), event.hidden ? L("hidden", "скрыто") : "",
-        toggle(!event.hidden, (on) => changeEvent(event, {hidden: !on}))));
-      return card;
-    }
-
-    // --- deadlines -----------------------------------------------------------
-
-    const SOURCES = () => L({hseapp: "HSE App X", ical: "RUZ", mail: "mail", tg: "chat", ha: "own"},
-                            {hseapp: "HSE App X", ical: "РУЗ", mail: "почта", tg: "чат", ha: "свой"});
-    const CATEGORIES = () => L({study: "study", personal: "personal"}, {study: "учёба", personal: "личное"});
-    let deadlineState = null;
 
     function dayLabel(iso) {
       const date = new Date(iso + "T00:00:00");
       return `${WEEKDAYS()[date.getDay()]} ${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
     }
 
-    // The mark of the pinned list in the forum; `today` is the service's, a Moscow date.
+    function daysFrom(today, iso) {
+      return Math.round((new Date(iso + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000);
+    }
+
+    // A deadline's day as the forum's pinned list says it; `today` is the service's, a Moscow date.
     function dueMark(iso, today) {
-      const days = Math.round((new Date(iso + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000);
-      if (days < 0) return L("overdue", "просрочен") + ` (${dayLabel(iso)})`;
+      const days = daysFrom(today, iso);
       if (days === 0) return L("today", "сегодня");
       if (days === 1) return L("tomorrow", "завтра");
       return dayLabel(iso);
     }
 
-    async function loadDeadlines() {
-      try {
-        renderDeadlines(await call("api/deadlines"));
-      } catch (error) {
-        $("tab-deadlines").replaceChildren(el("p", {className: "hint"}, error.message));
-      }
+    function dueValue(iso, today) {
+      const days = daysFrom(today, iso);
+      return el("span", {className: days < 0 ? "late" : days <= 1 ? "soon" : ""}, dueMark(iso, today));
     }
 
-    async function changeDeadlines(path, method, values) {
-      try {
-        renderDeadlines(await send(path, method, values));
-        return true;
-      } catch (error) {
-        tg.showAlert(error.message);
-        return false;
-      }
+    function room(value) {
+      if (!value) return "";
+      return /^https?:\/\//.test(value) ? L("link", "ссылка") : value === "online" ? L("online", "онлайн") : value;
     }
 
-    function renderDeadlines(data) {
-      deadlineState = data;
-      const parts = [el("p", {className: "hint"}, L("Every deadline after the merge: Tablo, HA's to-do lists and the "
-        + "pinned list of the «Deadlines» topic see the same list. A hidden one never comes back, even if its source "
-        + "sends it again.",
-        "Все дедлайны после склейки: тот же список видят Tablo, списки дел HA и закреп в теме «Дедлайны». Скрытый не "
-        + "вернётся, даже если источник пришлёт его снова."))];
-      if (data.hseapp.login_needed) {
-        parts.push(el("div", {className: "card warn"}, L("HSE App X: a login is needed, its deadlines are not updated "
-          + "(the «HSE App X» screen).", "HSE App X: нужен вход, дедлайны оттуда не обновляются (экран «HSE App X»).")));
-      }
-      parts.push(el("h3", {}, L("On the list · ", "В списке · ") + data.items.length), data.items.length ?
-        el("div", {className: "list"}, ...data.items.map(deadlineRow)) :
-        el("p", {className: "hint"}, L("No deadlines.", "Дедлайнов нет.")));
-      parts.push(el("h3", {}, L("Own · ", "Свои · ") + data.own.length));
-      if (data.own.length) parts.push(el("div", {className: "list"}, ...data.own.map(ownRow)));
-      const add = el("button", {}, L("Add one", "Добавить свой"));
-      add.onclick = () => openDeadline(null);
-      parts.push(el("div", {className: "actions"}, add));
-      if (data.hidden.length) {
-        parts.push(el("h3", {}, L("Hidden · ", "Скрытые · ") + data.hidden.length),
-          el("div", {className: "list"}, ...data.hidden.map(hiddenRow)));
-      }
-      $("tab-deadlines").replaceChildren(...parts);
+    function usd(value) {
+      return "$" + (value >= 10 ? value.toFixed(0) : value >= 0.1 || !value ? value.toFixed(2) : value.toFixed(3));
     }
 
-    function deadlineRow(d) {
-      const facts = [dueMark(d.due, deadlineState.today), SOURCES()[d.source] || d.source];
-      if (d.course) facts.push(d.course);
-      if (d.category === "personal") facts.push(CATEGORIES().personal);
-      const main = el("div", {className: "main"}, el("div", {className: "title"}, d.title),
-        el("div", {className: "hint" + (d.overdue ? " warn" : "")}, facts.join(" · ")));
-      const row = el("div", {className: "row"}, main);
-      if (d.source === "ha") {
-        main.onclick = () => openDeadline(deadlineState.own.find((own) => own.uid === d.uid) || d);
-        return row;
-      }
-      const hide = el("button", {className: "small"}, L("Hide", "Скрыть"));
-      hide.onclick = () => tg.showConfirm(L(`Hide «${d.title}»? It never comes back, even if its source sends it `
-        + "again. It can be restored below, in «Hidden».", `Скрыть «${d.title}»? Он не вернётся, даже если источник `
-        + "пришлёт его снова. Вернуть можно ниже, в «Скрытых»."), (yes) => {
-        if (yes) changeDeadlines("api/deadlines/" + encodeURIComponent(d.uid), "DELETE");
-      });
-      row.append(hide);
-      return row;
+    // n with its word: [one, two to four, five and more] in Russian, [one, many] in English.
+    function count(n, en, ru) {
+      if (lang !== "ru") return `${n} ${n === 1 ? en[0] : en[1]}`;
+      const last = n % 10, tens = n % 100;
+      return `${n} ${last === 1 && tens !== 11 ? ru[0] : last >= 2 && last <= 4 && (tens < 12 || tens > 14) ? ru[1] : ru[2]}`;
     }
 
-    function ownRow(d) {
-      const main = el("div", {className: "main"}, el("div", {className: "title"}, d.title),
-        el("div", {className: "hint"}, `${dueMark(d.due, deadlineState.today)} · ${CATEGORIES()[d.category]}`));
-      main.onclick = () => openDeadline(d);
-      return el("div", {className: "row"}, main);
-    }
+    const runs = (n) => count(n, ["call", "calls"], ["вызов", "вызова", "вызовов"]);
 
-    function hiddenRow(h) {
-      const main = el("div", {className: "main faded"}, el("div", {className: "title"}, h.title),
-        el("div", {className: "hint"}, `${dayLabel(h.due)} · ${SOURCES()[h.source] || h.source}`));
-      const restore = el("button", {className: "small"}, L("Restore", "Вернуть"));
-      restore.onclick = () => changeDeadlines("api/hidden/" + encodeURIComponent(h.uid), "DELETE");
-      return el("div", {className: "row"}, main, restore);
-    }
-
-    function openDeadline(d) {
-      openView("deadline");
-      const fresh = !d;
-      d = d || {title: "", due: deadlineState.today, category: "study"};
-      const title = el("input", {value: d.title, maxLength: 200,
-        placeholder: L("Sign up for a minor", "Записаться на майнор")});
-      const due = el("input", {type: "date", value: d.due});
-      const category = el("select", {disabled: !fresh}, el("option", {value: "study"}, CATEGORIES().study),
-        el("option", {value: "personal"}, CATEGORIES().personal));
-      category.value = d.category;
-      const saveButton = el("button", {}, L("Save", "Сохранить"));
-      saveButton.onclick = async () => {
-        const ok = fresh ?
-          await changeDeadlines("api/deadlines", "POST", {title: title.value, due: due.value, category: category.value}) :
-          await changeDeadlines("api/deadlines/" + encodeURIComponent(d.uid), "PATCH",
-            {title: title.value, due: due.value});
-        if (ok) back();
-      };
-      const actions = el("div", {className: "actions"}, saveButton);
-      if (!fresh) {
-        const removeButton = el("button", {className: "danger"}, L("Delete", "Удалить"));
-        removeButton.onclick = () => tg.showConfirm(L("Delete this own deadline?", "Удалить свой дедлайн?"),
-          async (yes) => {
-            if (yes && await changeDeadlines("api/deadlines/" + encodeURIComponent(d.uid), "DELETE")) back();
-          });
-        actions.append(removeButton);
-      }
-      $("deadline").replaceChildren(
-        el("h2", {}, fresh ? L("Own deadline", "Свой дедлайн") : d.title),
-        el("p", {className: "hint"}, L("Shown in Tablo, in HA's to-do list and in the pinned list of the «Deadlines» "
-          + "topic. Deleted by itself 30 days after it is due.", "Виден в Tablo, в списке дел HA и в закрепе темы "
-          + "«Дедлайны». Через 30 дней после срока удаляется сам.")),
-        el("label", {className: "field"}, L("What to do", "Что сделать"), title),
-        el("label", {className: "field"}, L("Due", "Срок"), due),
-        el("label", {className: "field"}, L("List", "Список"), category),
-        actions);
-    }
-
-    // --- summaries ------------------------------------------------------------
-
-    async function loadSummaries() {
-      try {
-        renderSummaries(await call("api/summaries"));
-      } catch (error) {
-        $("tab-summaries").replaceChildren(el("p", {className: "hint"}, error.message));
-      }
-    }
-
-    function renderSummaries(data) {
-      const time = el("input", {type: "time", value: data.time, step: 60});
-      time.onchange = async () => {
-        try {
-          renderSummaries(await send("api/summaries", "PATCH", {time: time.value}));
-        } catch (error) {
-          tg.showAlert(error.message);
-          loadSummaries();
-        }
-      };
-      const parts = [el("p", {className: "hint"}, L("The daily summary comes to the «Summaries» topic: for each chat, "
-        + "what it said since the last summary. A summary of any enabled chat can be asked of the bot: /summary "
-        + "[chat] [3h | 2d | 20.10-22.10] [en | ru]; the language is the forum's unless named.",
-        "Ежедневная сводка приходит в тему «Сводки»: по каждому чату — что в нём было с прошлой сводки. Сводку любого "
-        + "включённого чата можно попросить у бота: /summary [чат] [3h | 2d | 20.10-22.10] [en | ru]; язык — как в "
-        + "форуме, если не назван."))];
-      if (data.status.error) {
-        parts.push(el("div", {className: "card warn"}, L("The last summary: ", "Последняя сводка: ") + data.status.error));
-      }
-      parts.push(el("div", {className: "list"}, settingRow(L("Time", "Время"), L("Moscow time", "по Москве"), time)));
-      const okAt = data.status.ok_at;
-      const done = okAt ? L(`The last one was made on ${okAt.slice(8, 10)}.${okAt.slice(5, 7)} at ${okAt.slice(11, 16)}.`,
-        `Последняя собрана ${okAt.slice(8, 10)}.${okAt.slice(5, 7)} в ${okAt.slice(11, 16)}.`) : "";
-      parts.push(el("h3", {}, L("Chats in the summary · ", "Чаты в сводке · ") + data.chats.length));
-      if (done) parts.push(el("p", {className: "hint"}, done));
-      if (!data.chats.length) {
-        parts.push(el("p", {className: "hint"}, L("None yet: switch «Summary» on in a chat's settings.",
-          "Пока ни одного: включите «Сводку» в настройках чата.")));
-      } else {
-        parts.push(el("div", {className: "list"}, ...data.chats.map((item) => {
-          const main = el("div", {className: "main"}, el("div", {className: "title"}, item.title));
-          const chat = chats.find((c) => c.id === item.id);
-          if (chat) main.onclick = () => openChat(chat);
-          return el("div", {className: "row"}, main);
-        })));
-        parts.push(el("p", {className: "hint"}, L("To take a chat out of the summary, switch off «Summary» in its "
-          + "settings.", "Убрать чат из сводки — переключатель «Сводка» в его настройках.")));
-      }
-      $("tab-summaries").replaceChildren(...parts);
-    }
-
-    // --- sheets ---------------------------------------------------------------
-
-    async function loadSheets() {
-      try {
-        renderSheets(await call("api/sheets"));
-      } catch (error) {
-        $("tab-sheets").replaceChildren(el("p", {className: "hint"}, error.message));
-      }
-    }
-
-    async function changeSheets(path, method, values) {
-      try {
-        renderSheets(await send(path, method, values));
-      } catch (error) {
-        tg.showAlert(error.message);
-        loadSheets();
-      }
-    }
-
-    function sheetTitle(sheet) {
-      return (sheet.title || sheet.course || L("Sheet", "Листок"))
-        + (sheet.number ? L(" · sheet ", " · листок ") + sheet.number : "");
-    }
-
-    function renderSheets(data) {
-      const parts = [el("p", {className: "hint"}, L("PDFs with tasks from the chats: the bot posts them to the «Sheets» "
-        + "topic. A new version replaces the file in the old message. A version that was not recognised can be "
-        + "joined to the older sheet here.", "PDF с заданиями из чатов: бот присылает их в тему «Листочки». Новая "
-        + "версия заменяет файл в старом сообщении. Если версию не узнали, её можно присоединить к старому листку "
-        + "здесь."))];
-      if (data.status.error) {
-        parts.push(el("div", {className: "card warn"}, L("Reading a PDF failed: ", "Чтение PDF не удалось: ")
-          + data.status.error));
-      }
-      if (data.status.waiting) {
-        parts.push(el("div", {className: "card"}, L("Waiting for the forum: ", "Ждут отправки в форум: ")
-          + data.status.waiting + "."));
-      }
-      parts.push(el("h3", {}, L("Reading a whole PDF", "Чтение PDF целиком")),
-        el("p", {className: "hint"}, L("For chats with «Whole PDF»: how much of one file is read, whichever comes first.",
-          "Для чатов с «PDF целиком»: сколько читать из одного файла, что наступит раньше.")),
-        el("div", {className: "list"},
-          settingRow(L("Pages", "Страниц"), "", limitInput(data.limits.pdf_pages, 1, 50, "pdf_pages")),
-          settingRow(L("Tokens", "Токенов"), L("a scan is about 3000 a page", "скан — около 3000 на страницу"),
-            limitInput(data.limits.pdf_tokens, 1000, 200000, "pdf_tokens"))));
-      parts.push(el("h3", {}, L("Sheets · ", "Листочки · ") + data.sheets.length));
-      if (!data.sheets.length) parts.push(el("p", {className: "hint"}, L("No sheets yet.", "Листочков пока нет.")));
-      const older = data.sheets.filter((sheet) => sheet.status === "posted");
-      for (const sheet of data.sheets) parts.push(sheetCard(sheet, older));
-      $("tab-sheets").replaceChildren(...parts);
-    }
-
-    function limitInput(value, min, max, name) {
-      const input = el("input", {type: "number", value, min, max, step: 1, inputMode: "numeric"});
-      input.style.width = "90px";
-      input.style.textAlign = "right";
-      input.onchange = () => changeSheets("api/sheets", "PATCH", {[name]: Number(input.value)});
-      return input;
-    }
-
-    function sheetCard(sheet, older) {
-      const facts = [sheet.name];
-      if (sheet.due) facts.push(L("due ", "срок ") + dayLabel(sheet.due));
-      if (sheet.versions > 1) facts.push(L("versions: ", "версий: ") + sheet.versions);
-      const where = [sheet.chat, sheet.created_at.slice(8, 10) + "." + sheet.created_at.slice(5, 7)];
-      const main = el("div", {className: "main" + (sheet.status === "failed" ? " faded" : "")},
-        el("div", {className: "title"}, sheetTitle(sheet)), el("div", {className: "hint"}, facts.join(" · ")),
-        el("div", {className: "hint"}, where.filter(Boolean).join(" · ")));
-      if (sheet.summary) main.append(el("div", {className: "hint"}, sheet.summary));
-      if (sheet.status === "failed") {
-        main.append(el("div", {className: "hint warn"}, L("Not posted: ", "Не отправлен: ") + sheet.error));
-      }
-      if (sheet.status === "new") {
-        main.append(el("div", {className: "hint"}, L("Waiting for the forum.", "Ждёт отправки в форум.")));
-      }
-      const card = el("div", {className: "list"}, el("div", {className: "row"}, main));
-      const others = older.filter((other) => other.first !== sheet.first && other.created_at <= sheet.created_at);
-      if (sheet.status === "posted" && sheet.versions === 1 && sheet.file && others.length) {
-        const select = el("select", {}, el("option", {value: ""}, L("no", "нет")),
-          ...others.map((other) => el("option", {value: other.id},
-            `${sheetTitle(other)} · ${other.name} · ${other.chat || ""}`)));
-        select.onchange = () => {
-          if (!select.value) return;
-          const other = others.find((o) => String(o.id) === select.value);
-          tg.showConfirm(L(`Is it a new version of «${sheetTitle(other)}»? The file replaces the old one in its `
-            + "message, and this sheet's own message is deleted.", `Это новая версия «${sheetTitle(other)}»? Файл `
-            + "заменит старый в его сообщении, а отдельное сообщение этого листка удалится."), (yes) => {
-            if (yes) changeSheets(`api/sheets/${sheet.id}/join`, "POST", {previous: other.id});
-            else select.value = "";
-          });
-        };
-        card.append(settingRow(L("Update of a sheet", "Обновление листка"),
-          L("if it is a new version of one posted before", "если это новая версия уже присланного"), select));
-      }
-      return card;
-    }
-
-    // --- grades ---------------------------------------------------------------
-
-    let grades = null;
-    const draft = {url: "", label: ""};  // the sheet being added: kept across renders
-
-    async function loadGrades() {
-      try {
-        grades = await call("api/grades");
-        renderGrades();
-      } catch (error) {
-        $("tab-grades").replaceChildren(el("p", {className: "hint"}, error.message));
-      }
-    }
-
-    async function changeGrades(values) {
-      try {
-        grades = await send("api/grades", "PATCH", values);
-        renderGrades();
-        return true;
-      } catch (error) {
-        tg.showAlert(error.message);
-        loadGrades();
-        return false;
-      }
-    }
-
-    // The service reads the sheets at once after a change; their state comes a few seconds later.
-    function rereadGrades() {
-      setTimeout(() => { if (!$("tab-grades").hidden) loadGrades(); }, 5000);
+    function openLink(url) {  // a t.me link opens in Telegram itself, not in a browser
+      if (url.startsWith("https://t.me/")) tg.openTelegramLink(url); else tg.openLink(url);
     }
 
     function gradeMark(value) {
@@ -880,232 +711,1102 @@
       return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
     }
 
-    function sheetsOf(data) {
-      return data.sheets.map((sheet) => ({url: sheet.url, label: sheet.label}));
+    // --- navigation ----------------------------------------------------------------
+    // Four tabs at the bottom, each with one job; a screen opened from a tab goes on a stack that Telegram's back
+    // button walks down.
+
+    const TABS = () => [["deadlines", L("Deadlines", "Дедлайны")], ["schedule", L("Timetable", "Расписание")],
+                        ["study", L("Study", "Учёба")], ["settings", L("Settings", "Настройки")]];
+    const nav = {tab: "deadlines", stack: [], study: "grades"};
+    let drawing = 0;
+
+    function showTab(name) {
+      if (nav.tab === name && !nav.stack.length) return;
+      haptic();
+      nav.tab = name;
+      nav.stack = [];
+      draw(true);
     }
 
-    function renderGrades() {
-      const data = grades;
-      const student = el("input", {value: data.student, placeholder: L("Surname Name", "Фамилия Имя")});
-      student.style.width = "180px";
-      student.style.textAlign = "right";
-      student.onchange = () => {
-        const value = student.value.trim();
-        if (!data.student || !data.sheets.length) {
-          changeGrades({student: value}).then((ok) => ok && rereadGrades());
-          return;
-        }
-        tg.showConfirm(L("Change the name? The sheets are read anew: the first reading tells of no new grades.",
-          "Сменить ФИО? Таблицы прочитаются заново: первое чтение — без сообщений о новых оценках."),
-          (yes) => {
-            if (yes) changeGrades({student: value}).then((ok) => ok && rereadGrades());
-            else student.value = data.student;
-          });
-      };
-      const windowDays = el("input", {type: "number", value: data.window_days, min: 1, max: 60, step: 1,
-        inputMode: "numeric"});
-      windowDays.style.width = "70px";
-      windowDays.style.textAlign = "right";
-      windowDays.onchange = () => changeGrades({window_days: Number(windowDays.value)});
-      const parts = [el("p", {className: "hint"}, L("Teachers' Google Sheets open to anyone with the link. Every 30 "
-        + "minutes the service finds the own row in them by the name; Haiku sees the top of a tab and that row and "
-        + "finds the header itself. A new or changed grade comes to the «Grades» topic. The first reading of a sheet "
-        + "is a snapshot, without messages.", "Таблицы преподавателей в Google, открытые по ссылке. Раз в 30 минут "
-        + "сервис ищет в них свою строку по ФИО; Haiku видит верх вкладки и эту строку и сама находит шапку. Новая или "
-        + "изменённая оценка приходит в тему «Оценки». Первое чтение таблицы — снимок, без сообщений."))];
-      if (!data.llm) {
-        parts.push(el("div", {className: "card warn"}, L("No Haiku key: the tabs are not marked up.",
-          "Нет ключа Haiku: вкладки не размечаются.")));
-      }
-      parts.push(el("div", {className: "list"},
-        settingRow(L("Name", "ФИО"), L("as in the sheets: «Иванов Иван» finds «ИВАНОВ Иван Петрович»",
-          "как в таблицах: «Иванов Иван» найдёт «ИВАНОВ Иван Петрович»"), student),
-        settingRow(L("A grade is new", "Оценка новая"), L("days: the API for Tablo gives it this long",
-          "дней: столько её отдаёт API для Tablo"), windowDays)));
-      parts.push(el("h3", {}, L("Sheets · ", "Таблицы · ") + data.sheets.length));
-      if (!data.student && data.sheets.length) {
-        parts.push(el("p", {className: "hint warn"}, L("Without the name the sheets are not read.",
-          "Без ФИО таблицы не читаются.")));
-      }
-      for (const sheet of data.sheets) parts.push(gradeSheetCard(sheet, data));
-      parts.push(addSheetCard(data));
-      $("tab-grades").replaceChildren(...parts);
+    function push(page) {
+      if (page === hsePage) hse.failed = false;
+      nav.stack.push(page);
+      draw(true);
     }
 
-    function gradeSheetCard(sheet, data) {
-      const name = sheet.title || sheet.label || L("Sheet", "Таблица");
-      const facts = [];
-      if (sheet.label) facts.push(L("course ", "курс ") + sheet.label);
-      if (sheet.ok_at) {
-        facts.push(L(`tabs: ${sheet.tabs}, grades: ${sheet.items}, read ${when(sheet.ok_at)}`,
-          `вкладок: ${sheet.tabs}, оценок: ${sheet.items}, прочитана ${when(sheet.ok_at)}`));
-      } else if (!sheet.error) {
-        facts.push(L("not read yet", "ещё не прочитана"));
-      }
-      const link = el("a", {href: sheet.url, target: "_blank"}, name);
-      link.onclick = (event) => { event.preventDefault(); tg.openLink(sheet.url); };
-      const main = el("div", {className: "main"}, el("div", {className: "title"}, link),
-        el("div", {className: "hint"}, facts.join(" · ")));
-      if (sheet.error) main.append(el("div", {className: "hint warn"}, L("Cannot be read: ", "Не читается: ") + sheet.error));
-      if (sheet.unread && sheet.unread.length) {
-        main.append(el("div", {className: "hint warn"}, L("Haiku could not mark up the tabs: ",
-          "Haiku не смогла разметить вкладки: ") + sheet.unread.join(", ")
-          + L(". They are skipped until their header changes.", ". Они пропускаются, пока у них не изменится шапка.")));
-      }
-      const remove = el("button", {className: "small"}, L("Remove", "Убрать"));
-      remove.onclick = () => tg.showConfirm(L(`Remove «${name}»? Its grades are forgotten; added again, its first `
-        + "reading is a snapshot.", `Убрать «${name}»? Её оценки забудутся; если добавить снова, первое чтение будет `
-        + "снимком."), (yes) => {
-        if (yes) changeGrades({sheets: sheetsOf(data).filter((s) => s.url !== sheet.url)});
-      });
-      const card = el("div", {className: "list"}, el("div", {className: "row"}, main, remove));
-      for (const grade of sheet.grades) {
-        const value = gradeMark(grade.value) + (grade.bonus ? ` ${grade.bonus > 0 ? "+" : ""}${grade.bonus}` : "");
-        const points = grade.max !== 10 ? `${grade.raw} ${L("of", "из")} ${grade.max}` : "";
-        card.append(el("div", {className: "row"},
-          el("div", {className: "main"}, el("div", {className: "title"}, grade.label),
-            points ? el("div", {className: "hint"}, points) : ""),
-          grade.new ? el("span", {className: "badge"}, L("new", "новая")) : "",
-          el("b", {}, value)));
-      }
-      return card;
+    function back() {
+      nav.stack.pop();
+      draw(true);
     }
 
-    function addSheetCard(data) {
-      const url = el("input", {value: draft.url, placeholder: "https://docs.google.com/spreadsheets/d/…",
-        autocomplete: "off", spellcheck: false});
-      url.oninput = () => { draft.url = url.value; };
-      const label = el("input", {value: draft.label, maxLength: data.label_chars, placeholder: "DM"});
-      label.oninput = () => { draft.label = label.value; };
-      const add = el("button", {}, L("Add the sheet", "Добавить таблицу"));
-      add.onclick = async () => {
-        if (await changeGrades({sheets: [...sheetsOf(data), {url: draft.url, label: draft.label}]})) {
-          draft.url = draft.label = "";
-          renderGrades();
-          rereadGrades();
-        }
-      };
-      return el("div", {className: "card"},
-        el("label", {className: "field"}, L("The sheet's link (open to anyone with the link)",
-          "Ссылка на таблицу (доступ — всем, у кого есть ссылка)"), url),
-        el("label", {className: "field"}, L(`The course, in front of every grade, up to ${data.label_chars} characters; `
-          + "empty: the start of the sheet's title", `Курс — перед каждой оценкой, до ${data.label_chars} символов; `
-          + "пусто — начало названия таблицы"), label),
-        el("div", {className: "actions"}, add));
+    function redraw() {
+      draw(false);
     }
 
-    // --- the dictionary -----------------------------------------------------
-
-    async function loadSubjects() {
+    // `fresh`: a move to another screen, with data asked anew and the screen from its top.
+    async function draw(fresh) {
+      if (fresh) cache = {};
+      closeCard(true);
+      const token = ++drawing;
+      const page = nav.stack.at(-1) || ROOTS[nav.tab];
+      clearPrimary();
+      tg.BackButton[nav.stack.length ? "show" : "hide"]();
+      $("tabbar").hidden = nav.stack.length > 0;
+      document.body.classList.toggle("inner", nav.stack.length > 0);
+      for (const button of $("tabbar").children) button.classList.toggle("on", button.dataset.tab === nav.tab);
+      let nodes;
       try {
-        dictionary = await call("api/subjects");
-        renderSubjects();
+        nodes = await page();
       } catch (error) {
-        $("subjects").replaceChildren(el("p", {className: "hint"}, error.message));
+        nodes = [empty(error.message)];
+      }
+      if (token !== drawing) return;  // another screen was asked for meanwhile
+      if (nav.stack.length && !tg.initData) {  // outside Telegram there is no back button of its own
+        const link = el("button", {className: "backlink"}, "‹ " + L("Back", "Назад"));
+        link.onclick = back;
+        nodes = [link, ...nodes];
+      }
+      const y = window.scrollY;
+      $("screen").replaceChildren(...nodes.flat(2).filter(Boolean));
+      window.scrollTo(0, fresh ? 0 : y);
+      markProblems();  // an action may have fixed or caused one
+    }
+
+    function drawTabbar() {
+      $("tabbar").replaceChildren(...TABS().map(([name, title]) => {
+        const button = el("button", {}, icon(name), el("span", {}, title));
+        button.dataset.tab = name;
+        button.onclick = () => showTab(name);
+        return button;
+      }));
+      $("tabbar").hidden = nav.stack.length > 0;
+    }
+
+    // --- the card from the bottom -------------------------------------------------------------------
+    // A tap on a deadline, a class or a sheet opens its card: what it is, and what can be done with it. The lists
+    // themselves only show; every change is an action on a card.
+
+    let card = null;
+
+    function openCard(...children) {
+      closeCard(true);
+      const panel = el("div", {className: "card-panel"}, el("div", {className: "grip"}),
+        ...children.flat(2).filter(Boolean));
+      const shade = el("div", {className: "card"}, panel);
+      shade.onclick = (event) => { if (event.target === shade) closeCard(); };
+      document.body.append(shade);
+      document.body.classList.add("locked");
+      requestAnimationFrame(() => shade.classList.add("open"));
+      card = shade;
+      tg.BackButton.show();
+      haptic();
+    }
+
+    function closeCard(now = false) {
+      if (!card) return;
+      const shade = card;
+      card = null;
+      document.body.classList.remove("locked");
+      if (!nav.stack.length) tg.BackButton.hide();
+      if (now) return shade.remove();
+      shade.classList.remove("open");
+      setTimeout(() => shade.remove(), 220);
+    }
+
+    function cardHead(title, sub) {
+      return el("div", {className: "card-head"}, el("h2", {}, title), sub ? el("p", {}, sub) : null);
+    }
+
+    // A fact on a card: what on the left, its value on the right.
+    function fact(name, value) {
+      return value ? row({title: name, value, className: "fact"}) : null;
+    }
+
+    // An action of a card: the card closes, then the action runs.
+    function cardButton(text, run, options) {
+      return button(text, () => { closeCard(); run(); }, options);
+    }
+
+    function cardList(...rows) {
+      const shown = rows.flat().filter(Boolean);
+      return shown.length ? el("div", {className: "list"}, ...shown) : null;
+    }
+
+    const cardFoot = (text) => el("p", {className: "foot"}, text);
+
+    // A screen's big title, with a round button at its right.
+    function header(title, action) {
+      return el("div", {className: "head"}, el("h1", {className: "large"}, title), action || null);
+    }
+
+    function headButton(name, onclick) {
+      const node = el("button", {className: "head-action"}, icon(name));
+      node.onclick = onclick;
+      return node;
+    }
+
+    // A change whose answer is not the screen's data: the screen asks for its data anew.
+    async function change(path, method, values, ...stale) {
+      try {
+        await send(path, method, values);
+      } catch (error) {
+        tell(error.message);
+      }
+      for (const key of stale) delete cache[key];
+      redraw();
+    }
+
+    // --- adding and forms -------------------------------------------------------------------------------
+
+    // The «+» of every tab: what to add, the tab's own kind first.
+    function addCard(first) {
+      const kinds = [["deadline", L("Deadline", "Дедлайн"), "deadlines", "#3e88f7", () => deadlinePage(null)],
+                     ["event", L("Event", "Событие"), "schedule", "#e0605a", () => eventPage(null)],
+                     ["grade", L("Grade", "Оценка"), "grades", "#34a853", () => gradePage(null)],
+                     ["sheet", L("Sheet", "Листочек"), "sheet", "#8e8e93", () => sheetNewPage()]];
+      kinds.sort((a, b) => (b[0] === first) - (a[0] === first));
+      openCard(cardHead(L("Add", "Добавить")), cardList(kinds.map(([, title, name, color, page]) =>
+        row({title, lead: tile(name, color), go: () => { closeCard(true); push(page); }}))));
+    }
+
+    const addButton = (first) => headButton("plus", () => addCard(first));
+
+    // A field of a form: its name on the left, what to fill in on the right.
+    function field(name, input) {
+      return el("div", {className: "row field"}, el("span", {className: "label"}, name), input);
+    }
+
+    const input = (value, attrs = {}) => el("input", {className: "grow", value: value ?? "", ...attrs});
+
+    // Saves a form: the request, then back to where the form was opened from.
+    async function submit(path, method, values) {
+      try {
+        await (values instanceof FormData ? call(path, {method, body: values}) : send(path, method, values));
+        back();
+      } catch (error) {
+        tell(error.message);
       }
     }
 
-    function renderSubjects() {
-      $("subjects-error").hidden = !dictionary.error;
-      $("subjects-error").textContent = dictionary.error ? L("Haiku did not answer: ", "Haiku не ответила: ")
-        + dictionary.error + L(". Until it does, the names are the sources'.", ". Пока названия — как у источника.") : "";
-      const query = $("subject-search").value.trim().toLowerCase();
-      const shown = dictionary.subjects.filter((s) =>
-        [s.name, s.title, s.abbr].some((text) => text.toLowerCase().includes(query)));
-      const rows = shown.map((subject) => {
-        const main = el("div", {className: "main"}, el("div", {className: "title"}, subject.name),
-          el("div", {className: "hint"}, `${subject.title} · ${subject.abbr}`));
-        main.onclick = () => openSubject(subject);
-        return el("div", {className: "row"}, main,
-          el("span", {className: "badge"}, subject.manual ? L("manual", "вручную") : "Haiku"));
-      });
-      $("subjects").replaceChildren(rows.length ? el("div", {className: "list"}, ...rows) :
-        el("p", {className: "hint"}, dictionary.subjects.length ? L("Nothing found.", "Ничего не нашлось.") :
-          L("The dictionary is empty: courses come from RUZ and from the deadlines.",
-            "Словарь пуст: курсы появятся из РУЗ и из дедлайнов.")));
+    // --- Deadlines -----------------------------------------------------------------------------------
+
+    const FROM = () => L({hseapp: "HSE App X", ical: "RUZ", mail: "Mail", tg: "Chat", ha: "Own"},
+                         {hseapp: "HSE App X", ical: "РУЗ", mail: "Почта", tg: "Чат", ha: "Свой"});
+
+    // Where a deadline comes from, as precisely as it is known: the chat or the letter, else the source.
+    const deadlineFrom = (d) => d.source === "ha" ? FROM().ha : d.from || FROM()[d.source] || d.source;
+
+    async function deadlinesPage() {
+      const data = await get("api/deadlines");
+      const today = data.today;
+      const parts = [header(L("Deadlines", "Дедлайны"), addButton("deadline"))];
+      if (data.hseapp.login_needed) {
+        parts.push(notice(L("HSE App X needs a login: its deadlines are not updated.",
+          "HSE App X нужен вход: дедлайны оттуда не обновляются."), () => push(hsePage)));
+      }
+      const listed = new Set(data.items.map((d) => d.uid));
+      const all = [...data.items, ...data.own.filter((d) => !listed.has(d.uid)).map((d) => ({...d, source: "ha"}))];
+      const groups = [[L("Overdue", "Просрочены"), (n) => n < 0, true], [L("Today", "Сегодня"), (n) => n === 0, false],
+                      [L("Tomorrow", "Завтра"), (n) => n === 1, false],
+                      [L("This week", "На этой неделе"), (n) => n > 1 && n <= 7, true],
+                      [L("Later", "Позже"), (n) => n > 7, true]];
+      for (const [title, fits, dated] of groups) {
+        const part = all.filter((d) => fits(daysFrom(today, d.due)));
+        if (part.length) parts.push(section(title, part.map((d) => deadlineRow(d, data, dated))));
+      }
+      if (!all.length) parts.push(empty(L("No deadlines.", "Дедлайнов нет.")));
+      if (data.hidden.length) {
+        parts.push(el("div", {className: "list", style: "margin-top: 26px"}, row({title: L("Hidden", "Скрытые"),
+          value: String(data.hidden.length), go: () => push(hiddenDeadlinesPage)})));
+      }
+      parts.push(el("p", {className: "foot"}, L("The same list is in Tablo and in the pinned message of the "
+        + "«Deadlines» topic.", "Тот же список — в Tablo и в закрепе темы «Дедлайны».")));
+      return parts;
     }
 
-    function openSubject(subject) {
-      openView("subject");
-      const fresh = !subject;
-      subject = subject || {name: "", title: "", abbr: "", manual: true};
-      const name = el("input", {value: subject.name, readOnly: !fresh, placeholder: "Математический анализ"});
-      const title = el("input", {value: subject.title, maxLength: 40, placeholder: "Calculus"});
-      const abbr = el("input", {value: subject.abbr, maxLength: dictionary.abbr_chars, placeholder: "Calc"});
-      const saveButton = el("button", {}, L("Save", "Сохранить"));
-      saveButton.onclick = async () => {
-        try {
-          await send("api/subjects", "PUT", {name: name.value, title: title.value, abbr: abbr.value});
-          await loadSubjects();
-          back();
-        } catch (error) {
-          tg.showAlert(error.message);
+    function deadlineRow(d, data, dated) {
+      const sub = [deadlineFrom(d)];  // the course is in the title already, «Calc HW 3»; its full name is on the card
+      if (d.category === "personal") sub.push(CATEGORIES().personal);
+      return row({title: d.title, sub: sub.filter(Boolean).join(" · "),
+        value: dated ? dueValue(d.due, data.today) : null, go: () => deadlineCard(d, data)});
+    }
+
+    function deadlineCard(d, data) {
+      const own = d.source === "ha";
+      const days = daysFrom(data.today, d.due);
+      const due = (days === 0 || days === 1 ? dueMark(d.due, data.today) + ", " : "") + dayLabel(d.due)
+        + (days < 0 ? L(" · overdue", " · просрочен") : "");
+      const from = d.link ? el("a", {href: d.link, onclick: (e) => { e.preventDefault(); openLink(d.link); }},
+        deadlineFrom(d)) : deadlineFrom(d);
+      openCard(cardHead(d.title),
+        cardList(fact(L("Due", "Срок"), el("span", {className: days < 0 ? "late" : ""}, due)),
+          fact(L("Course", "Предмет"), d.course), fact(L("From", "Откуда"), from),
+          fact(L("List", "Список"), CATEGORIES()[d.category])),
+        cardList(cardButton(L("Edit", "Изменить"), () => push(() => deadlinePage(own
+          ? data.own.find((o) => o.uid === d.uid) || d : d, !own))),
+        own ? cardButton(L("Delete", "Удалить"), async () => {
+          if (await askYes(L("Delete this own deadline?", "Удалить свой дедлайн?"))) {
+            act("api/deadlines/" + encodeURIComponent(d.uid), "DELETE", undefined, "api/deadlines");
+          }
+        }, {danger: true}) : cardButton(L("Hide", "Скрыть"), () => act("api/deadlines/" + encodeURIComponent(d.uid),
+          "DELETE", undefined, "api/deadlines"), {danger: true})),
+        own ? null : cardFoot(L("Changed, it becomes your own and the source's one is hidden. A hidden one does not "
+          + "come back by itself, even if the source sends it again; it can be restored in «Hidden».", "После правки "
+          + "дедлайн станет своим, а дедлайн источника скроется. Скрытый сам не вернётся, даже если источник пришлёт "
+          + "его снова; вернуть можно в «Скрытых».")));
+    }
+
+    async function hiddenDeadlinesPage() {
+      const data = await get("api/deadlines");
+      return [el("h1", {className: "title"}, L("Hidden deadlines", "Скрытые дедлайны")),
+        data.hidden.length ? section(null, data.hidden.map((h) => {
+          const restore = el("button", {className: "small"}, L("Restore", "Вернуть"));
+          restore.onclick = () => act("api/hidden/" + encodeURIComponent(h.uid), "DELETE", undefined, "api/deadlines");
+          return row({title: h.title, sub: `${dayLabel(h.due)} · ${deadlineFrom(h)}`, control: restore});
+        }), L("A restored deadline is back if its source still has it.",
+          "Возвращённый дедлайн появится снова, если он ещё есть у источника.")) : empty(L("Nothing is hidden.",
+          "Скрытых нет."))];
+    }
+
+    // An own deadline, a new one, or a source's one changed (`copy`: saving hides the source's one).
+    async function deadlinePage(d, copy = false) {
+      const data = await get("api/deadlines");
+      const fresh = !d;
+      d = d || {title: "", due: data.today, category: "study"};
+      const title = input(d.title, {maxLength: 200, placeholder: L("Sign up for a minor", "Записаться на майнор")});
+      const due = input(d.due, {type: "date"});
+      let category = d.category;
+      return [el("h1", {className: "title"}, fresh ? L("New deadline", "Новый дедлайн") : L("Edit deadline", "Изменить дедлайн")),
+        section(null, [field(L("What", "Что"), title), field(L("Due", "Срок"), due),
+          field(L("List", "Список"), fresh ? selectOf(Object.entries(CATEGORIES()), category, (value) => { category = value; })
+            : el("span", {className: "grow"}, CATEGORIES()[d.category]))],
+          copy ? L("The source's deadline is hidden, your own with these values takes its place.",
+            "Дедлайн источника скроется, его место займёт свой с этими данными.")
+            : L("Shown in Tablo and in the «Deadlines» topic. Deleted by itself 30 days after it is due.",
+              "Виден в Tablo и в теме «Дедлайны». Через 30 дней после срока удаляется сам.")),
+        primary(L("Save", "Сохранить"), () => fresh
+          ? submit("api/deadlines", "POST", {title: title.value, due: due.value, category})
+          : submit("api/deadlines/" + encodeURIComponent(d.uid), "PATCH", {title: title.value, due: due.value}))];
+    }
+
+    // --- Timetable ------------------------------------------------------------------------------------
+    // The classes of RUZ with the corrections applied (the chats' and your own), and the events, day by day.
+
+    let agendaDays = 7;
+    const TYPES = () => L({Lecture: "lecture", Seminar: "seminar", Consultation: "consultation", Event: "event",
+                           "Interim assessment": "interim assessment", Exam: "exam", Lab: "lab", Class: "class"}, TYPES_RU);
+    const EVENT_TYPES = ["Event", "Consultation", "Lecture", "Seminar", "Exam"];
+
+    function addDays(iso, n) {
+      const date = new Date(iso + "T12:00:00");
+      date.setDate(date.getDate() + n);
+      return date.toISOString().slice(0, 10);
+    }
+
+    function dayTitle(iso, today) {
+      const days = daysFrom(today, iso);
+      if (days === 0) return L("Today · ", "Сегодня · ") + dayLabel(iso);
+      if (days === 1) return L("Tomorrow · ", "Завтра · ") + dayLabel(iso);
+      return dayLabel(iso);
+    }
+
+    const isLink = (value) => /^https?:\/\//.test(value || "");
+
+    function place(value) {
+      if (!value) return "";
+      return isLink(value) || value === "online" ? L("online", "онлайн") : value;
+    }
+
+    // A correction is in force on this class: moved or cancelled where RUZ has it otherwise.
+    const corrected = (item) => item.event && item.event.correction && !item.event.hidden;
+
+    // Where an entry comes from: RUZ, the chat or the letter that told it or corrected it, or you.
+    function itemFrom(item) {
+      const ev = item.event;
+      if (ev && ev.own && (!ev.correction || !ev.hidden)) return L("you", "вы");
+      if (ev && ev.chat && (!ev.correction || !ev.hidden)) return ev.chat;
+      return L("RUZ", "РУЗ");
+    }
+
+    async function schedulePage() {
+      const data = await get("api/agenda");
+      const parts = [header(L("Timetable", "Расписание"), addButton("event"))];
+      if (data.ruz.error) parts.push(notice(L("RUZ is not read: ", "РУЗ не читается: ") + data.ruz.error));
+      if (data.ruz.subjects_error) {
+        parts.push(notice(L("The course titles wait for Haiku: ", "Названия предметов ждут Haiku: ") + data.ruz.subjects_error));
+      }
+      const last = addDays(data.today, agendaDays - 1);
+      for (let day = data.today; day <= last; day = addDays(day, 1)) {
+        const items = data.items.filter((item) => item.start.slice(0, 10) === day);
+        if (!items.length && day !== data.today) continue;
+        parts.push(el("h3", {}, dayTitle(day, data.today)), el("div", {className: "list"}, ...(items.length
+          ? items.map((item) => agendaRow(item, data)) : [row({title: L("Nothing", "Ничего нет"), className: "faded"})])));
+      }
+      if (data.items.some((item) => item.start.slice(0, 10) > last)) {
+        parts.push(el("div", {className: "list", style: "margin-top: 22px"}, button(L("One more week", "Ещё неделя"),
+          () => { agendaDays += 7; redraw(); })));
+      }
+      if (data.hidden.length) {
+        parts.push(el("div", {className: "list", style: "margin-top: 22px"}, row({title: L("Removed events",
+          "Убранные события"), value: String(data.hidden.length), go: () => push(hiddenEventsPage)})));
+      }
+      parts.push(el("p", {className: "foot"}, L("Classes come from RUZ", "Пары — из РУЗ")
+        + (data.ruz.ok_at ? L(", updated ", ", обновлено ") + when(data.ruz.ok_at) : "") + L("; events and "
+        + "corrections, from the chats, the mail and you.", "; события и правки — из чатов, почты и ваши.")));
+      return parts;
+    }
+
+    function agendaRow(item, data) {
+      const time = el("div", {className: "time"}, el("b", {}, item.start.slice(11, 16)),
+        el("span", {}, item.end.slice(11, 16)));
+      const sub = [place(item.location), TYPES()[item.type] || item.type.toLowerCase(), itemFrom(item)].filter(Boolean);
+      const tags = [];
+      if (item.cancelled) tags.push(el("span", {className: "tag off"}, L("cancelled", "отменена")));
+      else if (corrected(item)) tags.push(el("span", {className: "tag moved"}, L("moved", "перенос")));
+      if (!item.required && !item.cancelled) tags.push(el("span", {className: "tag"}, L("optional", "по желанию")));
+      return row({lead: time, className: "timed" + (item.cancelled ? " gone" : ""),
+        title: el("span", {className: item.cancelled ? "struck" : ""}, item.title),
+        sub: el("span", {}, ...tags.flatMap((tag) => [tag, " · "]), sub.join(" · ")),
+        go: () => agendaCard(item, data)});
+    }
+
+    function agendaCard(item, data) {
+      const ev = item.event;
+      const hide = (hidden) => change("api/events/" + ev.id, "PATCH", {hidden}, "api/agenda");
+      const remove = () => change("api/events/" + ev.id, "DELETE", undefined, "api/agenda");
+      const fromText = itemFrom(item);
+      const link = ev && ev.link && (!ev.correction || !ev.hidden) ? ev.link : null;
+      const facts = [
+        fact(L("When", "Когда"), `${dayLabel(item.start.slice(0, 10))}, ${hours(item.start, item.end)}`),
+        fact(L("Where", "Где"), isLink(item.location) ? el("a", {href: item.location,
+          onclick: (e) => { e.preventDefault(); openLink(item.location); }}, L("the link", "по ссылке")) : place(item.location)),
+        fact(L("What", "Что"), TYPES()[item.type] || item.type),
+        fact(L("From", "Откуда"), link ? el("a", {href: link, onclick: (e) => { e.preventDefault(); openLink(link); }},
+          fromText) : fromText)];
+      const isClass = item.source === "ruz" || (ev && ev.correction);
+      let actions = [], foot = null;
+      if (isClass) {
+        actions.push(cardButton(L("Move or cancel", "Перенести или отменить"), () => push(() => eventPage(item))));
+        if (ev && !ev.hidden) {
+          facts.push(fact(L("In RUZ", "В РУЗ"), `${dayLabel(ev.class.start.slice(0, 10))}, ${hours(ev.class.start,
+            ev.class.end)}` + (ev.class.room ? ", " + place(ev.class.room) : "")));
+          actions.push(ev.own ? cardButton(L("Undo your correction", "Отменить свою правку"), remove, {danger: true})
+            : cardButton(L("The correction is wrong: as in RUZ", "Правка неверна — как в РУЗ"), () => hide(true),
+              {danger: true}));
+          foot = ev.own ? L("Your correction: the calendars and Tablo show the class so, until RUZ itself changes it.",
+            "Ваша правка: так пара стоит в календарях и в Tablo, пока РУЗ сам её не изменит.")
+            : L(`The chat ${ev.cancelled ? "cancelled" : "moved"} the class; the calendars show it so.`,
+              `В чате пару ${ev.cancelled ? "отменили" : "перенесли"}; так она и стоит в календарях.`);
+        } else if (ev && ev.hidden) {
+          actions.push(cardButton(L("Apply the chat's correction", "Применить правку из чата"), () => hide(false)));
+          foot = L(`${ev.chat || "A chat"} ${ev.cancelled ? "cancelled the class" : "moved the class to " + when(ev.start, ev.end)}, `
+            + "but you turned the correction off: the class is as in RUZ.", `${ev.chat || "В чате"}: пару `
+            + `${ev.cancelled ? "отменили" : "перенесли на " + when(ev.start, ev.end)}, но вы отключили правку — пара `
+            + "стоит как в РУЗ.");
         }
-      };
-      const actions = el("div", {className: "actions"}, saveButton);
-      if (!fresh) {
-        const removeButton = el("button", {className: "danger"}, L("Delete", "Удалить"));
-        removeButton.onclick = () => tg.showConfirm(subject.manual
-          ? L("Delete the entry? Haiku names the course again.", "Удалить запись? Haiku назовёт курс заново.")
-          : L("Delete Haiku's answer? The course is named again.", "Удалить ответ Haiku? Курс будет назван заново."),
-          async (yes) => {
-            if (!yes) return;
-            try {
-              await send("api/subjects", "DELETE", {name: subject.name});
-              await loadSubjects();
-              back();
-            } catch (error) {
-              tg.showAlert(error.message);
-            }
-          });
-        actions.append(removeButton);
+      } else if (ev) {
+        actions = [cardButton(L("Edit", "Изменить"), () => push(() => eventPage(item))),
+          cardButton(item.required ? L("Make it optional", "Сделать необязательным")
+            : L("Make it required", "Сделать обязательным"), () => change("api/events/" + ev.id, "PATCH",
+            {required: !item.required}, "api/agenda")),
+          ev.own ? cardButton(L("Delete", "Удалить"), async () => {
+            if (await askYes(L("Delete this event?", "Удалить событие?"))) remove();
+          }, {danger: true}) : cardButton(L("Remove from the timetable", "Убрать из расписания"), () => hide(true),
+            {danger: true})];
+        foot = item.required ? L("Required: in the main calendar, where you must be.",
+          "Обязательное — в основном календаре, где нужно быть.") : L("Optional: in the second calendar, where you "
+          + "may come.", "По желанию — во втором календаре, куда можно прийти.");
       }
-      $("subject").replaceChildren(
-        el("h2", {}, fresh ? L("New entry", "Новая запись") : subject.name),
-        el("p", {className: "hint"}, subject.manual ? L("The entry is set by hand.", "Запись задана вручную.") :
-          L("Now it is Haiku's answer; saved, the entry becomes manual.",
-            "Сейчас это ответ Haiku; после сохранения запись станет ручной.")),
-        el("label", {className: "field"}, L("The name, as the source gives it", "Название, как у источника"), name),
-        el("label", {className: "field"}, L(`In English, for the timetable (Tablo fits ${dictionary.title_chars})`,
-          `По-английски, для расписания (в Tablo влезает ${dictionary.title_chars})`), title),
-        el("label", {className: "field"}, L(`The abbreviation for deadlines, up to ${dictionary.abbr_chars} characters`,
-          `Сокращение для дедлайнов, до ${dictionary.abbr_chars} символов`), abbr),
-        actions);
+      openCard(cardHead(el("span", {className: item.cancelled ? "struck" : ""}, item.title),
+        item.cancelled ? el("span", {className: "late"}, L("Cancelled", "Отменена")) : null),
+        cardList(facts), actions.length ? cardList(actions) : null, foot ? cardFoot(foot) : null);
     }
 
-    // --- HSE App X ------------------------------------------------------------
+    async function hiddenEventsPage() {
+      const data = await get("api/agenda");
+      return [el("h1", {className: "title"}, L("Removed events", "Убранные события")),
+        data.hidden.length ? section(null, data.hidden.map((ev) => {
+          const restore = el("button", {className: "small"}, L("Restore", "Вернуть"));
+          restore.onclick = () => change("api/events/" + ev.id, "PATCH", {hidden: false}, "api/agenda");
+          return row({title: ev.title, sub: [when(ev.start, ev.end), ev.chat].filter(Boolean).join(" · "), control: restore});
+        })) : empty(L("Nothing is removed.", "Убранных нет."))];
+    }
+
+    // A new event, an event changed, or a RUZ class moved or cancelled (a correction of your own).
+    async function eventPage(item) {
+      const data = await get("api/agenda");
+      const ev = item && item.event;
+      const isClass = item && (item.source === "ruz" || (ev && ev.correction));
+      const title = input(item && item.title, {maxLength: 120, placeholder: L("Meeting with the supervisor",
+        "Встреча с научруком")});
+      const day = input(item ? item.start.slice(0, 10) : data.today, {type: "date"});
+      const from = input(item ? item.start.slice(11, 16) : "10:00", {type: "time"});
+      const to = input(item ? item.end.slice(11, 16) : "11:20", {type: "time"});
+      const where = input(item && item.location, {placeholder: L("Room or link", "Аудитория или ссылка")});
+      let kind = item ? item.type : "Event";
+      let required = item ? item.required : true;
+      let cancelled = item ? item.cancelled : false;
+      const fields = isClass ? [] : [field(L("Title", "Название"), title),
+        field(L("Type", "Тип"), selectOf([...new Set([...EVENT_TYPES, kind])].map((t) => [t, TYPES()[t] || t.toLowerCase()]),
+          kind, (value) => { kind = value; }))];
+      fields.push(field(L("Date", "Дата"), day), field(L("From", "С"), from), field(L("To", "До"), to),
+        field(L("Where", "Где"), where));
+      const save = () => {
+        const start = `${day.value}T${from.value}:00`, end = `${day.value}T${to.value}:00`;
+        if (isClass) return submit("api/corrections", "POST", {class_uid: item.uid, start, end, room: where.value, cancelled});
+        const values = {title: title.value, kind, start, end, room: where.value, required};
+        return ev ? submit("api/events/" + ev.id, "PATCH", values) : submit("api/events", "POST", values);
+      };
+      return [el("h1", {className: "title"}, !item ? L("New event", "Новое событие") : isClass
+        ? L("Move or cancel the class", "Перенести или отменить пару") : L("Edit event", "Изменить событие")),
+        isClass ? el("p", {className: "subtitle"}, item.title) : null,
+        section(null, fields),
+        section(null, [isClass ? row({title: L("Cancelled", "Отменена"), control: toggle(cancelled, (on) => { cancelled = on; })})
+          : row({title: L("Required", "Обязательное"), sub: L("off: the optional calendar", "выкл. — необязательный календарь"),
+            control: toggle(required, (on) => { required = on; })})],
+        isClass ? L("RUZ stays as it is: your correction moves or cancels the class in the calendars and in Tablo, until "
+          + "RUZ itself changes the class.", "РУЗ не меняется: ваша правка переносит или отменяет пару в календарях и "
+          + "в Tablo, пока РУЗ сам её не изменит.")
+          : ev && !ev.own ? L("The chat's event is hidden and your own copy with the changes takes its place: a later "
+            + "message of the chat does not undo them.", "Событие чата скроется, его место займёт ваша копия с "
+            + "изменениями: следующее сообщение чата их не отменит.")
+          : L("Your own event: in the calendars and in Tablo.", "Своё событие — в календарях и в Tablo.")),
+        primary(L("Save", "Сохранить"), save)];
+    }
+
+    // --- Study: grades and sheets ----------------------------------------------------------------------
+
+    async function studyPage() {
+      const segments = [["grades", L("Grades", "Оценки")], ["sheets", L("Sheets", "Листочки")]];
+      const bar = el("div", {className: "segmented"}, ...segments.map(([name, title]) => {
+        const b = el("button", {className: name === nav.study ? "on" : ""}, title);
+        b.onclick = () => { if (nav.study !== name) { haptic(); nav.study = name; draw(true); } };
+        return b;
+      }));
+      const body = await (nav.study === "sheets" ? sheetsPart() : gradesPart());
+      return [header(L("Study", "Учёба"), addButton(nav.study === "sheets" ? "sheet" : "grade")), bar, body];
+    }
+
+    const bookName = (sheet) => sheet.name || sheet.title || sheet.label || L("Untitled gradebook", "Таблица без названия");
+
+    function gradeValue(g) {
+      return gradeMark(g.value) + (g.bonus ? ` ${g.bonus > 0 ? "+" : ""}${g.bonus}` : "");
+    }
+
+    function gradeRow(g, sheet) {
+      return row({title: el("span", {}, g.label, g.new ? el("span", {className: "badge"}, L("new", "новая")) : null,
+        g.edited ? el("span", {className: "badge muted"}, L("edited", "изменена")) : null),
+        sub: g.max && g.max !== 10 ? `${g.raw} ${L("of", "из")} ${g.max}` : null,
+        value: el("b", {className: "grade"}, gradeValue(g)), go: () => gradeCard(g, sheet)});
+    }
+
+    async function gradesPart() {
+      const data = await get("api/grades");
+      const parts = [];
+      if (!data.student) {
+        parts.push(notice(L("Set your name: without it the gradebooks are not read.",
+          "Укажите ФИО: без него таблицы не читаются."), () => push(gradesSettingsPage)));
+      }
+      for (const sheet of data.sheets) {
+        parts.push(el("h3", {}, bookName(sheet)));
+        const rows = sheet.error ? [row({title: el("span", {className: "late"}, L("Cannot be read: ", "Не читается: ")
+          + sheet.error), wrap: true})] : sheet.grades.length ? sheet.grades.map((g) => gradeRow(g, sheet))
+          : [row({title: sheet.ok_at ? L("No grades yet", "Оценок пока нет") : L("Not read yet", "Ещё не прочитана"),
+            className: "faded"})];
+        rows.push(row({title: L("About the gradebook", "О таблице"), className: "more", go: () => openBook(sheet.id)}));
+        parts.push(el("div", {className: "list"}, ...rows));
+      }
+      const courses = [...new Set(data.manual.map((g) => g.course))];
+      for (const course of courses) {
+        parts.push(el("h3", {}, course + L(" · added by you", " · добавлены вами")),
+          el("div", {className: "list"}, ...data.manual.filter((g) => g.course === course).map((g) => gradeRow(g, null))));
+      }
+      if (!data.sheets.length && !data.manual.length) parts.push(empty(L("No grades yet.", "Оценок пока нет.")));
+      parts.push(el("div", {className: "list", style: "margin-top: 22px"},
+        button(L("Add a gradebook", "Добавить таблицу оценок"), () => push(gradesSettingsPage), {plus: true})));
+      return parts;
+    }
+
+    function gradeCard(g, sheet) {
+      const remove = () => change("api/grades/items/" + encodeURIComponent(g.id), "DELETE", undefined, "api/grades");
+      openCard(cardHead(g.label, sheet ? bookName(sheet) : g.course),
+        cardList(fact(L("Grade", "Оценка"), el("b", {}, gradeValue(g))),
+          g.max && g.max !== 10 ? fact(L("Points", "Баллы"), `${g.raw} ${L("of", "из")} ${g.max}`) : null,
+          g.edited ? fact(L("In the gradebook", "В таблице"), gradeMark(g.sheet_value)) : null,
+          fact(L("From", "Откуда"), sheet ? bookName(sheet) : L("added by you", "добавлена вами"))),
+        cardList(cardButton(L("Edit", "Изменить"), () => push(() => gradePage(g, sheet))),
+          !sheet ? cardButton(L("Delete", "Удалить"), async () => {
+            if (await askYes(L("Delete this grade?", "Удалить оценку?"))) remove();
+          }, {danger: true}) : g.edited ? cardButton(L("Back to the gradebook's grade", "Вернуть оценку из таблицы"), remove,
+            {danger: true}) : null),
+        sheet ? cardFoot(L("A changed grade stays yours until the gradebook itself changes it.",
+          "Изменённая оценка остаётся вашей, пока её не поменяют в самой таблице.")) : null);
+    }
+
+    // A grade added by hand, or one of them or of a sheet changed.
+    async function gradePage(g, sheet) {
+      const data = await get("api/grades");
+      const courses = [...new Set([...data.manual.map((m) => m.course), ...data.sheets.map((s) => s.label).filter(Boolean)])];
+      const course = input(g ? g.course : "", {maxLength: data.label_chars, placeholder: "Calc"});
+      course.setAttribute("list", "courses");
+      const label = input(g && g.label, {maxLength: 60, placeholder: L("Test 2", "Контрольная 2")});
+      const value = input(g ? gradeMark(g.value) : "", {type: "number", min: 0, max: 10, step: 0.1, inputMode: "decimal",
+        placeholder: "8"});
+      const save = () => {
+        const values = {label: label.value, value: Number(value.value)};
+        if (!sheet) values.course = course.value;
+        return g ? submit("api/grades/items/" + encodeURIComponent(g.id), "PATCH", values)
+          : submit("api/grades/items", "POST", values);
+      };
+      return [el("h1", {className: "title"}, g ? L("Edit grade", "Изменить оценку") : L("New grade", "Новая оценка")),
+        el("datalist", {id: "courses"}, ...courses.map((c) => el("option", {value: c}))),
+        section(null, [sheet ? field(L("Gradebook", "Таблица"), el("span", {className: "grow"}, bookName(sheet)))
+          : field(L("Course", "Предмет"), course), field(L("What", "За что"), label),
+          field(L("Grade", "Оценка"), value)],
+          L("On the 0–10 scale, as in Tablo and in the «Grades» topic.", "По шкале 0–10, как в Tablo и в теме «Оценки».")),
+        primary(L("Save", "Сохранить"), save)];
+    }
+
+    // --- a gradebook: its name, a check, the markup of its tabs ----------------------------------------
+    // Haiku marks up every tab: the header rows, the column of each graded work, its maximum and bonus column, its
+    // label; a summary tab is skipped. Your own markup of a tab stands over Haiku's until you give the tab back.
+
+    const bookPath = (id) => "api/grades/sheets/" + encodeURIComponent(id);
+    const openBook = (id) => push(Object.assign(() => gradebookPage(id), {book: id}));
+
+    async function gradebookPage(id) {
+      const book = await get(bookPath(id));
+      const name = input(book.name, {maxLength: 60, placeholder: book.title || L("Name", "Название")});
+      name.onchange = () => change(bookPath(id), "PATCH", {name: name.value.trim()}, bookPath(id), "api/grades");
+      const label = input(book.label, {maxLength: book.label_chars, placeholder: book.course});
+      label.onchange = () => change(bookPath(id), "PATCH", {label: label.value.trim()}, bookPath(id), "api/grades");
+      const read = async () => {
+        await change(bookPath(id) + "/read", "POST", {}, bookPath(id));
+        tell(L("Reading the gradebook: the result comes in a few seconds.",
+          "Таблица читается: результат будет через несколько секунд."));
+        setTimeout(() => { if (nav.stack.at(-1)?.book === id) { delete cache[bookPath(id)]; redraw(); } }, 5000);
+      };
+      const tabs = book.tabs.map((tab) => row({title: tab.tab, sub: tabSummary(tab),
+        value: tab.by === "you" ? L("yours", "ваша") : null, go: () => push(Object.assign(() => tabPage(id, tab.tab),
+        {book: id}))}));
+      return [el("h1", {className: "title"}, bookName(book)),
+        book.error ? notice(L("Cannot be read: ", "Не читается: ") + book.error) : null,
+        section(null, [field(L("Name", "Название"), name), field(L("Course", "Курс"), label)],
+          L(`The name is for this app; the course goes in front of every grade in Tablo and in the «Grades» topic, up `
+            + `to ${book.label_chars} characters: «${book.course} HW 1».`, `Название — для этого приложения; курс стоит `
+            + `перед каждой оценкой в Tablo и в теме «Оценки», до ${book.label_chars} символов: «${book.course} HW 1».`)),
+        section(L("Check", "Проверка"), [
+          fact(L("Read", "Прочитана"), book.ok_at ? when(book.ok_at) : L("not yet", "ещё нет")),
+          fact(L("Looked up by", "Строка ищется по"), book.student || null),
+          fact(L("Grades found", "Найдено оценок"), String(book.items)),
+          button(L("Read now", "Прочитать сейчас"), read),
+          button(L("Open in Google Sheets", "Открыть в Google Таблицах"), () => tg.openLink(book.url))],
+          L("It is read every 30 minutes by itself.", "Сама таблица читается раз в 30 минут.")),
+        section(L("Tabs", "Вкладки"), tabs.length ? tabs : [row({title: L("No tab with your row", "Нет вкладок с вашей строкой"),
+          className: "faded"})], L("Tap a tab to see which columns are which works, and to correct it.",
+          "Нажмите на вкладку, чтобы увидеть, какая колонка — какая работа, и поправить.")),
+        el("div", {className: "list", style: "margin-top: 26px"}, button(L("Remove the gradebook", "Удалить таблицу"), async () => {
+          if (!await askYes(L(`Remove «${bookName(book)}»? Its grades are forgotten; added again, its first reading is a `
+            + "snapshot.", `Удалить «${bookName(book)}»? Её оценки забудутся; если добавить снова, первое чтение будет `
+            + "снимком."))) return;
+          const all = await get("api/grades");
+          await submit("api/grades", "PATCH", {sheets: all.sheets.filter((s) => s.id !== id)
+            .map((s) => ({url: s.url, label: s.label, name: s.name}))});
+        }, {danger: true}))];
+    }
+
+    function tabSummary(tab) {
+      if (tab.by === "failed") return el("span", {className: "late"}, L("Haiku could not mark it up", "Haiku не смогла разметить"));
+      if (tab.skip) return L("skipped: ", "пропущена: ") + (tab.reason || L("no graded works", "нет оценок"));
+      return count(tab.works.length, ["work", "works"], ["работа", "работы", "работ"]) + L(` · your row ${tab.own_row}`,
+        ` · ваша строка ${tab.own_row}`);
+    }
+
+    // The owner's markup of a tab: what is sent replaces Haiku's.
+    function saveTab(id, tab, works, skip = tab.skip) {
+      return change(`${bookPath(id)}/tabs/${encodeURIComponent(tab.tab)}`, "PUT", {skip, works: works.map((w) =>
+        ({column: w.column, label: w.label, max: w.max, bonus_column: w.bonus_column}))}, bookPath(id), "api/grades");
+    }
+
+    async function tabPage(id, name) {
+      const book = await get(bookPath(id));
+      const tab = book.tabs.find((t) => t.tab === name);
+      if (!tab) return [empty(L("No such tab.", "Такой вкладки нет."))];
+      const works = tab.works.map((w) => row({title: w.label,
+        sub: L(`column ${w.column}`, `колонка ${w.column}`) + (w.header ? ` · «${w.header}»` : "")
+          + (w.max !== 10 ? L(` · out of ${w.max}`, ` · из ${w.max}`) : "") + (w.bonus_column ? L(` · bonus ${w.bonus_column}`,
+            ` · бонус ${w.bonus_column}`) : ""),
+        value: w.raw === null ? "—" : w.max !== 10 ? `${w.raw} → ${gradeMark(w.value)}` : gradeMark(w.value),
+        go: () => push(Object.assign(() => workPage(id, name, w), {book: id}))}));
+      const free = tab.columns.filter((c) => !tab.works.some((w) => w.column === c.column));
+      return [el("h1", {className: "title"}, tab.tab),
+        el("p", {className: "subtitle"}, bookName(book) + " · " + (tab.by === "you" ? L("marked up by you", "размечена вами")
+          : tab.by === "failed" ? L("not marked up", "не размечена") : L("marked up by Haiku", "размечена Haiku"))),
+        section(null, [row({title: L("Read this tab", "Читать вкладку"), sub: tab.skip && tab.reason ? tab.reason : null,
+          control: toggle(!tab.skip, (on) => saveTab(id, tab, tab.works, !on))})]),
+        tab.skip ? null : section(L("Works", "Работы"), [...works,
+          free.length ? button(L("Add a column", "Добавить колонку"), () => push(Object.assign(() => workPage(id, name, null),
+            {book: id})), {plus: true}) : null],
+          L(`Your row is row ${tab.own_row}. On the right: the number in it and the grade on 0–10.`,
+            `Ваша строка — ${tab.own_row}-я. Справа — число в ней и оценка по шкале 0–10.`)),
+        section(L("All columns of your row", "Все колонки вашей строки"), tab.columns.map((c) => row({
+          title: c.header || L("(no header)", "(без шапки)"), sub: L(`column ${c.column}`, `колонка ${c.column}`), value: c.value})),
+          L("As they are in the gradebook: to check that no work is missed.",
+            "Как в таблице: чтобы проверить, что ни одна работа не пропущена.")),
+        tab.by === "you" ? el("div", {className: "list", style: "margin-top: 26px"}, button(L("Give it back to Haiku",
+          "Вернуть разметку Haiku"), async () => {
+          if (await askYes(L("Drop your markup of this tab? Haiku's markup of it applies again.",
+            "Сбросить вашу разметку вкладки? Haiku разметит её заново при следующем чтении."))) {
+            change(`${bookPath(id)}/tabs/${encodeURIComponent(tab.tab)}`, "DELETE", undefined, bookPath(id), "api/grades");
+          }
+        }, {danger: true})) : null];
+    }
+
+    // A work of a tab: which column, its label, its maximum, its bonus column; or a new one from a free column.
+    async function workPage(id, name, work) {
+      const book = await get(bookPath(id));
+      const tab = book.tabs.find((t) => t.tab === name);
+      const fresh = !work;
+      const free = tab.columns.filter((c) => !tab.works.some((w) => w.column === c.column));
+      let column = work ? work.column : free[0]?.column;
+      const label = input(work && work.label, {maxLength: book.label_budget, placeholder: "HW 3"});
+      const max = input(work ? work.max : 10, {type: "number", min: 1, step: "any", inputMode: "decimal"});
+      let bonus = work && work.bonus_column || "";
+      const describe = (c) => `${c.column} · ${c.header || "—"} · ${c.value}`;
+      const others = tab.works.filter((w) => w !== work);
+      return [el("h1", {className: "title"}, fresh ? L("Add a column", "Добавить колонку") : work.label),
+        el("p", {className: "subtitle"}, `${bookName(book)} · ${tab.tab}`),
+        section(null, [
+          fresh ? field(L("Column", "Колонка"), selectOf(free.map((c) => [c.column, describe(c)]), column,
+            (value) => { column = value; })) : fact(L("Column", "Колонка"), describe(tab.columns.find((c) => c.column === work.column)
+              || {column: work.column, header: work.header, value: work.raw})),
+          field(L("Label", "Название"), label), field(L("Out of", "Из"), max),
+          field(L("Bonus", "Бонус"), selectOf([["", L("none", "нет")], ...tab.columns.filter((c) => c.column !== column)
+            .map((c) => [c.column, describe(c)])], bonus, (value) => { bonus = value; }))],
+          L(`The label goes after the course: «${book.course} ${work ? work.label : "HW 3"}», up to ${book.label_budget} `
+            + "characters. «Out of»: the maximum points, the grade is turned to 0–10 by it.", `Название идёт после курса: `
+            + `«${book.course} ${work ? work.label : "HW 3"}», до ${book.label_budget} символов. «Из» — максимум баллов, `
+            + "по нему оценка переводится в 0–10.")),
+        primary(L("Save", "Сохранить"), async () => {
+          const edited = {column, label: label.value.trim(), max: Number(max.value) || 10, bonus_column: bonus || null};
+          await saveTab(id, tab, fresh ? [...tab.works, edited] : tab.works.map((w) => w === work ? edited : w));
+          back();
+        }),
+        fresh ? null : el("div", {className: "list", style: "margin-top: 24px"}, button(L("Not a grade", "Это не оценка"),
+          async () => { await saveTab(id, tab, others); back(); }, {danger: true}))];
+    }
+
+    function sheetTitle(sheet) {
+      return (sheet.title || sheet.course || L("Sheet", "Листочек"))
+        + (sheet.number ? L(" · sheet ", " · листочек ") + sheet.number : "");
+    }
+
+    async function sheetsPart() {
+      const data = await get("api/sheets");
+      const parts = [];
+      if (data.status.error) parts.push(notice(L("Reading a PDF failed: ", "Чтение PDF не удалось: ") + data.status.error));
+      if (!data.sheets.length) {
+        return [...parts, empty(L("No sheets yet: PDFs with tasks from the chats come here.",
+          "Листочков пока нет: сюда попадут PDF с заданиями из чатов."))];
+      }
+      parts.push(el("div", {className: "list", style: "margin-top: 14px"}, ...data.sheets.map((sheet) => {
+        const sub = [sheet.due ? L("due ", "срок ") + dayLabel(sheet.due) : null,
+          sheet.versions > 1 ? count(sheet.versions, ["version", "versions"], ["версия", "версии", "версий"]) : null,
+          sheet.own ? L("you", "вы") : sheet.chat];
+        const status = sheet.status === "failed" ? el("span", {className: "late"}, L("not posted", "не отправлен"))
+          : sheet.status === "new" ? L("waiting for the forum", "ждёт отправки") : null;
+        return row({title: sheetTitle(sheet), sub: el("span", {}, ...[status, ...sub].filter(Boolean)
+          .flatMap((part, i) => i ? [" · ", part] : [part])), value: sheet.created_at.slice(8, 10) + "."
+          + sheet.created_at.slice(5, 7), go: () => sheetCard(sheet, data)});
+      })));
+      parts.push(el("p", {className: "foot"}, L("PDFs with tasks; the bot posts them to the «Sheets» topic, a new "
+        + "version replaces the file in the old message.", "PDF с заданиями; бот присылает их в тему «Листочки», новая "
+        + "версия заменяет файл в старом сообщении.")));
+      return parts;
+    }
+
+    // The sheets posted before this one that it may be a new version of.
+    function olderSheets(sheet, data) {
+      if (sheet.status !== "posted" || sheet.versions !== 1 || !sheet.file) return [];
+      return data.sheets.filter((other) => other.status === "posted" && other.first !== sheet.first
+        && other.created_at <= sheet.created_at);
+    }
+
+    function sheetCard(sheet, data) {
+      const older = olderSheets(sheet, data);
+      openCard(cardHead(sheetTitle(sheet), sheet.name),
+        sheet.summary ? el("div", {className: "list"}, el("div", {className: "text"}, sheet.summary)) : null,
+        cardList(fact(L("Due", "Срок"), sheet.due ? dayLabel(sheet.due) : null),
+          fact(L("Versions", "Версий"), sheet.versions > 1 ? String(sheet.versions) : null),
+          fact(L("From", "Откуда"), sheet.own ? L("added by you", "добавлен вами") : sheet.chat),
+          fact(L("Received", "Получен"), when(sheet.created_at)),
+          sheet.status === "failed" ? fact(L("Not posted", "Не отправлен"), el("span", {className: "late"}, sheet.error))
+            : null,
+          sheet.status === "new" ? fact(L("State", "Состояние"), L("waiting for the forum", "ждёт отправки в форум")) : null),
+        cardList(cardButton(L("Edit", "Изменить"), () => push(() => sheetEditPage(sheet))),
+          older.length ? cardButton(L("It is a new version of another sheet…", "Это новая версия другого листка…"),
+            () => push(() => joinPage(sheet, older))) : null,
+          sheet.own ? cardButton(L("Delete", "Удалить"), async () => {
+            if (await askYes(L("Delete this sheet? Its message in «Sheets» is deleted too.",
+              "Удалить листочек? Его сообщение в «Листочках» тоже удалится."))) {
+              change("api/sheets/" + sheet.id, "DELETE", undefined, "api/sheets");
+            }
+          }, {danger: true}) : null),
+        cardFoot(L("Changes go to its message in the «Sheets» topic.", "Изменения попадут в его сообщение в теме «Листочки».")));
+    }
+
+    function sheetFields(sheet) {
+      const course = input(sheet && (sheet.title || sheet.course), {maxLength: 40, placeholder: "Calculus"});
+      const number = input(sheet && sheet.number, {maxLength: 10, placeholder: "5", inputMode: "numeric"});
+      const due = input(sheet && sheet.due, {type: "date"});
+      return {course, number, due, rows: [field(L("Course", "Предмет"), course), field(L("Number", "Номер"), number),
+        field(L("Due", "Срок"), due)]};
+    }
+
+    function sheetEditPage(sheet) {
+      const f = sheetFields(sheet);
+      const summary = el("textarea", {className: "prose", rows: 4, value: sheet.summary || "",
+        placeholder: L("What is in it", "Что в нём")});
+      return [el("h1", {className: "title"}, L("Edit sheet", "Изменить листочек")),
+        el("p", {className: "subtitle"}, sheet.name),
+        section(null, f.rows),
+        section(L("Description", "Описание"), [el("div", {className: "row"}, summary)],
+          L("The caption of its message in the «Sheets» topic is updated.",
+            "Подпись его сообщения в теме «Листочки» обновится.")),
+        primary(L("Save", "Сохранить"), () => submit("api/sheets/" + sheet.id, "PATCH", {course: f.course.value,
+          number: f.number.value, due: f.due.value || null, summary: summary.value}))];
+    }
+
+    function sheetNewPage() {
+      const f = sheetFields(null);
+      const file = el("input", {type: "file", accept: "application/pdf", className: "grow"});
+      return [el("h1", {className: "title"}, L("New sheet", "Новый листочек")),
+        section(null, [field("PDF", file), ...f.rows],
+          L("The bot posts it to the «Sheets» topic as one from a chat. Only your own sheets can be deleted.",
+            "Бот пришлёт его в тему «Листочки», как листочек из чата. Удалить можно только свои листочки.")),
+        primary(L("Add", "Добавить"), () => {
+          if (!file.files.length) return tell(L("Choose a PDF.", "Выберите PDF."));
+          const form = new FormData();
+          form.append("file", file.files[0]);
+          for (const name of ["course", "number", "due"]) form.append(name, f[name].value);
+          return submit("api/sheets", "POST", form);
+        })];
+    }
+
+    function joinPage(sheet, older) {
+      return [el("h1", {className: "title"}, L("A new version of…", "Новая версия…")),
+        el("p", {className: "subtitle"}, `${sheetTitle(sheet)} · ${sheet.name}`),
+        section(null, older.map((other) => row({title: sheetTitle(other), sub: [other.name, other.chat].filter(Boolean)
+          .join(" · "), go: async () => {
+          if (!await askYes(L(`Join it to «${sheetTitle(other)}»? The file replaces the old one in its message, and `
+            + "this sheet's own message is deleted.", `Присоединить к «${sheetTitle(other)}»? Файл заменит старый в его `
+            + "сообщении, а отдельное сообщение этого листка удалится."))) return;
+          submit(`api/sheets/${sheet.id}/join`, "POST", {previous: other.id});
+        }})))];
+    }
+
+    // --- Settings ----------------------------------------------------------------------------------------
+
+    // What does not work and needs a hand, each with the screen where it is put right (or none: then it is the
+    // server's .env).
+    async function problems() {
+      const [list, deadlines, agenda, grades, llm] = await Promise.all([maybe("api/chats"), maybe("api/deadlines"),
+        maybe("api/agenda"), maybe("api/grades"), maybe("api/llm")]);
+      const found = [];
+      const twin = list && list.twin;
+      if (twin && !twin.account) found.push([L("The twin is not logged in: no chat is read", "Твинк не вошёл: чаты не читаются"), chatsPage]);
+      else if (twin && twin.error) found.push([L("The twin: ", "Твинк: ") + twin.error, chatsPage]);
+      if (list && list.mail && list.mail.configured && list.mail.error) {
+        found.push([L("The mail is not read: ", "Почта не читается: ") + list.mail.error, null]);
+      }
+      if (deadlines && deadlines.hseapp.login_needed) found.push([L("HSE App X needs a login", "HSE App X: нужен вход"), hsePage]);
+      if (agenda && agenda.ruz.error) found.push([L("RUZ is not read: ", "РУЗ не читается: ") + agenda.ruz.error, null]);
+      if (agenda && !agenda.calendar) {
+        found.push([L("The iCal feeds are off: set CALENDAR_SECRET or CALENDAR_PUBLIC_SECRET in .env",
+          "Ленты iCal выключены: задайте CALENDAR_SECRET или CALENDAR_PUBLIC_SECRET в .env"), null]);
+      }
+      for (const sheet of grades ? grades.sheets : []) {
+        if (sheet.error) {
+          found.push([L("A gradebook is not read: ", "Таблица оценок не читается: ") + (sheet.title || sheet.label
+            || L("untitled", "без названия")), gradesSettingsPage]);
+        }
+      }
+      if (list && list.images && list.images.error) {
+        found.push([L("Reading images failed: ", "Чтение картинок не удалось: ") + list.images.error, imagesPage]);
+      }
+      if (llm && llm.level !== "ok") {
+        found.push([llm.level === "hard" ? L("The LLM limit is spent: calls wait until midnight",
+          "Лимит LLM исчерпан: вызовы стоят до полуночи") : L("Over 80 % of the LLM limit", "Больше 80 % лимита LLM"),
+        llmPage]);
+      }
+      return found;
+    }
+
+    // The number of problems on the Settings tab.
+    async function markProblems() {
+      const found = await problems();
+      const tab = $("tabbar").querySelector('[data-tab="settings"]');
+      if (!tab) return;
+      tab.querySelector(".count")?.remove();
+      if (found.length) tab.append(el("span", {className: "count"}, String(found.length)));
+    }
+
+    async function settingsPage() {
+      const [list, general, hse, llm, summaries, grades, agenda, found] = await Promise.all([get("api/chats"),
+        maybe("api/general"), maybe("api/hseapp"), maybe("api/llm"), maybe("api/summaries"), maybe("api/grades"),
+        maybe("api/agenda"), problems()]);
+      const on = list.chats.filter((chat) => chat.settings.enabled).length;
+      const bad = (text) => el("span", {className: "late"}, text);
+      const mail = list.mail || {};
+      const parts = [header(L("Settings", "Настройки"))];
+      if (found.length) {
+        parts.push(section(L("Needs attention", "Требует внимания"), found.map(([text, page]) => row({title: text,
+          wrap: true, lead: el("span", {className: "dot"}), go: page ? () => push(page) : null})),
+          found.some(([, page]) => !page) ? L("Without an arrow: the server's .env and logs.",
+            "Без стрелки — .env и логи на сервере.") : null));
+      }
+      parts.push(section(L("Sources", "Источники"), [
+        row({title: L("Twin and chats", "Твинк и чаты"), lead: tile("chats", "#3e88f7"), go: () => push(chatsPage),
+          value: list.twin && !list.twin.account ? bad(L("login needed", "нужен вход")) : `${on} ${L("of", "из")} ${list.chats.length}`}),
+        mail.configured ? row({title: L("Mail", "Почта"), lead: tile("mail", "#4f9df0"), value: mail.error
+          ? bad(L("error", "ошибка")) : count(mail.letters, ["letter", "letters"], ["письмо", "письма", "писем"])
+            + (mail.ok_at ? " · " + mail.ok_at.slice(11, 16) : "")}) : null,
+        agenda ? row({title: L("RUZ timetable", "Расписание РУЗ"), lead: tile("schedule", "#e0605a"), value: agenda.ruz.error
+          ? bad(L("error", "ошибка")) : count(agenda.ruz.classes, ["class", "classes"], ["пара", "пары", "пар"])}) : null,
+        hse ? row({title: "HSE App X", lead: tile("hse", "#5a5ce0"), go: () => push(hsePage), value: !hse.status.enabled
+          ? L("off", "выкл.") : hse.status.logged_in ? L("on", "вкл.") : bad(L("login needed", "нужен вход"))}) : null,
+        grades ? row({title: L("Gradebooks", "Таблицы оценок"), lead: tile("grades", "#34a853"),
+          value: String(grades.sheets.length), go: () => push(gradesSettingsPage)}) : null,
+      ]));
+      parts.push(section(L("Processing", "Обработка"), [
+        general ? row({title: L("Batches and news", "Пачки и новости"), lead: tile("clock", "#f09a37"),
+          value: L(`every ${general.batch_hours} h`, `раз в ${general.batch_hours} ч`), go: () => push(generalPage)}) : null,
+        summaries ? row({title: L("Daily summary", "Ежедневная сводка"), lead: tile("summary", "#e0605a"),
+          value: summaries.time, go: () => push(summariesPage)}) : null,
+        row({title: L("Whole PDFs", "PDF целиком"), lead: tile("sheet", "#8e8e93"), go: () => push(sheetsSettingsPage)}),
+        list.images && list.images.daily !== undefined ? row({title: L("Images", "Картинки"), lead: tile("image", "#2fb5a0"),
+          value: L(`${list.images.daily} a day`, `${list.images.daily} в день`), go: () => push(imagesPage)}) : null,
+        row({title: L("Course dictionary", "Словарь предметов"), lead: tile("book", "#a76fdc"), go: () => push(subjectsPage)}),
+      ]));
+      if (llm) {
+        parts.push(section("LLM", [row({title: L("Spending and limit", "Расход и лимит"), lead: tile("bolt", "#f2b544"),
+          value: `${usd(llm.spent_usd)} / ${usd(llm.limit_usd)}`, go: () => push(llmPage)})]));
+      }
+      if (general) {
+        parts.push(section(L("Language", "Язык"), [
+          row({title: "Mini App", control: selectOf(Object.entries(LANGUAGE_NAMES), general.miniapp_language, async (value) => {
+            try {
+              await send("api/general", "PATCH", {miniapp_language: value});
+            } catch (error) {
+              tell(error.message);
+            }
+            start("settings");
+          })}),
+          row({title: L("Forum", "Форум"), control: selectOf(Object.entries(LANGUAGE_NAMES), general.forum_language,
+            (value) => act("api/general", "PATCH", {forum_language: value}))}),
+        ], L("The forum: the bot's messages, buttons and answers, the summaries and the sheets' descriptions; news and "
+          + "deadline titles stay English, as Tablo gets them.", "Форум — сообщения, кнопки и ответы бота, сводки и "
+          + "описания листочков; новости и названия дедлайнов остаются английскими, как в Tablo.")));
+      }
+      parts.push(el("p", {className: "foot", style: "margin-top: 22px"}, L("The secrets (tokens, the mail password, "
+        + "the RUZ link) are in .env on the server.", "Секреты (токены, пароль почты, ссылка РУЗ) — в .env на сервере.")));
+      return parts;
+    }
+
+    async function imagesPage() {
+      const list = await get("api/chats");
+      const img = list.images;
+      return [el("h1", {className: "title"}, L("Images", "Картинки")),
+        img.error ? notice(L("Reading failed: ", "Чтение не удалось: ") + img.error) : null,
+        section(null, [row({title: L("A day, at most", "В день, не больше"), sub: L("read today: ", "сегодня прочитано: ")
+          + img.today, control: numberInput(img.daily, {min: 0, max: 500}, async (daily) => {
+          try {
+            list.images = await send("api/images", "PATCH", {daily});
+          } catch (error) {
+            tell(error.message);
+          }
+          redraw();
+        })})], L("In chats with «Images» on Haiku reads photos and screenshots before they are parsed. Above 80 % of "
+          + "the LLM limit images are not read.", "В чатах с включёнными «Картинками» фото и скриншоты читает Haiku, "
+          + "прежде чем их разберут. Выше 80 % лимита LLM картинки не читаются."))];
+    }
+
+    // --- the twin and the chats ------------------------------------------------------------------
+
+    let chatQuery = "";
+
+    async function chatsPage() {
+      const list = await get("api/chats");
+      const parts = [el("h1", {className: "title"}, L("Twin and chats", "Твинк и чаты"))];
+      if (list.twin) parts.push(twinSection(list.twin));
+      if (list.chats.length >= 8) {
+        const search = el("input", {className: "search", type: "search", value: chatQuery,
+          placeholder: L("Find a chat", "Найти чат")});
+        search.oninput = () => { chatQuery = search.value; drawChatList(list); };
+        parts.push(el("div", {style: "margin-top: 22px"}, search));
+      }
+      parts.push(el("div", {id: "chat-list"}, ...chatListParts(list)));
+      return parts;
+    }
+
+    function drawChatList(list) {
+      $("chat-list").replaceChildren(...chatListParts(list).flat());
+    }
+
+    function chatListParts(list) {
+      const query = chatQuery.trim().toLowerCase();
+      const shown = list.chats.filter((chat) => chat.title.toLowerCase().includes(query));
+      const parts = [];
+      for (const [title, enabled, foot] of [[L("Read", "Читаются"), true, L("Tap a chat to set it up.",
+        "Нажмите на чат, чтобы настроить его.")], [L("Off", "Выключены"), false,
+        L("A new chat comes switched off.", "Новый чат появляется выключенным.")]]) {
+        const part = shown.filter((chat) => chat.settings.enabled === enabled);
+        if (part.length) parts.push(...section(`${title} · ${part.length}`, part.map((chat) => chatRow(chat, list)), foot));
+      }
+      if (!shown.length) parts.push(empty(list.chats.length ? L("Nothing found.", "Ничего не нашлось.") :
+        L("No chats yet: they come when the twin logs in to Telegram.",
+          "Чатов пока нет: они появятся, когда твинк войдёт в Telegram.")));
+      return parts;
+    }
+
+    function chatFacts(chat) {
+      const facts = [KINDS()[chat.kind] || chat.kind];
+      if (chat.settings.study) facts.push(L("study", "учебный"));
+      if (chat.settings.filter === "important") facts.push(L("important only", "только важное"));
+      return facts.join(" · ");
+    }
+
+    function chatRow(chat, list) {
+      const node = row({title: chat.title, sub: chatFacts(chat), control: toggle(chat.settings.enabled, async (on) => {
+        try {
+          chat.settings = await send("api/chats/" + chat.id, "PATCH", {enabled: on});
+        } catch (error) {
+          tell(error.message);
+        }
+        drawChatList(list);
+      })});
+      node.classList.add("tap");
+      node.onclick = () => push(() => chatPage(chat.id));
+      node.querySelector(".switch").onclick = (event) => event.stopPropagation();
+      return node;
+    }
+
+    async function chatPage(chatId) {
+      const list = await get("api/chats");
+      const chat = list.chats.find((c) => c.id === chatId);
+      if (!chat) return [empty(L("No such chat.", "Такого чата нет."))];
+      const senders = await get(`api/chats/${chat.id}/senders`);
+      const s = chat.settings;
+      const change = async (values) => {
+        try {
+          chat.settings = await send("api/chats/" + chat.id, "PATCH", values);
+        } catch (error) {
+          tell(error.message);
+        }
+        redraw();
+      };
+      const people = senders.map((sender) => row({title: sender.name || `id ${sender.id}`,
+        sub: sender.messages ? L("messages: ", "сообщений: ") + sender.messages : L("has not written yet", "ещё не писал"),
+        control: toggle(s.people.includes(sender.id), (on) => change({people: on ? [...s.people, sender.id] :
+          s.people.filter((id) => id !== sender.id)}))}));
+      return [el("h1", {className: "title"}, chat.title),
+        el("p", {className: "subtitle"}, [KINDS()[chat.kind] || chat.kind, chat.username ? "@" + chat.username : "",
+          chat.messages ? L("messages: ", "сообщений: ") + chat.messages : ""].filter(Boolean).join(" · ")),
+        section(null, [row({title: L("Read the chat", "Читать чат"), control: toggle(s.enabled, (on) => change({enabled: on}))})],
+          L("Its messages go to the base.", "Сообщения попадают в базу.")),
+        section(L("What to do with it", "Что с ним делать"), FLAGS().map(([name, title, hint]) =>
+          row({title, sub: hint, control: toggle(s[name], (on) => change({[name]: on}))}))),
+        section(L("Parsing", "Разбор"), [
+          row({title: L("Messages", "Сообщения"), control: selectOf([["all", L("all", "все")],
+            ["important", L("important only", "только важное")]], s.filter, (value) => change({filter: value}))}),
+          row({title: L("How often", "Как часто"), control: selectOf([["", L("as all chats", "как у всех")],
+            ...BATCH_HOURS.map((h) => [String(h), L(`every ${h} h`, `каждые ${h} ч`)])], String(s.batch_hours ?? ""),
+            (value) => change({batch_hours: value ? Number(value) : null}))})],
+          L("Important: the people below, pins, files, dates and the replies to them.",
+            "Важное — люди ниже, закрепы, файлы, даты и ответы на них.")),
+        section(L("Important people", "Важные люди"), people.length ? people : [row({title: L("Nobody has written yet",
+          "Пока никто не писал"), className: "faded"})],
+          L("For «important only» and «Urgent»: the group head, the teachers.",
+            "Для «только важное» и «Срочно»: староста, преподаватели."))];
+    }
+
+    // The twin's account: who it is, or the login by phone, code and password.
+    function twinSection(t) {
+      const step = async (path, values = {}) => {
+        try {
+          await send(path, "POST", values);
+        } catch (error) {
+          tell(error.message);
+        }
+        draw(true);  // the chats come with a login
+      };
+      if (t.account) {
+        const out = el("button", {className: "small"}, L("Log out", "Выйти"));
+        out.onclick = async () => {
+          if (await askYes(L("Log out of the twin's account? The chats stop being read, their settings stay.",
+            "Выйти из аккаунта твинка? Чаты перестанут читаться, их настройки останутся."))) step("api/twin/logout");
+        };
+        return section(L("Twin", "Твинк"), [row({title: t.account.name + (t.account.username ? " · @" + t.account.username : ""),
+          sub: t.error ? el("span", {className: "warn"}, t.error) : L("reads the enabled chats", "читает включённые чаты"),
+          control: out})]);
+      }
+      let input, go, field, foot;
+      if (t.login && t.login.step === "code") {
+        input = el("input", {className: "grow", inputMode: "numeric", autocomplete: "one-time-code", placeholder: "12345"});
+        field = L("Code", "Код");
+        go = () => step("api/twin/login", {code: input.value});
+        foot = L(`The code comes to the twin's Telegram (${t.login.phone}) or by SMS. Do not forward it in Telegram: `
+          + "then it stops working.", `Код приходит в Telegram твинка (${t.login.phone}) или по SMS. Не пересылайте `
+          + "его в Telegram: тогда он перестаёт действовать.");
+      } else if (t.login && t.login.step === "password") {
+        input = el("input", {className: "grow", type: "password", autocomplete: "current-password"});
+        field = L("Password", "Пароль");
+        go = () => step("api/twin/login", {password: input.value});
+        foot = L("The twin's cloud password.", "Облачный пароль твинка.");
+      } else {
+        input = el("input", {className: "grow", type: "tel", autocomplete: "tel", placeholder: "+7…"});
+        field = L("Phone", "Телефон");
+        go = () => step("api/twin/login", {phone: input.value});
+        foot = L("A Telegram account of its own, not your main one and not a bot.",
+          "Отдельный аккаунт Telegram, не ваш основной и не бот.");
+      }
+      input.onkeydown = (event) => { if (event.key === "Enter") go(); };
+      const rows = [row({title: el("span", {style: "color: var(--hint); min-width: 72px; display: inline-block"}, field),
+        control: input}),
+        button(t.login ? L("Log in", "Войти") : L("Get a code", "Получить код"), go)];
+      if (t.login) rows.push(button(L("Cancel", "Отмена"), () => step("api/twin/cancel"), {danger: true}));
+      return [notice(L("The twin reads no chats: ", "Твинк не читает чаты: ") + (t.error || L("a login is needed",
+        "нужен вход"))), ...section(L("Twin login", "Вход твинка"), rows, foot)];
+    }
+
+    // --- HSE App X ------------------------------------------------------------------------------
 
     // Login links are made ahead: Telegram opens a link only right in a tap, not after a request. Each link holds
     // a PKCE state and the service keeps the last five, so links are made on opening the screen and after a tap,
     // never while the screen waits for the login to come back.
-    const hse = {state: null, link: null, appLink: null, watch: null, note: null, fallback: false, pasted: ""};
+    const hse = {link: null, appLink: null, watch: null, note: null, fallback: false, pasted: "", busy: false,
+                 failed: false};
+    const LOGIN_ERROR = "login needed: ";  // the status error when the session ended (collectors/hseapp.py)
+    const loggedIn = () => L("Logged in. The deadlines will be updated within a minute.",
+                             "Вход выполнен. Дедлайны обновятся в течение минуты.");
 
-    async function loadHseApp() {
-      stopHseWatch();
-      hse.link = hse.appLink = null;
-      try {
-        hse.state = await call("api/hseapp");
-      } catch (error) {
-        $("tab-hseapp").replaceChildren(el("p", {className: "hint"}, error.message));
-        return;
-      }
-      renderHseApp();
-      if (hse.state.status.enabled) prepareHseLinks();
+    async function hseLink(app) {
+      return (await send("api/hseapp/link", "POST", {app})).url;
     }
 
     // The link back to the service always, the one with the app's address once its section is open.
     async function prepareHseLinks() {
+      if (hse.busy) return;
+      hse.busy = true;
       try {
         if (!hse.link) hse.link = await hseLink(false);
         if (hse.fallback && !hse.appLink) hse.appLink = await hseLink(true);
       } catch (error) {
         hse.note = {ok: false, text: error.message};
+        hse.failed = true;
       }
-      renderHseApp();
-    }
-
-    async function hseLink(app) {
-      return (await send("api/hseapp/link", "POST", {app})).url;
+      hse.busy = false;
+      if (nav.stack.at(-1) === hsePage) redraw();
     }
 
     function stopHseWatch() {
@@ -1118,25 +1819,24 @@
       stopHseWatch();
       const started = Date.now();
       hse.watch = setInterval(async () => {
-        if (Date.now() - started > 5 * 60 * 1000 || $("tab-hseapp").hidden) return stopHseWatch();
+        if (Date.now() - started > 5 * 60 * 1000 || nav.stack.at(-1) !== hsePage) return stopHseWatch();
         try {
+          const before = await get("api/hseapp");
           const state = await call("api/hseapp");
-          const changed = JSON.stringify(state) !== JSON.stringify(hse.state);
+          const changed = JSON.stringify(state) !== JSON.stringify(before);
           if (state.status.logged_in && changed) {
             stopHseWatch();
-            if (!hse.state.status.logged_in) hse.note = {ok: true, text: loggedIn()};
+            if (!before.status.logged_in) hse.note = {ok: true, text: loggedIn()};
           }
-          hse.state = state;
-          if (changed) renderHseApp();  // not on every tick: a half-pasted address must stay
+          if (changed) {  // not on every tick: a half-pasted address must stay
+            cache["api/hseapp"] = Promise.resolve(state);
+            redraw();
+          }
         } catch (error) {
           stopHseWatch();
         }
       }, 3000);
     }
-
-    const loggedIn = () => L("Logged in. The deadlines will be updated within a minute.",
-                             "Вход выполнен. Дедлайны обновятся в течение минуты.");
-    const LOGIN_ERROR = "login needed: ";  // the status error when the session ended (collectors/hseapp.py)
 
     function openHseLink(app) {
       tg.openLink(app ? hse.appLink : hse.link);
@@ -1147,258 +1847,270 @@
       prepareHseLinks();
     }
 
-    async function changeHseApp(values) {
-      hse.note = null;
-      try {
-        hse.state = await send("api/hseapp", "PATCH", values);
-      } catch (error) {
-        tg.showAlert(error.message);
-      }
-      renderHseApp();
-      if (hse.state.status.enabled) prepareHseLinks();
-    }
-
-    function hseCards(s) {
-      const cards = [];
-      if (!s.enabled) {
-        cards.push(el("div", {className: "card"}, L("Polling is off: the deadlines of HSE App X are not updated.",
-          "Опрос выключен: дедлайны из HSE App X не обновляются.")));
-      } else if (s.logged_in) {
-        cards.push(el("div", {className: "card"}, L(`Logged in. Active deadlines: ${s.items}, done: ${s.done}`,
-          `Вход выполнен. Активных дедлайнов: ${s.items}, выполненных: ${s.done}`)
-          + (s.ok_at ? L(". Updated ", ". Обновлено ") + when(s.ok_at) + "." : L(". The poll is coming.",
-            ". Опрос — вот-вот."))));
-      }
-      const ended = (s.error || "").startsWith(LOGIN_ERROR);  // Keycloak ended the session: said in the card below
+    async function hsePage() {
+      const state = await get("api/hseapp");
+      const s = state.status;
+      if (s.enabled && !hse.failed && (!hse.link || (hse.fallback && !hse.appLink))) setTimeout(prepareHseLinks);
+      const ended = (s.error || "").startsWith(LOGIN_ERROR);  // Keycloak ended the session
+      const parts = [el("h1", {className: "title"}, "HSE App X"),
+        el("p", {className: "subtitle"}, L("Deadlines from the HSE app.", "Дедлайны из приложения ВШЭ."))];
       if (s.enabled && !s.logged_in) {
-        const why = ended ? L(`The login is no longer valid (${s.error.slice(LOGIN_ERROR.length)}): the deadlines`,
-          `Вход больше не действует (${s.error.slice(LOGIN_ERROR.length)}): дедлайны`)
-          : L("A login is needed: without it the deadlines", "Нужен вход: без него дедлайны");
-        cards.push(el("div", {className: "card warn"}, why + L(" of HSE App X are not updated",
-          " из HSE App X не обновляются") + (s.items || s.done ? L(": the list has the last ones received.",
-          " — в списке последнее полученное.") : ".")));
+        parts.push(notice((ended ? L(`The login is no longer valid (${s.error.slice(LOGIN_ERROR.length)})`,
+          `Вход больше не действует (${s.error.slice(LOGIN_ERROR.length)})`) : L("A login is needed", "Нужен вход"))
+          + L(": the deadlines are not updated", ": дедлайны не обновляются")
+          + (s.items || s.done ? L(", the list has the last ones received.", ", в списке последнее полученное.") : ".")));
       }
-      if (s.error && s.enabled && !ended) {
-        cards.push(el("div", {className: "card warn"}, L("The last error: ", "Последняя ошибка: ") + s.error));
-      }
+      if (s.error && s.enabled && !ended) parts.push(notice(L("The last error: ", "Последняя ошибка: ") + s.error));
       if (s.labels_error) {
-        cards.push(el("div", {className: "card warn"}, L("The English titles wait for Haiku: ",
-          "Английские названия ждут Haiku: ") + s.labels_error + L(". Until then new deadlines have Russian titles.",
-          ". Пока у новых дедлайнов русские названия.")));
+        parts.push(notice(L("The English titles wait for Haiku: ", "Английские названия ждут Haiku: ") + s.labels_error));
       }
-      return cards;
-    }
-
-    function renderHseApp() {
-      const s = hse.state.status;
-      const parts = [el("p", {className: "hint"}, L("Deadlines from the HSE app. Log in once: after that the service "
-        + "renews the login itself at every poll, every 15 minutes.", "Дедлайны из приложения ВШЭ. Войти нужно один "
-        + "раз: дальше сервис сам продлевает вход при каждом опросе, раз в 15 минут.")), ...hseCards(s),
-        el("div", {className: "list"}, settingRow(L("Poll HSE App X", "Опрашивать HSE App X"),
-          L("one client per login: HSE App X must be off in Tablo",
-            "только один клиент на вход: в Tablo HSE App X должен быть выключен"),
-          toggle(s.enabled, (on) => changeHseApp({enabled: on}))))];
+      parts.push(section(null, [row({title: L("Poll HSE App X", "Опрашивать HSE App X"),
+        control: toggle(s.enabled, async (on) => {
+          hse.note = null;
+          await act("api/hseapp", "PATCH", {enabled: on});
+        })})], L("One client per login: HSE App X must be off in Tablo.",
+        "Только один клиент на вход: в Tablo HSE App X должен быть выключен.")));
+      if (s.enabled && s.logged_in) {
+        parts.push(section(L("State", "Состояние"), [
+          row({title: L("Active deadlines", "Активные дедлайны"), value: String(s.items)}),
+          row({title: L("Done", "Выполненные"), value: String(s.done)}),
+          row({title: L("Updated", "Обновлено"), value: s.ok_at ? when(s.ok_at) : L("soon", "вот-вот")})]));
+      }
       if (s.enabled) {
-        const login = el("button", {disabled: !hse.link}, s.logged_in ? L("Log in again", "Войти заново") :
-          L("Log in", "Войти"));
-        login.onclick = () => openHseLink(false);
-        parts.push(el("div", {className: "actions"}, login));
+        parts.push(el("div", {className: "list", style: "margin-top: 22px"},
+          button(s.logged_in ? L("Log in again", "Войти заново") : L("Log in", "Войти"), () => openHseLink(false),
+            {disabled: !hse.link})));
+        parts.push(el("p", {className: "foot" + (hse.note && !hse.note.ok ? " warn" : "")}, hse.note ? hse.note.text
+          : L("Once is enough: after that the service renews the login itself every 15 minutes.",
+            "Достаточно одного раза: дальше сервис сам продлевает вход раз в 15 минут.")));
+        parts.push(hseFallback(state));
       }
-      if (hse.note) parts.push(el("p", {className: hse.note.ok ? "ok" : "warn"}, hse.note.text));
-      if (s.enabled) parts.push(hseFallback());
-      $("tab-hseapp").replaceChildren(...parts);
+      return parts;
     }
 
-    function hseFallback() {
-      const box = el("details", {className: "card", open: hse.fallback},
-        el("summary", {}, L("The browser did not come back", "Браузер не вернулся")));
-      box.ontoggle = () => {
-        if (box.open === hse.fallback) return;  // set by the render, not by a tap
-        hse.fallback = box.open;
-        if (box.open) prepareHseLinks();
-      };
-      const appLogin = el("button", {disabled: !hse.appLink}, L("Log in with the app's address",
-        "Войти с адресом приложения"));
-      appLogin.onclick = () => openHseLink(true);
+    function hseFallback(state) {
+      const head = row({title: L("The browser did not come back", "Браузер не вернулся"), go: () => {
+        hse.fallback = !hse.fallback;
+        if (hse.fallback) prepareHseLinks();
+        redraw();
+      }});
+      if (!hse.fallback) return el("div", {className: "list", style: "margin-top: 22px"}, head);
       const pasted = el("textarea", {rows: 3, value: hse.pasted, autocomplete: "off", spellcheck: false,
         placeholder: "https://…/hseapp/callback?state=…&code=…"});
       pasted.oninput = () => { hse.pasted = pasted.value; };
-      const saveLogin = el("button", {}, L("Save the login", "Сохранить вход"));
-      saveLogin.onclick = async () => {
-        try {
-          hse.state = await send("api/hseapp/login", "POST", {url: hse.pasted});
-          hse.note = {ok: true, text: loggedIn()};
-          hse.pasted = "";
-          hse.fallback = false;
-          stopHseWatch();
-        } catch (error) {
-          hse.note = {ok: false, text: error.message};
+      return [el("div", {className: "list", style: "margin-top: 22px"}, head,
+        button(L("Log in with the app's address", "Войти с адресом приложения"), () => openHseLink(true),
+          {disabled: !hse.appLink}),
+        el("div", {className: "row"}, pasted),
+        button(L("Save the login", "Сохранить вход"), async () => {
+          try {
+            cache["api/hseapp"] = Promise.resolve(await send("api/hseapp/login", "POST", {url: hse.pasted}));
+            hse.note = {ok: true, text: loggedIn()};
+            hse.pasted = "";
+            hse.fallback = false;
+            stopHseWatch();
+          } catch (error) {
+            hse.note = {ok: false, text: error.message};
+          }
+          redraw();
+        })),
+      el("p", {className: "foot"}, L(`After the login the browser comes back to ${state.callback} by itself. If that `
+        + "page did not open, copy its whole address (it has code= in it) and paste it above within a minute. If HSE "
+        + "does not let you in, log in with the app's address: the browser cannot open ru.hse.hseappx://…, and that "
+        + "address is the one to copy (Safari loses it, Chrome is needed).", `После входа браузер сам возвращается на `
+        + `${state.callback}. Если эта страница не открылась, скопируйте её адрес целиком (в нём есть code=) и вставьте `
+        + "выше в течение минуты. Если ВШЭ не пускает, войдите с адресом приложения: браузер не сможет открыть "
+        + "ru.hse.hseappx://… — этот адрес и нужно скопировать (Safari его теряет, нужен Chrome)."))];
+    }
+
+    // --- grades: the name and the sheets ---------------------------------------------------------
+
+    const draft = {url: "", label: ""};  // the sheet being added: kept across redraws
+
+    // The service reads the sheets at once after a change; their state comes a few seconds later.
+    function rereadGrades() {
+      setTimeout(() => {
+        if (nav.stack.at(-1) === gradesSettingsPage || (nav.tab === "study" && !nav.stack.length)) {
+          delete cache["api/grades"];
+          redraw();
         }
-        renderHseApp();
+      }, 5000);
+    }
+
+    async function gradesSettingsPage() {
+      const data = await get("api/grades");
+      const sheetsOf = () => data.sheets.map((sheet) => ({url: sheet.url, label: sheet.label, name: sheet.name}));
+      const change = async (values) => (await act("api/grades", "PATCH", values)) && rereadGrades();
+      const student = el("input", {className: "grow", value: data.student, placeholder: L("Surname Name", "Фамилия Имя")});
+      student.onchange = async () => {
+        const value = student.value.trim();
+        if (data.student && data.sheets.length && !await askYes(L("Change the name? The gradebooks are read anew: the "
+          + "first reading tells of no new grades.", "Сменить ФИО? Таблицы прочитаются заново: первое чтение — без "
+          + "сообщений о новых оценках."))) {
+          student.value = data.student;
+          return;
+        }
+        change({student: value});
       };
-      box.append(
-        el("p", {className: "hint"}, L(`After the login the browser comes back to ${hse.state.callback} by itself and `
-          + "says «Logged in». If that page did not open, copy its whole address from the address bar (it has code= in "
-          + "it) and paste it below within a minute.", `После входа браузер сам возвращается на ${hse.state.callback} `
-          + "и пишет «Вход выполнен». Если эта страница не открылась, скопируйте её адрес из адресной строки целиком "
-          + "(в нём есть code=) и вставьте ниже в течение минуты.")),
-        el("p", {className: "hint"}, L("If HSE does not let you in with this address, log in with the app's address: "
-          + "after the login the browser cannot open ru.hse.hseappx://…, and that address is the one to copy (Safari "
-          + "loses it, Chrome is needed).", "Если ВШЭ не пускает с этим адресом, войдите с адресом приложения: после "
-          + "входа браузер не сможет открыть ru.hse.hseappx://… — этот адрес и нужно скопировать (Safari его "
-          + "теряет, нужен Chrome).")),
-        el("div", {className: "actions"}, appLogin), pasted, el("div", {className: "actions"}, saveLogin));
-      return box;
+      const url = el("input", {className: "grow", value: draft.url, autocomplete: "off", spellcheck: false,
+        placeholder: "https://docs.google.com/spreadsheets/d/…"});
+      url.oninput = () => { draft.url = url.value; };
+      const label = el("input", {className: "grow", value: draft.label, maxLength: data.label_chars, placeholder: "DM"});
+      label.oninput = () => { draft.label = label.value; };
+      return [el("h1", {className: "title"}, L("Gradebooks", "Таблицы оценок")),
+        section(L("You", "Вы"), [row({title: student}),
+          row({title: L("A grade is new, days", "Оценка новая, дней"), control: numberInput(data.window_days,
+            {min: 1, max: 60}, (value) => change({window_days: value}))})],
+          L("The name as in the gradebooks: «Иванов Иван» finds «ИВАНОВ Иван Петрович». A new grade is given to Tablo "
+            + "this many days.", "ФИО как в таблицах: «Иванов Иван» найдёт «ИВАНОВ Иван Петрович». Новую оценку столько "
+            + "дней отдаёт API для Tablo.")),
+        section(L("Gradebooks", "Таблицы"), data.sheets.map((sheet) => {
+          const name = bookName(sheet);
+          const facts = [];
+          if (sheet.label) facts.push(L("course ", "курс ") + sheet.label);
+          if (sheet.ok_at) facts.push(L(`${sheet.items} grades, read ${when(sheet.ok_at)}`,
+            `оценок: ${sheet.items}, прочитана ${when(sheet.ok_at)}`));
+          else if (!sheet.error) facts.push(L("not read yet", "ещё не прочитана"));
+          const sub = el("div", {}, facts.join(" · "));
+          if (sheet.error) sub.append(el("div", {className: "warn"}, L("Cannot be read: ", "Не читается: ") + sheet.error));
+          if (sheet.unread && sheet.unread.length) {
+            sub.append(el("div", {className: "warn"}, L("Haiku could not mark up the tabs: ", "Haiku не смогла "
+              + "разметить вкладки: ") + sheet.unread.join(", ")));
+          }
+          return row({title: name, wrap: true, sub, go: () => openBook(sheet.id)});
+        }), data.sheets.length ? L("Every 30 minutes the service finds your row by the name; Haiku finds the header "
+          + "itself. A new or changed grade comes to the «Grades» topic.", "Раз в 30 минут сервис ищет вашу строку по "
+          + "ФИО; шапку Haiku находит сама. Новая или изменённая оценка приходит в тему «Оценки».") : null),
+        section(L("Add a gradebook", "Добавить таблицу"), [row({title: url}), row({title: label}),
+          button(L("Add", "Добавить"), async () => {
+            if (await act("api/grades", "PATCH", {sheets: [...sheetsOf(), {url: draft.url, label: draft.label}]})) {
+              draft.url = draft.label = "";
+              redraw();
+              rereadGrades();
+            }
+          })], L(`A teacher's Google Sheets table open to anyone with the link, and the course in front of every grade, up to `
+          + `${data.label_chars} characters (empty: the start of the table's title). The first reading is a snapshot, `
+          + "without messages.", `Таблица преподавателя в Google, открытая по ссылке, и курс перед каждой оценкой, до `
+          + `${data.label_chars} символов (пусто — начало названия таблицы). Первое чтение — снимок, без сообщений.`))];
     }
 
-    // --- the twin's account ----------------------------------------------------
+    // --- summaries, sheets, batches ------------------------------------------------------------------
 
-    async function twinStep(path, values = {}) {
-      try {
-        const state = await send(path, "POST", values);
-        renderTwin(state);
-        if (state.account) {  // logged in: its chats are listed now
-          chats = (await call("api/chats")).chats;
-          $("search").hidden = chats.length < 8;
-          renderList();
-        }
-      } catch (error) {
-        tg.showAlert(error.message);
-      }
+    async function summariesPage() {
+      const data = await get("api/summaries");
+      const time = el("input", {type: "time", value: data.time, step: 60});
+      time.onchange = () => act("api/summaries", "PATCH", {time: time.value});
+      const okAt = data.status.ok_at;
+      return [el("h1", {className: "title"}, L("Summaries", "Сводки")),
+        data.status.error ? notice(L("The last summary: ", "Последняя сводка: ") + data.status.error) : null,
+        section(null, [row({title: L("Daily, at", "Ежедневно, в"), sub: L("Moscow time", "по Москве"), control: time})],
+          (okAt ? L(`The last one was made on ${okAt.slice(8, 10)}.${okAt.slice(5, 7)} at ${okAt.slice(11, 16)}. `,
+            `Последняя собрана ${okAt.slice(8, 10)}.${okAt.slice(5, 7)} в ${okAt.slice(11, 16)}. `) : "")
+          + L("Any enabled chat can be summed up on demand: /summary [chat] [3h | 2d | 20.10-22.10] [en | ru].",
+            "Сводку любого включённого чата можно попросить: /summary [чат] [3h | 2d | 20.10-22.10] [en | ru].")),
+        section(L("Chats in the summary", "Чаты в сводке"), data.chats.length ? data.chats.map((item) =>
+          row({title: item.title, go: () => push(() => chatPage(item.id))})) : [row({title: L("None yet",
+          "Пока ни одного"), className: "faded"})], L("A chat is in the summary when «Summary» is on in its settings.",
+          "Чат попадает в сводку, если в его настройках включена «Сводка»."))];
     }
 
-    function twinForm(label, input, button, cancel) {
-      const go = el("button", {type: "submit"}, button);
-      const form = el("form", {}, el("label", {className: "field"}, label, input), el("div", {className: "actions"}, go));
-      if (cancel) {
-        const stop = el("button", {type: "button", className: "danger"}, L("Cancel", "Отмена"));
-        stop.onclick = () => twinStep("api/twin/cancel");
-        form.lastChild.append(stop);
-      }
-      return form;
+    async function sheetsSettingsPage() {
+      const data = await get("api/sheets");
+      const change = (name) => (value) => act("api/sheets", "PATCH", {[name]: value});
+      return [el("h1", {className: "title"}, L("Sheets", "Листочки")),
+        section(L("Reading a whole PDF", "Чтение PDF целиком"), [
+          row({title: L("Pages", "Страниц"), control: numberInput(data.limits.pdf_pages, {min: 1, max: 50}, change("pdf_pages"))}),
+          row({title: L("Tokens", "Токенов"), sub: L("a scan is about 3000 a page", "скан — около 3000 на страницу"),
+            control: numberInput(data.limits.pdf_tokens, {min: 1000, max: 200000}, change("pdf_tokens"))})],
+          L("For chats with «Whole PDF»: how much of one file is read, whichever comes first.",
+            "Для чатов с «PDF целиком»: сколько читать из одного файла, что наступит раньше."))];
     }
 
-    function renderTwin(t) {
-      const box = $("twin");
-      box.hidden = false;
-      if (t.account) {
-        const out = el("button", {className: "link"}, L("Log out", "Выйти"));
-        out.onclick = () => tg.showConfirm(L("Log out of the twin's account? The chats stop being read, their settings "
-          + "stay.", "Выйти из аккаунта твинка? Чаты перестанут читаться, их настройки останутся."),
-          (yes) => { if (yes) twinStep("api/twin/logout"); });
-        box.replaceChildren(el("div", {className: "row", style: "padding: 0"},
-          el("div", {className: "main"}, el("div", {className: "title"}, L("Twin: ", "Твинк: ") + t.account.name
-            + (t.account.username ? " (@" + t.account.username + ")" : "")),
-            el("div", {className: t.error ? "hint warn" : "hint"}, t.error || L("reads the enabled chats",
-              "читает включённые чаты"))),
-          out));
-        return;
-      }
-      let form;
-      if (t.login && t.login.step === "code") {
-        const code = el("input", {inputMode: "numeric", autocomplete: "one-time-code", placeholder: "12345"});
-        form = twinForm(L(`The code from the twin's Telegram (${t.login.phone})`,
-          `Код из Telegram твинка (${t.login.phone})`), code, L("Log in", "Войти"), true);
-        form.onsubmit = (event) => { event.preventDefault(); twinStep("api/twin/login", {code: code.value}); };
-        box.replaceChildren(el("p", {className: "hint"}, L("The code comes to the twin's Telegram or by SMS. Do not "
-          + "forward it in Telegram: then it stops working.", "Код приходит в Telegram твинка или по SMS. Не "
-          + "пересылайте его в Telegram: тогда он перестаёт действовать.")), form);
-      } else if (t.login && t.login.step === "password") {
-        const password = el("input", {type: "password", autocomplete: "current-password"});
-        form = twinForm(L("The twin's cloud password", "Облачный пароль твинка"), password, L("Log in", "Войти"), true);
-        form.onsubmit = (event) => { event.preventDefault(); twinStep("api/twin/login", {password: password.value}); };
-        box.replaceChildren(form);
-      } else {
-        const phone = el("input", {type: "tel", autocomplete: "tel", placeholder: "+7…"});
-        form = twinForm(L("The twin's phone", "Телефон твинка"), phone, L("Get a code", "Получить код"), false);
-        form.onsubmit = (event) => { event.preventDefault(); twinStep("api/twin/login", {phone: phone.value}); };
-        box.replaceChildren(el("div", {className: "warn"}, L("The twin reads no chats: ", "Твинк не читает чаты: ")
-          + (t.error || L("a login is needed", "нужен вход")) + "."),
-          el("p", {className: "hint"}, L("A Telegram account of its own, not your main one and not a bot.",
-            "Отдельный аккаунт Telegram, не ваш основной и не бот.")), form);
-      }
+    async function generalPage() {
+      const data = await get("api/general");
+      return [el("h1", {className: "title"}, L("Batches and news", "Пачки и новости")),
+        section(null, [row({title: L("Parse batches", "Разбирать пачки"), control: selectOf(data.batch_choices.map((n) =>
+          [String(n), L(`every ${n} h`, `раз в ${n} ч`)]), String(data.batch_hours),
+          (value) => act("api/general", "PATCH", {batch_hours: Number(value)}))})],
+          L("At the hours of the day divisible by N; a chat may have its own.",
+            "В часы суток, кратные N; у чата может быть свой.")),
+        section(null, [row({title: L("News lives, hours", "Новости живут, часов"), control: numberInput(data.news_ttl_hours,
+          {min: 1, max: 168}, (value) => act("api/general", "PATCH", {news_ttl_hours: value}))})],
+          L("In the forum and in Tablo; non-study messages older than this are parsed without the model.",
+            "В форуме и в Tablo; неучебное старше этого разбирается без модели."))];
     }
 
-    // --- general settings -----------------------------------------------------
+    // --- the dictionary ------------------------------------------------------------------------------
 
-    const PRICE_FIELDS = () => [["input", L("input", "вход")], ["output", L("output", "выход")],
-                                ["long_input", L("input > 100K", "вход > 100K")],
-                                ["long_output", L("output > 100K", "выход > 100K")]];
+    let subjectQuery = "";
 
-    async function loadGeneral() {
-      try {
-        renderGeneral(await call("api/general"));
-      } catch (error) {
-        $("tab-general").replaceChildren(el("p", {className: "hint"}, error.message));
-      }
+    async function subjectsPage() {
+      const dictionary = await get("api/subjects");
+      const list = el("div");
+      const fill = () => {
+        const query = subjectQuery.trim().toLowerCase();
+        const shown = dictionary.subjects.filter((s) => [s.name, s.title, s.abbr].some((t) => t.toLowerCase().includes(query)));
+        list.replaceChildren(...(shown.length ? section(null, shown.map((subject) => row({title: subject.name,
+          sub: `${subject.title} · ${subject.abbr}`, value: subject.manual ? L("manual", "вручную") : "Haiku",
+          go: () => push(() => subjectPage(subject, dictionary))}))) : [empty(dictionary.subjects.length
+          ? L("Nothing found.", "Ничего не нашлось.") : L("The dictionary is empty: courses come from RUZ and from the "
+            + "deadlines.", "Словарь пуст: курсы появятся из РУЗ и из дедлайнов."))]));
+      };
+      fill();
+      const search = el("input", {className: "search", type: "search", value: subjectQuery,
+        placeholder: L("Find a course", "Найти курс")});
+      search.oninput = () => { subjectQuery = search.value; fill(); };
+      return [el("h1", {className: "title"}, L("Course dictionary", "Словарь предметов")),
+        el("p", {className: "subtitle"}, L("How the courses are named in the timetable, the feed and the deadlines.",
+          "Как курсы называются в расписании, ленте и дедлайнах.")),
+        dictionary.error ? notice(L("Haiku did not answer: ", "Haiku не ответила: ") + dictionary.error
+          + L(". Until it does, the names are the sources'.", ". Пока названия — как у источника.")) : null,
+        search,
+        el("div", {className: "list"}, button(L("Add an entry", "Добавить запись"),
+          () => push(() => subjectPage(null, dictionary)), {plus: true})),
+        list,
+        el("p", {className: "foot"}, L("Haiku never changes a manual entry; a deleted entry Haiku names again.",
+          "Ручные записи Haiku не меняет; удалённую запись Haiku назовёт заново."))];
     }
 
-    async function changeGeneral(values) {
-      try {
-        renderGeneral(await send("api/general", "PATCH", values));
-      } catch (error) {
-        tg.showAlert(error.message);
-        loadGeneral();
-      }
+    function subjectPage(subject, dictionary) {
+      const fresh = !subject;
+      subject = subject || {name: "", title: "", abbr: "", manual: true};
+      const name = el("input", {className: "grow", value: subject.name, readOnly: !fresh, placeholder: "Математический анализ"});
+      const title = el("input", {className: "grow", value: subject.title, maxLength: 40, placeholder: "Calculus"});
+      const abbr = el("input", {className: "grow", value: subject.abbr, maxLength: dictionary.abbr_chars, placeholder: "Calc"});
+      const label = (text) => el("span", {style: "color: var(--hint); width: 92px; flex: none"}, text);
+      const field = (text, input) => el("div", {className: "row"}, label(text), input);
+      return [el("h1", {className: "title"}, fresh ? L("New entry", "Новая запись") : subject.name),
+        section(null, [field(L("Source", "Источник"), name), field(L("Title", "Название"), title),
+          field(L("Short", "Кратко"), abbr)],
+          L(`The source's name; the English title for the timetable (Tablo fits ${dictionary.title_chars}); the `
+            + `abbreviation for deadlines, up to ${dictionary.abbr_chars} characters.`, `Название как у источника; `
+            + `английское — для расписания (в Tablo влезает ${dictionary.title_chars}); сокращение — для дедлайнов, до `
+            + `${dictionary.abbr_chars} символов.`) + " " + (subject.manual ? L("The entry is set by hand.",
+            "Запись задана вручную.") : L("Now it is Haiku's answer; saved, it becomes manual.",
+            "Сейчас это ответ Haiku; после сохранения станет ручной."))),
+        primary(L("Save", "Сохранить"), async () => {
+          try {
+            await send("api/subjects", "PUT", {name: name.value, title: title.value, abbr: abbr.value});
+            back();
+          } catch (error) {
+            tell(error.message);
+          }
+        }),
+        fresh ? null : el("div", {className: "list", style: "margin-top: 24px"}, button(subject.manual
+          ? L("Delete the entry", "Удалить запись") : L("Delete Haiku's answer", "Удалить ответ Haiku"), async () => {
+          if (!await askYes(L("Delete it? Haiku names the course again.", "Удалить? Haiku назовёт курс заново."))) return;
+          try {
+            await send("api/subjects", "DELETE", {name: subject.name});
+            back();
+          } catch (error) {
+            tell(error.message);
+          }
+        }, {danger: true}))];
     }
 
-    // The languages (р. 41): the Mini App's is drawn anew at once, the forum's applies to what the bot says next.
-    function languageSelect(value, onchange) {
-      const select = el("select", {}, ...Object.entries(LANGUAGE_NAMES).map(([code, name]) =>
-        el("option", {value: code}, name)));
-      select.value = value;
-      select.onchange = () => onchange(select.value);
-      return select;
-    }
-
-    async function changeLanguage(value) {
-      try {
-        await send("api/general", "PATCH", {miniapp_language: value});
-      } catch (error) {
-        tg.showAlert(error.message);
-        loadGeneral();
-        return;
-      }
-      start("general");
-    }
-
-    function renderGeneral(data) {
-      const every = el("select", {}, ...data.batch_choices.map((n) =>
-        el("option", {value: n, selected: n === data.batch_hours}, L(`${n} h`, `${n} ч`))));
-      every.onchange = () => changeGeneral({batch_hours: Number(every.value)});
-      const ttl = el("input", {type: "number", min: 1, max: 168, step: 1, value: data.news_ttl_hours});
-      ttl.onchange = () => changeGeneral({news_ttl_hours: Number(ttl.value)});
-      const parts = [el("p", {className: "hint"}, L("The other settings are on their own screens: chats, LLM spending, "
-        + "sheets, summaries, grades, HSE App X. The secrets (tokens, the mail password, the RUZ link) are in .env on "
-        + "the server.", "Остальные настройки — на своих экранах: чаты, расход LLM, листочки, сводки, оценки, HSE App X. "
-        + "Секреты (токены, пароль почты, ссылка РУЗ) — в .env на сервере.")),
-        el("div", {className: "list"},
-          settingRow(L("Batch parsing", "Разбор пачек"), L("every N hours, at the hours of the day divisible by N; a "
-            + "chat may have its own", "каждые N часов, в часы суток, кратные N; у чата может быть свой"), every),
-          settingRow(L("News lives, h", "Новости живут, ч"), L("in the forum and in Tablo; non-study messages older "
-            + "than this are parsed without the model", "в форуме и в Tablo; неучебное старше этого разбирается без "
-            + "модели"), ttl)),
-        el("h3", {}, L("Language", "Язык")),
-        el("div", {className: "list"},
-          settingRow("Mini App", L("this app and the HSE App X login page", "это приложение и страница входа HSE App X"),
-            languageSelect(data.miniapp_language, changeLanguage)),
-          settingRow(L("Forum", "Форум"), L("the bot's messages, buttons and answers, the summaries and the sheets' "
-            + "descriptions; news and deadline titles stay English, as Tablo gets them", "сообщения, кнопки и ответы "
-            + "бота, сводки и описания листочков; новости и названия дедлайнов остаются английскими, как в Tablo"),
-            languageSelect(data.forum_language, (value) => changeGeneral({forum_language: value}))))];
-      for (const [model, price] of Object.entries(data.llm_prices)) {
-        parts.push(el("h3", {}, L(`${model} · $ per 1M tokens`, `${model} · $ за 1 млн токенов`)));
-        parts.push(el("div", {className: "list"}, ...PRICE_FIELDS().map(([key, title]) => {
-          const input = el("input", {type: "number", min: 0, step: 0.01, value: price[key]});
-          input.onchange = () => changeGeneral({llm_prices: {...data.llm_prices,
-                                                             [model]: {...price, [key]: Number(input.value)}}});
-          return settingRow(title, "", input);
-        })));
-      }
-      $("tab-general").replaceChildren(...parts);
-    }
-
-    // --- LLM spending ---------------------------------------------------------
+    // --- LLM spending ---------------------------------------------------------------------------------
 
     const TASKS = () => L({batch: "Batch parsing", image: "Images", pdf: "Whole PDF", summary: "Summaries",
                            subjects: "Dictionary", grades: "Grades", hseapp_labels: "HSE App X labels"},
@@ -1406,42 +2118,11 @@
                            subjects: "Словарь", grades: "Оценки", hseapp_labels: "Метки HSE App X"});
     const PERIODS = () => [["today", L("Today", "Сегодня")], ["week", L("Week", "Неделя")],
                            ["month", L("Month", "Месяц")]];
-    const llmView = {data: null, period: "today", day: null};
+    const PRICE_FIELDS = () => [["input", L("Input", "Вход")], ["output", L("Output", "Выход")],
+                                ["long_input", L("Input > 100K", "Вход > 100K")],
+                                ["long_output", L("Output > 100K", "Выход > 100K")]];
+    const llmView = {period: "today", day: null};
     const SVG = "http://www.w3.org/2000/svg";
-
-    function usd(value) {
-      return "$" + (value >= 10 ? value.toFixed(0) : value >= 0.1 || !value ? value.toFixed(2) : value.toFixed(3));
-    }
-
-    function runs(n) {
-      if (lang !== "ru") return `${n} call${n === 1 ? "" : "s"}`;
-      const last = n % 10, tens = n % 100;
-      const word = last === 1 && tens !== 11 ? "вызов"
-        : last >= 2 && last <= 4 && (tens < 12 || tens > 14) ? "вызова" : "вызовов";
-      return `${n} ${word}`;
-    }
-
-    function shortDay(iso) {
-      const date = new Date(iso + "T12:00:00");
-      return `${WEEKDAYS()[date.getDay()]} ${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
-    }
-
-    async function loadLlm() {
-      try {
-        renderLlm(await call("api/llm"));
-      } catch (error) {
-        $("tab-llm").replaceChildren(el("p", {className: "hint"}, error.message));
-      }
-    }
-
-    async function changeLlm(path, method, values) {
-      try {
-        renderLlm(await send(path, method, values));
-      } catch (error) {
-        tg.showAlert(error.message);
-        loadLlm();
-      }
-    }
 
     function svg(tag, attrs) {
       const node = document.createElementNS(SVG, tag);
@@ -1462,14 +2143,14 @@
         picture.append(svg("rect", {class: classes, x: i * step + 1, y: y(0) - bar, width: step - 2, height: bar,
                                     rx: 1.5}));
         const tap = svg("rect", {class: "tap", x: i * step, y: 0, width: step, height});
-        tap.onclick = () => { llmView.day = llmView.day === day.day ? null : day.day; renderLlm(data); };
+        tap.onclick = () => { llmView.day = llmView.day === day.day ? null : day.day; redraw(); };
         picture.append(tap);
       });
       picture.append(svg("line", {class: "limit", x1: 0, x2: width, y1: y(data.daily_limit_usd),
                                   y2: y(data.daily_limit_usd)}));
       for (const i of [0, Math.floor(last / 2), last]) {
         const label = svg("text", {x: i * step + step / 2, y: height - 3, "font-size": 9, fill: "currentColor",
-                                   opacity: .6, "text-anchor": i === 0 ? "start" : i === last ? "end" : "middle"});
+                                   opacity: .5, "text-anchor": i === 0 ? "start" : i === last ? "end" : "middle"});
         label.textContent = i === last ? L("today", "сегодня")
           : data.days[i].day.slice(8, 10) + "." + data.days[i].day.slice(5, 7);
         picture.append(label);
@@ -1477,149 +2158,105 @@
       return picture;
     }
 
-    function costRow(title, hint, cost, total) {
+    function costRow(title, sub, cost, total) {
       const share = total ? Math.round(cost / total * 100) : 0;
-      return el("div", {className: "row"},
-        el("div", {className: "main"}, el("div", {className: "title"}, title),
-          el("div", {className: "hint"}, hint),
-          el("div", {className: "share"}, el("i", {style: `width: ${share}%`}))),
-        el("div", {className: "money"}, usd(cost), el("div", {className: "hint"}, share + " %")));
+      return row({title, sub: el("div", {}, sub, el("div", {className: "meter"}, el("i", {style: `width: ${share}%`}))),
+        control: el("div", {className: "money"}, usd(cost), el("div", {className: "sub"}, share + " %"))});
     }
 
-    function showLlmLine(spent, limit, count) {
-      $("llm").replaceChildren(el("span", {}, L(`LLM today: ${usd(spent)} of ${usd(limit)}, ${runs(count)}`,
-        `LLM сегодня: ${usd(spent)} из ${usd(limit)}, ${runs(count)}`)), el("span", {className: "hint"}, "›"));
-    }
-
-    function renderLlm(data) {
-      llmView.data = data;
-      showLlmLine(data.spent_usd, data.limit_usd, data.periods.today.runs);
+    async function llmPage() {
+      const [data, general] = await Promise.all([get("api/llm"), maybe("api/general")]);
       const period = data.periods[llmView.period];
-      const parts = [el("p", {className: "hint"}, L("Every call of Haiku, the failed ones too. A day is Moscow's, a "
-        + "week starts on Monday. Above 80 % of the limit images, whole PDFs and the daily summary are off; at 100 % "
-        + "calls wait until midnight.", "Все вызовы Haiku, неудачные тоже. Сутки — по Москве, неделя с понедельника. "
-        + "Выше 80 % лимита отключаются картинки, PDF целиком и ежедневная сводка; на 100 % вызовы стоят до "
-        + "полуночи."))];
+      const parts = [el("h1", {className: "title"}, L("LLM spending", "Расход LLM"))];
       if (data.level !== "ok") {
-        parts.push(el("div", {className: "card warn"}, data.level === "hard"
+        parts.push(notice(data.level === "hard"
           ? L("Today's limit is spent: calls wait until midnight, messages wait in the queue.",
             "Лимит на сегодня исчерпан: вызовы стоят до полуночи, сообщения ждут в очереди.")
           : L("Over 80 % of the limit: images, whole PDFs and the daily summary are off until midnight.",
             "Больше 80 % лимита: картинки, PDF целиком и ежедневная сводка отключены до полуночи.")));
       }
       const share = Math.round(data.spent_usd / data.limit_usd * 100);
-      const subtitles = {today: L(`${share} % of the limit`, `${share} % лимита`), week: runs(data.periods.week.runs),
-                         month: L("forecast ", "прогноз ") + usd(data.month_forecast_usd)};
+      const notes = {today: L(`${share} % of the limit`, `${share} % лимита`), week: runs(data.periods.week.runs),
+                     month: L("forecast ", "прогноз ") + usd(data.month_forecast_usd)};
       parts.push(el("div", {className: "periods"}, ...PERIODS().map(([name, title]) => {
-        const button = el("button", {className: name === llmView.period ? "on" : ""},
-          el("div", {className: "hint"}, title), el("div", {className: "sum"}, usd(data.periods[name].cost_usd)),
-          el("div", {className: "hint"}, subtitles[name]));
-        button.onclick = () => { llmView.period = name; renderLlm(data); };
-        return button;
+        const b = el("button", {className: name === llmView.period ? "on" : ""}, el("div", {className: "label"}, title),
+          el("div", {className: "sum"}, usd(data.periods[name].cost_usd)), el("div", {className: "note"}, notes[name]));
+        b.onclick = () => { haptic(); llmView.period = name; redraw(); };
+        return b;
       })));
-
-      parts.push(el("h3", {}, L(`${data.days.length} days`, `${data.days.length} дней`)));
-      parts.push(el("div", {className: "card"}, chart(data), el("div", {className: "hint"}, (() => {
-        const day = data.days.find((d) => d.day === llmView.day);
-        if (!day) {
-          return L(`The dashes are the limit, ${usd(data.daily_limit_usd)} a day; red days hit the limit. Tap a bar.`,
-            `Пунктир — лимит ${usd(data.daily_limit_usd)} в день, красные дни упёрлись в лимит. Нажмите на столбик.`);
-        }
-        return `${shortDay(day.day)}: ${usd(day.cost_usd)}, ${runs(day.runs)}`
-          + (day.failed ? L(`, failed ${day.failed}`, `, неудачных ${day.failed}`) : "")
-          + (day.stopped ? L(", the limit was spent", ", лимит исчерпан") : "");
-      })())));
-
+      const day = data.days.find((d) => d.day === llmView.day);
+      parts.push(el("h3", {}, L(`${data.days.length} days`, `${data.days.length} дней`)),
+        el("div", {className: "list chart-box"}, chart(data), el("div", {className: "sub"}, day
+          ? `${dayLabel(day.day)}: ${usd(day.cost_usd)}, ${runs(day.runs)}`
+            + (day.failed ? L(`, failed ${day.failed}`, `, неудачных ${day.failed}`) : "")
+            + (day.stopped ? L(", the limit was spent", ", лимит исчерпан") : "")
+          : L(`Dashes: the limit, ${usd(data.daily_limit_usd)} a day. Tap a bar.`,
+            `Пунктир — лимит ${usd(data.daily_limit_usd)} в день. Нажмите на столбик.`))));
       const title = PERIODS().find(([name]) => name === llmView.period)[1].toLowerCase();
-      parts.push(el("h3", {}, L("By task · ", "По задачам · ") + title));
       if (!period.runs) {
-        parts.push(el("p", {className: "hint"}, L("No calls.", "Вызовов не было.")));
+        parts.push(el("h3", {}, L("By task · ", "По задачам · ") + title), empty(L("No calls.", "Вызовов не было.")));
       } else {
-        parts.push(el("div", {className: "list"}, ...period.by_task.map((row) => costRow(TASKS()[row.task] || row.task,
-          runs(row.runs) + (row.failed ? L(`, failed ${row.failed}`, `, неудачных ${row.failed}`) : ""), row.cost_usd,
+        parts.push(section(L("By task · ", "По задачам · ") + title, period.by_task.map((r) => costRow(TASKS()[r.task] || r.task,
+          runs(r.runs) + (r.failed ? L(`, failed ${r.failed}`, `, неудачных ${r.failed}`) : ""), r.cost_usd,
           period.cost_usd))));
-        parts.push(el("h3", {}, L("By chat · ", "По чатам · ") + title));
-        const chatted = period.by_chat.reduce((sum, row) => sum + row.cost_usd, 0);
-        const rows = period.by_chat.map((row) => costRow(row.title, runs(row.runs), row.cost_usd, period.cost_usd));
+        const chatted = period.by_chat.reduce((sum, r) => sum + r.cost_usd, 0);
+        const rows = period.by_chat.map((r) => costRow(r.title, runs(r.runs), r.cost_usd, period.cost_usd));
         if (period.cost_usd - chatted > 0.0005) {
           rows.push(costRow(L("No chat", "Без чата"), L("dictionary, grades, HSE App X labels",
             "словарь, оценки, метки HSE App X"), period.cost_usd - chatted, period.cost_usd));
         }
-        parts.push(el("div", {className: "list"}, ...rows));
+        parts.push(section(L("By chat · ", "По чатам · ") + title, rows));
       }
-
-      parts.push(el("h3", {}, L("Limit", "Лимит")));
-      const limit = el("input", {type: "number", min: 0.05, step: 0.05, value: data.daily_limit_usd});
-      limit.onchange = () => changeLlm("api/llm", "PATCH", {daily_limit_usd: Number(limit.value)});
-      const raise = el("button", {className: "link"}, `+${usd(data.daily_limit_usd)}`);
       const raised = usd(data.limit_usd + data.daily_limit_usd);
-      raise.onclick = () => tg.showConfirm(L(`Raise today's limit to ${raised}?`, `Поднять лимит на сегодня до ${raised}?`),
-        (yes) => { if (yes) changeLlm("api/llm/raise", "POST", {}); });
-      parts.push(el("div", {className: "list"},
-        settingRow(L("A day, $", "В день, $"), L("every Moscow day", "каждые сутки по Москве"), limit),
-        settingRow(L("Raise for today", "Поднять на сегодня"), data.raised_usd
-          ? L(`raised by ${usd(data.raised_usd)} today already, until midnight`,
-            `сегодня уже поднят на ${usd(data.raised_usd)}, до полуночи`)
-          : L("until midnight, like the button in «System»", "до полуночи, как кнопка в «Системе»"),
-          raise)));
-      $("tab-llm").replaceChildren(...parts);
-    }
-
-    // --- start ----------------------------------------------------------------
-
-    function showTab(name) {
-      for (const button of $("tabs").querySelectorAll("button")) {
-        button.classList.toggle("on", button.dataset.tab === name);
-        $("tab-" + button.dataset.tab).hidden = button.dataset.tab !== name;
+      parts.push(section(L("Limit", "Лимит"), [
+        row({title: L("A day, $", "В день, $"), control: numberInput(data.daily_limit_usd, {min: 0.05, step: 0.05},
+          (value) => act("api/llm", "PATCH", {daily_limit_usd: value}))}),
+        button(L(`Raise today's limit to ${raised}`, `Поднять лимит на сегодня до ${raised}`), async () => {
+          if (await askYes(L(`Raise today's limit to ${raised}? Until midnight.`,
+            `Поднять лимит на сегодня до ${raised}? До полуночи.`))) act("api/llm/raise", "POST", {}, "api/llm");
+        })], L("Every call of Haiku, the failed ones too; a day is Moscow's. Above 80 % of the limit images, whole PDFs "
+        + "and the daily summary are off; at 100 % calls wait until midnight.", "Все вызовы Haiku, неудачные тоже; сутки "
+        + "— по Москве. Выше 80 % лимита отключаются картинки, PDF целиком и ежедневная сводка; на 100 % вызовы стоят "
+        + "до полуночи.") + (data.raised_usd ? " " + L(`Raised by ${usd(data.raised_usd)} today already.`,
+        `Сегодня уже поднят на ${usd(data.raised_usd)}.`) : "")));
+      if (general) {
+        for (const [model, price] of Object.entries(general.llm_prices)) {
+          parts.push(section(L(`${model} · $ per 1M tokens`, `${model} · $ за 1 млн токенов`), PRICE_FIELDS().map(([key, name]) =>
+            row({title: name, control: numberInput(price[key], {min: 0, step: 0.01}, (value) => act("api/general",
+              "PATCH", {llm_prices: {...general.llm_prices, [model]: {...price, [key]: value}}}))}))));
+        }
       }
-      if (name !== "hseapp") stopHseWatch();
-      if (name === "schedule") loadSchedule();
-      if (name === "deadlines") loadDeadlines();
-      if (name === "sheets") loadSheets();
-      if (name === "grades") loadGrades();
-      if (name === "summaries") loadSummaries();
-      if (name === "subjects") loadSubjects();
-      if (name === "hseapp") { hse.note = null; loadHseApp(); }
-      if (name === "llm") loadLlm();
-      if (name === "general") loadGeneral();
+      return parts;
     }
 
-    // A screen asked for by the link the Mini App was opened with (a button under a post in the forum).
+    // --- start -----------------------------------------------------------------------------------------
+
+    const ROOTS = {deadlines: deadlinesPage, schedule: schedulePage, study: studyPage, settings: settingsPage};
+    // The screens a link may ask for (a button under a post in the forum): the tab, then what to open in it.
+    const SCREENS = {chats: ["settings", chatsPage], schedule: ["schedule"], deadlines: ["deadlines"],
+                     sheets: ["study", "sheets"], grades: ["study", "grades"], summaries: ["settings", summariesPage],
+                     subjects: ["settings", subjectsPage], hseapp: ["settings", hsePage], llm: ["settings", llmPage],
+                     general: ["settings", generalPage], settings: ["settings"]};
     const startScreen = new URLSearchParams(location.search).get("screen") || tg.initDataUnsafe.start_param;
 
-    tg.BackButton.onClick(back);
-    $("search").oninput = renderList;
-    $("subject-search").oninput = renderSubjects;
-    $("subject-add").onclick = () => openSubject(null);
-    $("llm").onclick = () => showTab("llm");
+    tg.BackButton.onClick(() => card ? closeCard() : back());
 
-    // The home screen and the screen to show, again after the Mini App's language changed.
-    function start(screen) {
-      return Promise.all([call("api/me"), call("api/chats")])
-        .then(([me, list]) => {
-          lang = me.language;
-          applyLanguage();
-          $("title").textContent = L("Hi, ", "Привет, ") + me.first_name;
-          $("state").hidden = true;
-          showLlmLine(me.llm.spent_usd, me.llm.limit_usd, me.llm.runs_today);
-          $("llm").hidden = false;
-          $("tabs").hidden = false;
-          renderTwin(list.twin);
-          const mail = list.mail || {};
-          if (mail.configured) {  // collectors/mail.py: letters are read with the chats
-            $("mail").textContent = mail.error ? L("The mail is not read: ", "Почта не читается: ") + mail.error + "."
-              : L("Mail: letters of 14 days: ", "Почта: писем за 14 дней — ") + mail.letters
-                + (mail.ok_at ? L(", checked ", ", проверена ") + mail.ok_at.slice(11, 16) : "");
-            $("mail").classList.toggle("warn", Boolean(mail.error));
-            $("mail").hidden = false;
-          }
-          chats = list.chats;
-          $("search").hidden = chats.length < 8;
-          renderList();
-          renderImages(list.images);
-          showTab(screen && $("tab-" + screen) ? screen : "chats");
-        })
-        .catch((error) => { $("state").hidden = false; $("state").textContent = error.message; });
+    // The first screen, again after the Mini App's language changed.
+    async function start(screen) {
+      try {
+        me = await call("api/me");
+      } catch (error) {
+        $("screen").replaceChildren(empty(error.message));
+        return;
+      }
+      lang = me.language;
+      document.documentElement.lang = lang;
+      drawTabbar();
+      const [tab, inner] = SCREENS[screen] || ["deadlines"];
+      nav.tab = tab;
+      nav.stack = typeof inner === "function" ? [inner] : [];
+      if (typeof inner === "string") nav.study = inner;
+      draw(true);
     }
 
     start(startScreen);

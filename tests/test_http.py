@@ -277,30 +277,58 @@ async def test_miniapp_subjects(aiohttp_client, budget, journal, store, schedule
     assert (await client.delete("/app/api/subjects", json={"name": "Алгебра"}, headers=owner())).status == 404
 
 
-async def test_miniapp_schedule(aiohttp_client, budget, journal, store, schedule, now, merged):
+async def test_miniapp_agenda(aiohttp_client, budget, journal, store, schedule, now, merged):
+    """The Расписание screen: the timetable as the feeds have it; the chats' events switched and hidden, the
+    owner's own events added, changed and deleted, classes moved by the owner (р. 44)."""
+    schedule.ruz._sync(parse(FEED))
     client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
     events = schedule.events
     with store.db:
-        own = events.add({"uid": "tg-1@infomaster", "source": "tg", "chat_id": None, "msg_ids": [5],
-                          "course": "Алгебра", "title": "Alg consult", "kind": "consultation",
-                          "start": "2026-10-23T18:10:00", "end": None, "room": "R205", "required": True}, now())
-        events.add({"uid": "tg-2@infomaster", "source": "tg", "chat_id": None, "msg_ids": [6], "course": "",
-                    "title": "Old talk", "kind": "talk", "start": "2026-10-19T18:10:00", "end": None, "room": "",
-                    "required": False}, now())
-    assert (await client.get("/app/api/schedule")).status == 401
+        told = events.add({"uid": "tg-1@infomaster", "source": "tg", "chat_id": None, "msg_ids": [5],
+                           "course": "Алгебра", "title": "Alg consult", "kind": "consultation",
+                           "start": "2026-10-23T18:10:00", "end": None, "room": "R205", "required": True}, now())
+    assert (await client.get("/app/api/agenda")).status == 401
 
-    body = await (await client.get("/app/api/schedule", headers=owner())).json()
-    assert body["ruz"]["error"] == "RUZ_ICAL_URL is not set" and body["calendar"] is False
-    [listed] = body["events"]  # the past talk is not listed
-    assert (listed["title"], listed["type"], listed["end"], listed["required"]) == \
-        ("Alg consult", "Consultation", "2026-10-23T19:30:00", True)
+    body = await (await client.get("/app/api/agenda", headers=owner())).json()
+    assert body["today"] == "2026-10-20" and body["calendar"] is False and body["ruz"]["error"]
+    items = {item["uid"]: item for item in body["items"]}
+    told_item = items["tg-1@infomaster"]
+    assert (told_item["type"], told_item["end"]) == ("Consultation", "2026-10-23T19:30:00")
+    assert items["2000005@ruz.hse.ru"]["event"] is None and "2000001@ruz.hse.ru" not in items  # Oct 19: past
 
-    body = await (await client.patch(f"/app/api/events/{own}", json={"required": False, "hidden": True},
+    body = await (await client.patch(f"/app/api/events/{told}", json={"required": False, "hidden": True},
                                      headers=owner())).json()
-    assert (body["events"][0]["required"], body["events"][0]["hidden"]) == (False, True)
-    assert events.get(own)["chosen"]
-    for bad in ({}, {"required": 1}, {"title": "x"}):
-        assert (await client.patch(f"/app/api/events/{own}", json=bad, headers=owner())).status == 400
+    assert "tg-1@infomaster" not in {i["uid"] for i in body["items"]} and body["hidden"][0]["id"] == told
+    assert events.get(told)["chosen"] and not events.get(told)["required"]
+
+    new = {"title": " Supervisor ", "kind": "Event", "start": "2026-10-24T15:00", "end": "2026-10-24T16:00",
+           "room": "R205", "required": True}
+    body = await (await client.post("/app/api/events", json=new, headers=owner())).json()
+    [own] = [i for i in body["items"] if i["title"] == "Supervisor"]
+    assert (own["start"], own["source"], own["event"]["own"]) == ("2026-10-24T15:00:00", "own", True)
+    body = await (await client.patch(f"/app/api/events/{own['event']['id']}", json={"title": "Supervisor meeting"},
+                                     headers=owner())).json()
+    [own] = [i for i in body["items"] if i["source"] == "own"]
+    assert own["title"] == "Supervisor meeting"
+    response = await client.delete(f"/app/api/events/{own['event']['id']}", headers=owner())
+    assert response.status == 200 and all(i["source"] != "own" for i in (await response.json())["items"])
+    assert (await client.delete(f"/app/api/events/{told}", headers=owner())).status == 404  # a chat's: hidden only
+
+    fix = {"class_uid": "2000005@ruz.hse.ru", "start": "2026-10-23T15:00", "end": "2026-10-23T16:20", "room": "R510",
+           "cancelled": False}
+    body = await (await client.post("/app/api/corrections", json=fix, headers=owner())).json()
+    moved = next(i for i in body["items"] if i["uid"] == "2000005@ruz.hse.ru")
+    assert (moved["start"], moved["location"], moved["event"]["own"], moved["event"]["class"]["start"]) == (
+        "2026-10-23T15:00:00", "R510", True, "2026-10-23T09:30:00")
+    response = await client.patch(f"/app/api/events/{moved['event']['id']}", json={"title": "x"}, headers=owner())
+    assert response.status == 400  # a correction is changed by another correction
+
+    for bad in ({}, {"required": 1}, {"title": ""}, {"hidden": True, "title": "x"}, {"start": "2026-10-24T17:00"},
+                {"start": "2026-10-24T17:00", "end": "2026-10-24T16:00"}, {"kind": ""}):
+        assert (await client.patch(f"/app/api/events/{told}", json=bad, headers=owner())).status == 400
+    for bad in ({**new, "title": "x" * 121}, {**new, "start": "tomorrow"}, {**new, "required": "yes"}):
+        assert (await client.post("/app/api/events", json=bad, headers=owner())).status == 400
+    assert (await client.post("/app/api/corrections", json={**fix, "class_uid": "nope"}, headers=owner())).status == 404
     assert (await client.patch("/app/api/events/999", json={"hidden": False}, headers=owner())).status == 404
     assert (await client.patch("/app/api/events/x", json={"hidden": False}, headers=owner())).status == 404
 
@@ -324,7 +352,9 @@ async def test_miniapp_hiding_a_correction_moves_its_midterm(aiohttp_client, bud
     schedule.sync_midterms()
     client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
     response = await client.patch(f"/app/api/events/{moved}", json={"hidden": True}, headers=owner())
-    assert response.status == 200 and (await response.json())["events"][0]["hidden"]
+    assert response.status == 200
+    [item] = [i for i in (await response.json())["items"] if i["uid"] == uid]
+    assert item["event"]["hidden"] and item["start"] == "2026-10-29T10:00:00"
     [(_, back)] = published[0].moved
     assert schedule.deadlines.get(back)["due"] == "2026-10-29"
 
@@ -366,12 +396,18 @@ async def test_miniapp_deadlines(aiohttp_client, budget, journal, store, schedul
     sources = {**TWIN, "hseapp": lambda: {"login_needed": True, "error": None, "enabled": True}}
     client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged, sources=sources))
     assert (await client.get("/app/api/deadlines")).status == 401
+    schedule.inbox.put_chat(-1001, "Матан", "group", None, 0)
     row = add_row(merged, "Calc HW 3", "2026-10-21")
+    letter = add_row(merged, "Phil essay", "2026-10-22", "mail", "Философия")
     body = await (await client.get("/app/api/deadlines", headers=owner())).json()
     assert body["hseapp"] == {"login_needed": True, "error": None} and body["today"] == "2026-10-20"
-    [item] = body["items"]
+    item, essay = body["items"]
     assert item == {"uid": merged.items()[0]["uid"], "title": "Calc HW 3", "due": "2026-10-21", "category": "study",
-                    "source": "tg", "course": "Математический анализ", "overdue": False}
+                    "source": "tg", "course": "Математический анализ", "overdue": False, "from": "Матан",
+                    "link": None}  # where the chat and the letter it came from are known (р. 44)
+    assert (essay["from"], essay["link"]) == ("letter", None)
+    with merged.db:
+        merged.deadlines.drop([letter], merged.now())
     assert body["own"] == [] and body["hidden"] == []
 
     for bad in ({"title": "", "due": "2026-10-25", "category": "study"},

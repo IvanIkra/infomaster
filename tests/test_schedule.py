@@ -243,16 +243,83 @@ async def test_past_midterm_is_no_news(schedule):
     assert [schedule.deadlines.get(i)["due"] for i in changes.deadlines] == ["2026-10-29"]
 
 
-def test_listing(loaded, now):
+def test_agenda(loaded, now):
     add(loaded, now, uid="past@x", title="Past talk", start="2026-10-19T18:00:00", msg_ids=[7])
-    own = add(loaded, now, end="2026-10-23T19:00:00")
+    talk = add(loaded, now, end="2026-10-23T19:00:00")
+    hidden = add(loaded, now, uid="hidden@x", title="Debate club", start="2026-10-24T12:00:00", msg_ids=[8],
+                 hidden=True)
     fix = correction(loaded, now, "2000004@ruz.hse.ru", start="2026-10-21T10:00:00", end="2026-10-21T11:20:00")
-    old = correction(loaded, now, "2000001@ruz.hse.ru", cancelled=True)  # Oct 19: past
-    listed = loaded.listing(dt.date(2026, 10, 20))
-    assert [e["id"] for e in listed] == [fix, own]  # a correction by its class's own time: Thu, then Fri
-    assert listed[0]["correction"] and listed[0]["class"]["start"] == "2026-10-22T16:40:00"
-    assert listed[0]["title"] == "Discrete Mathematics" and listed[1]["chat"] == "Матан"
-    assert listed[1]["link"] == "https://t.me/c/1234567890/1" and listed[1]["end"] == "2026-10-23T19:00:00" and old
+    agenda = loaded.agenda(dt.date(2026, 10, 20))
+    items = {item["uid"]: item for item in agenda["items"]}
+    assert "2000001@ruz.hse.ru" not in items and "past@x" not in items  # Oct 19: past
+    moved = items["2000004@ruz.hse.ru"]  # by its corrected time, Wed, with RUZ's own Thu behind it
+    assert (moved["start"], moved["source"], moved["event"]["id"], moved["event"]["correction"]) == (
+        "2026-10-21T10:00:00", "tg", fix, True)
+    assert moved["event"]["class"]["start"] == "2026-10-22T16:40:00" and moved["event"]["chat"] == "Матан"
+    told = items[event_uid("tg", CHAT, 1)]
+    assert (told["event"]["id"], told["event"]["correction"], told["end"], told["link"]) == (
+        talk, False, "2026-10-23T19:00:00", "https://t.me/c/1234567890/1")
+    assert items["2000005@ruz.hse.ru"]["event"] is None and "hidden@x" not in items
+    assert [(h["id"], h["type"]) for h in agenda["hidden"]] == [(hidden, "Consultation")]
+    assert "2000009@ruz.hse.ru" in items  # Nov 3: within four weeks
+    assert "2000009@ruz.hse.ru" not in {i["uid"] for i in loaded.agenda(dt.date(2026, 10, 20), days=7)["items"]}
+
+
+async def test_own_events_and_corrections(loaded, now):
+    """The owner's own events and corrections (р. 44)."""
+    talk = add(loaded, now)
+    own = loaded.add_event({"title": "Supervisor", "kind": "Event", "start": "2026-10-24T15:00:00",
+                            "end": "2026-10-24T16:00:00", "room": "R205", "required": False})
+    [item] = [i for i in loaded.agenda(dt.date(2026, 10, 20))["items"] if i["title"] == "Supervisor"]
+    assert (item["source"], item["event"]["own"], item["required"]) == ("own", True, False)
+    newer = loaded.edit_event(own, {"start": "2026-10-24T17:00:00", "end": "2026-10-24T18:00:00"})
+    assert loaded.events.get(own)["replaced_by"] == newer
+    assert loaded.events.get(newer)["uid"] == loaded.events.get(own)["uid"]
+
+    # A chat's event changed: hidden, an own copy in its place; the batches see neither the copy nor any own event.
+    copy = loaded.edit_event(talk, {"title": "Alg consult, moved", "start": "2026-10-23T19:00:00",
+                                    "end": "2026-10-23T20:00:00"})
+    assert loaded.events.get(talk)["hidden"] and loaded.events.get(talk)["replaced_by"] is None
+    assert (loaded.events.get(copy)["source"], loaded.events.get(copy)["course"]) == ("own", "Алгебра")
+    assert [e["id"] for e in loaded.events.upcoming(dt.date(2026, 10, 20))] == [talk]
+
+    # The owner's move of a class wins over the chats' corrections, a later one too; undone, the chats' newest applies.
+    uid = "2000005@ruz.hse.ru"
+    chats = correction(loaded, now, uid, start="2026-10-23T11:10:00", end="2026-10-23T12:30:00")
+    mine = await loaded.correct_class(uid, "2026-10-23T15:00:00", "2026-10-23T16:20:00", "R510", False)
+    later = correction(loaded, now, uid, msg_ids=[9], start="2026-10-23T13:00:00", end="2026-10-23T14:20:00")
+    [entry] = [e for e in loaded.entries() if e.uid == uid]
+    assert (entry.start, entry.location, entry.source) == (dt.datetime(2026, 10, 23, 15), "R510", "own")
+    assert entry.notes == ["Moved from Fri Oct 23 09:30 by hand"]
+    assert loaded.events.correction(uid)["id"] == later and chats  # what a chat's next message supersedes
+    again = await loaded.correct_class(uid, "2026-10-23T15:00:00", "2026-10-23T16:20:00", "R510", True)
+    assert loaded.events.get(mine)["replaced_by"] == again
+    assert (await loaded.remove_own(again))["id"] == again
+    [entry] = [e for e in loaded.entries() if e.uid == uid]
+    assert entry.start == dt.datetime(2026, 10, 23, 13) and not entry.cancelled
+
+    # Deleted, an own event does not come back with an older version; the chats' ones are hidden, never deleted.
+    assert (await loaded.remove_own(newer))["id"] == newer
+    assert all(e["title"] != "Supervisor" for e in loaded.events.in_force_all())
+    assert await loaded.remove_own(talk) is None and loaded.edit_event(later, {"title": "x"}) is None
+    assert await loaded.correct_class("x@ruz.hse.ru", "2026-10-23T15:00:00", "2026-10-23T16:00:00", "", False) is None
+
+
+async def test_own_correction_moves_the_midterm(loaded):
+    await loaded.after_poll(Diff(first=True))
+    published = []
+
+    async def record(midterms):
+        published.append(midterms)
+
+    loaded.on_midterms = record
+    uid = "2000007@ruz.hse.ru"  # the interim assessment, Thu Oct 29
+    mine = await loaded.correct_class(uid, "2026-11-05T10:00:00", "2026-11-05T13:00:00", "R401", False)
+    [(_, moved)] = published[0].moved
+    assert loaded.deadlines.get(moved)["due"] == "2026-11-05"
+    await loaded.remove_own(mine)
+    [(_, back)] = published[1].moved
+    assert loaded.deadlines.get(back)["due"] == "2026-10-29"
 
 
 def test_new_tables_join_an_older_database(tmp_path):

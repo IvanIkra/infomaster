@@ -3,19 +3,18 @@
 Every /app/api/ request carries Telegram's initData in `Authorization: tma <initData>`. It is signed with the bot
 token, and only the owner's Telegram id gets in (р. 16).
 
-Screens: the twin's account with its login and logout and the chats with their settings and the daily number of
-images read in them (р. 12), the course dictionary
-with manual entries (р. 3, р. 33), the timetable's events from chats and corrections of classes with the main/optional
-switch and hiding (§6.5), the merged deadlines with the owner's own ones and the hidden ones (§5.4, §5.5: the same
-list and the same actions as HA's to-do lists), the HSE App X login (§5.2, р. 7), the sheets with their versions, the
-limits of reading them and the joining of a sheet posted as new to an older one (§6.3, р. 14), the summaries: the time
-of the daily one and its chats (§6.6), the grades: the name, the sheets and what was read in them (§6.7), the LLM
-spending (§7, р. 40): today, this week and this month by task and by chat, the cost of each of the last 30 days and
-the daily limit, which can be changed or raised for today. Tablo and HA show no spending: this screen is the one place.
-The general settings: the batches' N, how long news lives, the prices of the models and the languages of the forum
-and the Mini App (р. 41). Every setting is here (р. 33); only the secrets of .env are not. The Mini App's texts are
-the page's own; what the service says here (errors, the reasons of a failed login, the statuses) comes in the Mini
-App's language too.
+Screens (р. 44: four tabs, every change an action on a card): the merged deadlines with the owner's own ones and the
+hidden ones (§5.4, §5.5), the timetable as the feeds have it, with the main/optional switch and hiding of the chats'
+events and corrections, the owner's own events and corrections of classes (§6.5), the grades and the sheets (§6.7,
+§6.3, р. 14), and the settings: the twin's account with its login and logout and the chats with their settings and the
+daily number of images read in them (р. 12), the course dictionary with manual entries (р. 3, р. 33), the HSE App X
+login (§5.2, р. 7), the limits of reading a PDF, the time of the daily summary and its chats (§6.6), the gradebooks:
+the name, the sheets and what was read in them, the LLM spending (§7, р. 40): today, this week and this month by task
+and by chat, the cost of each of the last 30 days and the daily limit, which can be changed or raised for today. Tablo
+and HA show no spending: this screen is the one place. The general settings: the batches' N, how long news lives, the
+prices of the models and the languages of the forum and the Mini App (р. 41). Every setting is here (р. 33); only the
+secrets of .env are not. The Mini App's texts are the page's own; what the service says here (errors, the reasons of a
+failed login, the statuses) comes in the Mini App's language too.
 
 The same port serves /hseapp/callback, where the browser comes back after the HSE login. It has no initData: the
 PKCE state of the login link is its protection, and it answers with a short page in the Mini App's language. And
@@ -36,7 +35,8 @@ from urllib.parse import parse_qsl
 from aiohttp import web
 
 from .. import clock
-from ..collectors.grades import sheet_id
+from ..collectors.files import UPLOAD_MAX_SIZE
+from ..collectors.grades import sheet_id, short_course
 from ..collectors.hseapp import CALLBACK_PATH, HseApp
 from ..collectors.inbox import MAILBOX, Inbox
 from ..collectors.telegram import LoginError, Twin
@@ -44,9 +44,10 @@ from ..config import Env
 from ..i18n import LANGUAGES, json_default, reason, tr
 from ..llm.budget import SOFT_SHARE, Budget
 from ..llm.journal import Journal
-from ..processing.grades import Grades
+from ..processing.grades import Grades, budget
 from ..processing.merge import DeadlineList
 from ..processing.schedule import Schedule
+from ..processing.sheets import SUMMARY_CHARS
 from ..processing.subjects import ABBR_CHARS, TITLE_CHARS, SubjectError, Subjects
 from ..processing.todo import CATEGORIES, uid
 from ..settings import BATCH_HOURS, SHEET_LABEL_CHARS, SPECS, ChatSettings, Settings, SettingsError
@@ -76,6 +77,12 @@ GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "forum_language", "min
 GRADE_SETTINGS = {"student": "grades_student", "sheets": "grades_sheets", "window_days": "grades_window_days"}
 PDF_LIMITS = ("pdf_pages", "pdf_tokens")
 TITLE_LIMIT = 200  # characters of an own deadline's title
+SHEET_COURSE_LIMIT, SHEET_NUMBER_LIMIT = 60, 20
+GRADE_LABEL_LIMIT = 40
+EVENT_TITLE_LIMIT = 120
+ROOM_LIMIT = 300  # a room, or a meeting's link
+EVENT_FIELDS = ("title", "kind", "start", "end", "room", "required")
+KIND_LIMIT = 40  # the kind is the type of the feeds once processing/schedule.py's type_of has read it
 CHART_DAYS = 30
 
 
@@ -234,48 +241,139 @@ async def delete_subject(request: web.Request) -> web.Response:
     return respond(request, {"deleted": name})
 
 
-async def schedule(request: web.Request) -> web.Response:
-    """The Расписание screen: events from chats and corrections of classes from today on, hidden ones too."""
+def _agenda_state(request: web.Request) -> dict:
     timetable = request.app[SCHEDULE_KEY]
-    return respond(request, {"ruz": request.app[SOURCES_KEY]["ruz"](),
-                              "calendar": bool(request.app[ENV_KEY].calendar_secret or
-                                               request.app[ENV_KEY].calendar_public_secret),
-                              "events": timetable.listing(clock.local_day(timetable.now()))})
+    today = clock.local_day(timetable.now())
+    return {"today": today.isoformat(), "ruz": request.app[SOURCES_KEY]["ruz"](),
+            "calendar": bool(request.app[ENV_KEY].calendar_secret or request.app[ENV_KEY].calendar_public_secret),
+            **timetable.agenda(today)}
+
+
+async def agenda(request: web.Request) -> web.Response:
+    """The Расписание screen: the classes with their corrections and the events, as the feeds have them, from today
+    on; every change of the screen answers it anew."""
+    return respond(request, _agenda_state(request))
+
+
+def _moment(request: web.Request, value) -> dt.datetime:
+    try:
+        moment = dt.datetime.fromisoformat(value if isinstance(value, str) else "")
+    except ValueError:
+        raise bad_request(request, "a time like 2026-10-22T10:00", "время вида 2026-10-22T10:00") from None
+    if moment.tzinfo is not None:
+        raise bad_request(request, "a time like 2026-10-22T10:00", "время вида 2026-10-22T10:00")
+    return moment
+
+
+def _event_fields(request: web.Request, values: dict, names: set[str]) -> dict:
+    """The checked `names` of an event from the screen: title, kind, start and end (Moscow), room, required,
+    cancelled."""
+    fields = {}
+    if "title" in names:
+        title = values.get("title")
+        if not isinstance(title, str) or not " ".join(title.split()) or len(title) > EVENT_TITLE_LIMIT:
+            raise bad_request(request, f"a title is needed, up to {EVENT_TITLE_LIMIT} characters",
+                              f"нужно название, до {EVENT_TITLE_LIMIT} символов")
+        fields["title"] = " ".join(title.split())
+    if "kind" in names:
+        kind = values.get("kind")
+        if not isinstance(kind, str) or not kind.strip() or len(kind) > KIND_LIMIT:
+            raise web.HTTPBadRequest(text=f"kind: a word up to {KIND_LIMIT} characters, as Event or Consultation")
+        fields["kind"] = kind.strip()
+    if {"start", "end"} & names:
+        start, end = _moment(request, values.get("start")), _moment(request, values.get("end"))
+        if end <= start:
+            raise bad_request(request, "the end comes after the start", "конец — позже начала")
+        fields["start"], fields["end"] = start.isoformat(timespec="seconds"), end.isoformat(timespec="seconds")
+    if "room" in names:
+        room = values.get("room", "")
+        if not isinstance(room, str) or len(room) > ROOM_LIMIT:
+            raise web.HTTPBadRequest(text=f"room: up to {ROOM_LIMIT} characters")
+        fields["room"] = room.strip()
+    for flag in {"required", "cancelled"} & names:
+        if not isinstance(values.get(flag), bool):
+            raise web.HTTPBadRequest(text=f"{flag}: true or false")
+        fields[flag] = values[flag]
+    return fields
+
+
+def _event_id(request: web.Request) -> int:
+    try:
+        return int(request.match_info["event_id"])
+    except ValueError:
+        raise web.HTTPNotFound() from None
+
+
+async def add_event(request: web.Request) -> web.Response:
+    """{title, kind, start, end, room, required}: an own event."""
+    request.app[SCHEDULE_KEY].add_event(_event_fields(request, await _json(request), set(EVENT_FIELDS)))
+    return respond(request, _agenda_state(request))
 
 
 async def update_event(request: web.Request) -> web.Response:
-    """{required?: bool, hidden?: bool} for the newest version of an event; returns the screen's list anew."""
-    try:
-        event_id = int(request.match_info["event_id"])
-    except ValueError:
-        raise web.HTTPNotFound() from None
+    """{required?, hidden?} for the newest version of an event, as the forum's buttons; or some of {title, kind,
+    start, end, room, required}: the owner's change of an event of its own (not a correction)."""
+    event_id = _event_id(request)
     values = await _json(request)
-    if not values or set(values) - {"required", "hidden"} or \
-            any(not isinstance(value, bool) for value in values.values()):
-        raise web.HTTPBadRequest(text="expected {required: true|false, hidden: true|false}")
     timetable = request.app[SCHEDULE_KEY]
-    events = timetable.events
-    event = events.current(event_id)
+    event = timetable.events.current(event_id)
     if event is None or event["gone_at"] is not None:
         raise web.HTTPNotFound(text="no such event")
-    if "required" in values and event["class_uid"] is not None:
-        raise bad_request(request, "a class of RUZ is always in the main calendar",
-                          "пара из РУЗ всегда в основном календаре")
-    if "required" in values:
-        events.set_required(event_id, values["required"])
-    if "hidden" in values:  # through the schedule: a correction of an interim assessment moves its Midterm
-        await timetable.set_hidden(event_id, values["hidden"])
-    return await schedule(request)
+    if values and set(values) <= {"required", "hidden"}:
+        if any(not isinstance(value, bool) for value in values.values()):
+            raise web.HTTPBadRequest(text="expected {required: true|false, hidden: true|false}")
+        if "required" in values and event["class_uid"] is not None:
+            raise bad_request(request, "a class of RUZ is always in the main calendar",
+                              "пара из РУЗ всегда в основном календаре")
+        if "required" in values:
+            timetable.events.set_required(event_id, values["required"])
+        if "hidden" in values:  # through the schedule: a correction of an interim assessment moves its Midterm
+            await timetable.set_hidden(event_id, values["hidden"])
+    elif values and set(values) <= set(EVENT_FIELDS):
+        if event["class_uid"] is not None:
+            raise bad_request(request, "a class is moved or cancelled as a correction",
+                              "пару переносят или отменяют правкой")
+        timetable.edit_event(event_id, _event_fields(request, values, set(values) | (
+            {"start", "end"} if {"start", "end"} & set(values) else set())))
+    else:
+        raise web.HTTPBadRequest(text="expected {required?, hidden?} or some of " + ", ".join(EVENT_FIELDS))
+    return respond(request, _agenda_state(request))
+
+
+async def delete_event(request: web.Request) -> web.Response:
+    """An own event is deleted, an own correction undone; the chats' events are hidden instead."""
+    if await request.app[SCHEDULE_KEY].remove_own(_event_id(request)) is None:
+        raise web.HTTPNotFound(text="no such own event")
+    return respond(request, _agenda_state(request))
+
+
+async def correct_class(request: web.Request) -> web.Response:
+    """{class_uid, start, end, room, cancelled}: the owner moves or cancels a RUZ class."""
+    values = await _json(request)
+    fields = _event_fields(request, values, {"start", "end", "room", "cancelled"})
+    if not isinstance(values.get("class_uid"), str) or await request.app[SCHEDULE_KEY].correct_class(
+            values["class_uid"], fields["start"], fields["end"], fields["room"], fields["cancelled"]) is None:
+        raise web.HTTPNotFound(text="no such class")
+    return respond(request, _agenda_state(request))
 
 
 # --- deadlines -------------------------------------------------------------------------------
+
+def _origin(request: web.Request, d) -> dict:
+    """The chat or the letter a deadline of the chats or the mail came from, with the link to its message."""
+    row = request.app[DEADLINES_KEY].deadlines.get(int(d.ref[3:])) if d.ref.startswith("dl:") else None
+    if row is None or row["source"] not in ("tg", "mail"):
+        return {"from": None, "link": None}
+    timetable = request.app[SCHEDULE_KEY]
+    return {"from": timetable.told_by(row), "link": timetable.link(row)}
+
 
 def _deadlines_state(request: web.Request) -> dict:
     """The Дедлайны screen: the merged list as Tablo and HA get it, the own ones, the hidden ones."""
     merged = request.app[DEADLINES_KEY]
     today = merged.today()
     items = [{"uid": uid(d), "title": d.title, "due": d.due.isoformat(), "category": d.category, "source": d.source,
-              "course": d.name, "overdue": d.due < today} for d in merged.visible()]
+              "course": d.name, "overdue": d.due < today, **_origin(request, d)} for d in merged.visible()]
     own = [{"uid": d.key, "title": d.title, "due": d.due.isoformat(), "category": d.category}
            for d in merged.todo.own()]
     hidden = [{"uid": row["uid"], "title": row["title"], "due": row["due"], "source": row["source"]}
@@ -378,6 +476,73 @@ async def update_sheets(request: web.Request) -> web.Response:
     return respond(request, _sheets_state(request))
 
 
+def _sheet_id(request: web.Request) -> int:
+    try:
+        return int(request.match_info["sheet_id"])
+    except ValueError:
+        raise web.HTTPNotFound() from None
+
+
+def _sheet_fields(request: web.Request, values: dict) -> dict:
+    """The owner's course, number, due date and summary of a sheet; an empty course or due date clears it."""
+    fields = {}
+    for name, limit in (("course", SHEET_COURSE_LIMIT), ("number", SHEET_NUMBER_LIMIT),
+                        ("summary", SUMMARY_CHARS)):
+        if name in values:
+            value = values[name]
+            if not isinstance(value, str) or len(value) > limit:
+                raise web.HTTPBadRequest(text=f"{name}: text up to {limit} characters")
+            fields[name] = " ".join(value.split()) if name != "summary" else value.strip()
+    for name in ("course", "summary"):
+        if name in fields:
+            fields[name] = fields[name] or None
+    if "due" in values:
+        due = values["due"]
+        if due in (None, ""):
+            fields["due"] = None
+        else:
+            try:
+                fields["due"] = dt.date.fromisoformat(due if isinstance(due, str) else "").isoformat()
+            except ValueError:
+                raise bad_request(request, "the due date is a date like 2026-10-22",
+                                  "срок — дата вида 2026-10-22") from None
+    return fields
+
+
+async def edit_sheet(request: web.Request) -> web.Response:
+    """Some of {course, number, due, summary}: the owner's change; the caption of its message follows."""
+    values = await _json(request)
+    if not values or set(values) - {"course", "number", "due", "summary"}:
+        raise web.HTTPBadRequest(text="expected some of course, number, due, summary")
+    if await request.app[SHEETS_KEY].edit(_sheet_id(request), _sheet_fields(request, values)) is None:
+        raise web.HTTPNotFound(text="no such sheet")
+    return respond(request, _sheets_state(request))
+
+
+async def add_sheet(request: web.Request) -> web.Response:
+    """A multipart form of a PDF (`file`) and course, number, due: an own sheet, posted at once."""
+    form = await request.post()
+    upload = form.get("file")
+    if not isinstance(upload, web.FileField):
+        raise bad_request(request, "choose a PDF", "выберите PDF")
+    fields = _sheet_fields(request, {name: form[name] for name in ("course", "number", "due") if name in form})
+    topic = request.app[SHEETS_KEY]
+    try:
+        file = await topic.files.keep(upload.file.read(), upload.filename or "sheet.pdf", clock.now_utc())
+    except ValueError as e:
+        raise web.HTTPBadRequest(text=reason(e, language(request))) from None
+    topic.sheets.add_own(file, fields.get("course"), fields.get("number", ""), fields.get("due"), clock.now_utc())
+    await topic.publish()
+    return respond(request, _sheets_state(request))
+
+
+async def delete_sheet(request: web.Request) -> web.Response:
+    """An own sheet deleted with its messages; the chats' sheets are not the owner's to delete."""
+    if not await request.app[SHEETS_KEY].remove(_sheet_id(request)):
+        raise web.HTTPNotFound(text="no such own sheet")
+    return respond(request, _sheets_state(request))
+
+
 async def join_sheet(request: web.Request) -> web.Response:
     """{previous: id}: the sheet is a newer version of that one (р. 14); its file replaces the older one's."""
     try:
@@ -445,8 +610,8 @@ async def hseapp_callback(request: web.Request) -> web.Response:
     except ValueError as e:
         why = reason(e, lang).rstrip(".")
         return page(lang, tr(lang, "The login failed", "Вход не удался"), f"{why[:1].upper()}{why[1:]}.",
-                    tr(lang, "Go back to Telegram and log in again: the Mini App, screen «HSE App X».",
-                       "Вернитесь в Telegram и войдите ещё раз: Mini App, экран «HSE App X»."), status=400)
+                    tr(lang, "Go back to Telegram and log in again: the Mini App, Settings → HSE App X.",
+                       "Вернитесь в Telegram и войдите ещё раз: Mini App, Настройки → HSE App X."), status=400)
     return page(lang, tr(lang, "Logged in to HSE App X", "Вход в HSE App X выполнен"),
                 tr(lang, "The deadlines will be updated within a minute.", "Дедлайны обновятся в течение минуты."),
                 tr(lang, "This window can be closed: go back to Telegram.",
@@ -617,11 +782,12 @@ async def raise_llm(request: web.Request) -> web.Response:
 def _grades_state(request: web.Request) -> dict:
     grades, status = request.app[GRADES_KEY], request.app[SOURCES_KEY].get("grades", dict)()
     read = status.get("sheets") or {}
-    sheets = [{"id": sid, "url": sheet["url"], "label": sheet["label"], **read.get(sid, {}),
-               "grades": grades.items(sid)}
+    sheets = [{"id": sid, "url": sheet["url"], "label": sheet["label"], "name": sheet.get("name", ""),
+               **read.get(sid, {}), "grades": grades.items(sid)}
               for sheet in grades.settings.get("grades_sheets") for sid in [sheet_id(sheet["url"])]]
     return {**{key: grades.settings.get(name) for key, name in GRADE_SETTINGS.items() if key != "sheets"},
-            "llm": status.get("llm", True), "sheets": sheets, "label_chars": SHEET_LABEL_CHARS}
+            "llm": status.get("llm", True), "sheets": sheets, "manual": grades.manual(),
+            "label_chars": SHEET_LABEL_CHARS}
 
 
 async def grade_sheets(request: web.Request) -> web.Response:
@@ -630,8 +796,8 @@ async def grade_sheets(request: web.Request) -> web.Response:
 
 
 async def update_grades(request: web.Request) -> web.Response:
-    """{student?, sheets?: [{url, label}], window_days?}: all checked before any is saved; a sheet removed, or all of
-    them for a new name, start again from a baseline. The sheets are read at once."""
+    """{student?, sheets?: [{url, label, name?}], window_days?}: all checked before any is saved; a sheet removed, or
+    all of them for a new name, start again from a baseline. The sheets are read at once."""
     values = await _json(request)
     if not values or set(values) - set(GRADE_SETTINGS):
         raise web.HTTPBadRequest(text="expected {student?, sheets?, window_days?}")
@@ -639,6 +805,138 @@ async def update_grades(request: web.Request) -> web.Response:
         request.app[GRADES_KEY].configure({GRADE_SETTINGS[key]: value for key, value in values.items()})
     except SettingsError as e:
         raise web.HTTPBadRequest(text=str(e)) from None
+    return respond(request, _grades_state(request))
+
+
+def _configured(request: web.Request) -> tuple[list[dict], dict]:
+    """The grade sheets as set, and the one of the request by its id; 404 for a sheet not set."""
+    sheets = [dict(sheet) for sheet in request.app[GRADES_KEY].settings.get("grades_sheets")]
+    found = next((sheet for sheet in sheets if sheet_id(sheet["url"]) == request.match_info["sid"]), None)
+    if found is None:
+        raise web.HTTPNotFound(text="no such grade sheet")
+    return sheets, found
+
+
+def _gradebook_state(request: web.Request) -> dict:
+    """A gradebook's screen (р. 44): its name and course, how its last read went, and each tab with the own row's
+    cells, the works laid out in them, and whose the layout is."""
+    grades, (_, sheet) = request.app[GRADES_KEY], _configured(request)
+    sid = request.match_info["sid"]
+    read = (request.app[SOURCES_KEY].get("grades", dict)().get("sheets") or {}).get(sid, {})
+    view = grades.view(sid)
+    course = view["course"] or short_course(sheet["label"], read.get("title"), sid)
+    return {"id": sid, "url": sheet["url"], "label": sheet["label"], "name": sheet.get("name", ""),
+            "title": read.get("title"), "ok_at": read.get("ok_at"), "error": read.get("error"),
+            "student": grades.settings.get("grades_student"), "course": course, "label_chars": SHEET_LABEL_CHARS,
+            "label_budget": budget(course), "items": len(grades.items(sid)), "tabs": view["tabs"]}
+
+
+async def gradebook(request: web.Request) -> web.Response:
+    return respond(request, _gradebook_state(request))
+
+
+async def update_gradebook(request: web.Request) -> web.Response:
+    """{name?, label?}: the owner's name of a gradebook and the course in front of its grades."""
+    values = await _json(request)
+    if not values or set(values) - {"name", "label"}:
+        raise web.HTTPBadRequest(text="expected {name?, label?}")
+    sheets, sheet = _configured(request)
+    sheet.update(values)
+    try:
+        request.app[GRADES_KEY].configure({"grades_sheets": sheets})
+    except SettingsError as e:
+        raise web.HTTPBadRequest(text=str(e)) from None
+    return respond(request, _gradebook_state(request))
+
+
+async def read_gradebook(request: web.Request) -> web.Response:
+    """«Прочитать сейчас»: the gradebooks are read at once, not in 30 minutes."""
+    _configured(request)
+    grades = request.app[GRADES_KEY]
+    if grades.wake is not None:
+        grades.wake()
+    return respond(request, _gradebook_state(request))
+
+
+def _layout_items(values: dict) -> tuple[bool, list[dict]]:
+    """{skip, works: [{column, label, max, bonus_column}]} of the owner's layout of a tab."""
+    listed = values.get("works")
+    if set(values) != {"skip", "works"} or not isinstance(values["skip"], bool) or not isinstance(listed, list):
+        raise web.HTTPBadRequest(text="expected {skip, works: [{column, label, max, bonus_column}]}")
+    items, columns = [], set()
+    for work in listed:
+        if not isinstance(work, dict) or set(work) != {"column", "label", "max", "bonus_column"} or \
+                not isinstance(work["column"], str) or not isinstance(work["label"], str) or \
+                isinstance(work["max"], bool) or not isinstance(work["max"], int | float) or work["max"] <= 0 or \
+                not isinstance(work["bonus_column"], str | None) or work["column"] in columns:
+            raise web.HTTPBadRequest(text="a work: {column, label, max > 0, bonus_column or null}, each column once")
+        columns.add(work["column"])
+        items.append({**work, "label": " ".join(work["label"].split())})
+    return values["skip"], items
+
+
+async def set_layout(request: web.Request) -> web.Response:
+    """The owner's layout of a tab: it stands over Haiku's; the gradebook is read again at once."""
+    _configured(request)
+    skip, items = _layout_items(await _json(request))
+    try:
+        found = request.app[GRADES_KEY].set_layout(request.match_info["sid"], request.match_info["tab"], skip, items)
+    except ValueError as e:
+        raise web.HTTPBadRequest(text=reason(e, language(request))) from None
+    if found is None:
+        raise web.HTTPNotFound(text="no such tab")
+    return respond(request, _gradebook_state(request))
+
+
+async def clear_layout(request: web.Request) -> web.Response:
+    """The tab given back to Haiku."""
+    _configured(request)
+    if request.app[GRADES_KEY].clear_layout(request.match_info["sid"], request.match_info["tab"]) is None:
+        raise web.HTTPNotFound(text="no such tab")
+    return respond(request, _gradebook_state(request))
+
+
+def _grade_fields(request: web.Request, values: dict, names: set[str]) -> dict:
+    fields = {}
+    for name, limit in (("course", SHEET_LABEL_CHARS), ("label", GRADE_LABEL_LIMIT)):
+        if name in names:
+            value = values.get(name)
+            if not isinstance(value, str) or not " ".join(value.split()) or len(value) > limit:
+                raise bad_request(request, f"{name}: up to {limit} characters", f"{name}: до {limit} символов")
+            fields[name] = " ".join(value.split())
+    value = values.get("value")
+    if isinstance(value, bool) or not isinstance(value, int | float) or not 0 <= value <= 10:
+        raise bad_request(request, "a grade from 0 to 10", "оценка от 0 до 10")
+    fields["value"] = round(float(value), 2)
+    return fields
+
+
+async def add_grade(request: web.Request) -> web.Response:
+    """{course, label, value}: a grade added by hand."""
+    values = await _json(request)
+    if set(values) != {"course", "label", "value"}:
+        raise web.HTTPBadRequest(text="expected {course, label, value}")
+    fields = _grade_fields(request, values, {"course", "label"})
+    request.app[GRADES_KEY].add_grade(fields["course"], fields["label"], fields["value"])
+    return respond(request, _grades_state(request))
+
+
+async def change_grade(request: web.Request) -> web.Response:
+    """{value, label?, course?}: a grade added by hand changed, or a sheet's grade changed by the owner."""
+    values = await _json(request)
+    if "value" not in values or set(values) - {"value", "label", "course"}:
+        raise web.HTTPBadRequest(text="expected {value, label?, course?}")
+    fields = _grade_fields(request, values, set(values) & {"label", "course"})
+    if not request.app[GRADES_KEY].change_grade(request.match_info["grade"], fields.get("label"), fields["value"],
+                                                fields.get("course")):
+        raise web.HTTPNotFound(text="no such grade")
+    return respond(request, _grades_state(request))
+
+
+async def drop_grade(request: web.Request) -> web.Response:
+    """A grade added by hand deleted, or a sheet's grade back as the sheet has it."""
+    if not request.app[GRADES_KEY].drop_grade(request.match_info["grade"]):
+        raise web.HTTPNotFound(text="no such grade")
     return respond(request, _grades_state(request))
 
 
@@ -657,7 +955,7 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
     """The Mini App's port; without the settings and the sheets' topic the Листочки screen has no API, without the
     settings and the summaries' topic the Сводки screen has none, without the grades the Оценки screen has none,
     without the calendar feed there are no public feeds."""
-    app = web.Application(middlewares=[owner_only])
+    app = web.Application(middlewares=[owner_only], client_max_size=UPLOAD_MAX_SIZE + 2**20)  # an own sheet's PDF
     app[ENV_KEY], app[BUDGET_KEY], app[JOURNAL_KEY] = env, budget, journal
     app[INBOX_KEY], app[CHAT_SETTINGS_KEY], app[SOURCES_KEY] = inbox, chat_settings, sources
     app[SUBJECTS_KEY], app[SCHEDULE_KEY], app[HSEAPP_KEY], app[DEADLINES_KEY] = dictionary, timetable, hse, merged
@@ -683,8 +981,11 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
     app.router.add_get("/app/api/subjects", subjects)
     app.router.add_put("/app/api/subjects", put_subject)
     app.router.add_delete("/app/api/subjects", delete_subject)
-    app.router.add_get("/app/api/schedule", schedule)
+    app.router.add_get("/app/api/agenda", agenda)
+    app.router.add_post("/app/api/events", add_event)
     app.router.add_patch("/app/api/events/{event_id}", update_event)
+    app.router.add_delete("/app/api/events/{event_id}", delete_event)
+    app.router.add_post("/app/api/corrections", correct_class)
     app.router.add_get("/app/api/deadlines", deadlines)
     app.router.add_post("/app/api/deadlines", add_deadline)
     app.router.add_patch("/app/api/deadlines/{uid}", edit_deadline)
@@ -693,6 +994,9 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
     if settings is not None and sheet_topic is not None:
         app.router.add_get("/app/api/sheets", sheets)
         app.router.add_patch("/app/api/sheets", update_sheets)
+        app.router.add_post("/app/api/sheets", add_sheet)
+        app.router.add_patch("/app/api/sheets/{sheet_id}", edit_sheet)
+        app.router.add_delete("/app/api/sheets/{sheet_id}", delete_sheet)
         app.router.add_post("/app/api/sheets/{sheet_id}/join", join_sheet)
     if settings is not None and summary_topic is not None:
         app.router.add_get("/app/api/summaries", summaries)
@@ -701,6 +1005,14 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
         app[GRADES_KEY] = grade_list
         app.router.add_get("/app/api/grades", grade_sheets)
         app.router.add_patch("/app/api/grades", update_grades)
+        app.router.add_post("/app/api/grades/items", add_grade)
+        app.router.add_patch("/app/api/grades/items/{grade}", change_grade)
+        app.router.add_delete("/app/api/grades/items/{grade}", drop_grade)
+        app.router.add_get("/app/api/grades/sheets/{sid}", gradebook)
+        app.router.add_patch("/app/api/grades/sheets/{sid}", update_gradebook)
+        app.router.add_post("/app/api/grades/sheets/{sid}/read", read_gradebook)
+        app.router.add_put("/app/api/grades/sheets/{sid}/tabs/{tab}", set_layout)
+        app.router.add_delete("/app/api/grades/sheets/{sid}/tabs/{tab}", clear_layout)
     app.router.add_get("/app/api/hseapp", hseapp)
     app.router.add_patch("/app/api/hseapp", update_hseapp)
     app.router.add_post("/app/api/hseapp/link", hseapp_link)

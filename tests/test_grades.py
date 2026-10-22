@@ -497,7 +497,31 @@ async def test_api_and_miniapp(aiohttp_client, grades, settings, budget, journal
     assert body["student"] == "Иванов Иван" and body["window_days"] == 7 and body["label_chars"] == 10
     [shown] = body["sheets"]
     assert shown["id"] == "abc123" and shown["title"] == "ДМ ПИ" and shown["label"] == "DM"
-    assert shown["grades"] == [{"label": "DM HW 1", "value": 8, "raw": 8, "max": 10, "bonus": 1, "new": True}]
+    assert shown["grades"] == [{"id": "k1", "label": "DM HW 1", "value": 8, "raw": 8, "max": 10, "bonus": 1,
+                                "edited": False, "sheet_value": 8, "new": True}]
+    assert shown["name"] == "" and body["manual"] == []
+
+    # The owner's grades (р. 44): a sheet's changed, one added by hand; both go to Tablo.
+    body = await (await client.patch("/app/api/grades/items/k1", json={"value": 9.5}, headers=headers)).json()
+    assert (body["sheets"][0]["grades"][0]["value"], body["sheets"][0]["grades"][0]["edited"]) == (9.5, True)
+    body = await (await client.post("/app/api/grades/items", headers=headers,
+                                    json={"course": "Eng", "label": " Essay ", "value": 8})).json()
+    [mine] = body["manual"]
+    assert (mine["course"], mine["label"], mine["value"]) == ("Eng", "Essay", 8)
+    api_client = await aiohttp_client(api.create_app(env(), budget, sources, None, merged, grades))
+    tablo = await (await api_client.get("/api/grades", headers={"Authorization": "Bearer tok"})).json()
+    assert {(i["label"], i["value"]) for i in tablo["items"]} == {("DM HW 1", 9.5), ("Eng Essay", 8)}
+    for bad in ({"value": 11}, {"value": "9"}, {"value": True}, {"label": "x"}, {"value": 5, "oops": 1}):
+        assert (await client.patch("/app/api/grades/items/k1", json=bad, headers=headers)).status == 400
+    for bad in ({"course": "", "label": "x", "value": 5}, {"course": "Eng", "label": "x"},
+                {"course": "Discrete Math", "label": "x", "value": 5}):
+        assert (await client.post("/app/api/grades/items", json=bad, headers=headers)).status == 400
+    assert (await client.patch("/app/api/grades/items/nope", json={"value": 5}, headers=headers)).status == 404
+    body = await (await client.delete(f"/app/api/grades/items/{mine['id']}", headers=headers)).json()
+    assert body["manual"] == []
+    body = await (await client.delete("/app/api/grades/items/k1", headers=headers)).json()
+    assert body["sheets"][0]["grades"][0]["value"] == 8
+    assert (await client.delete("/app/api/grades/items/k1", headers=headers)).status == 404
 
     woken = []
     grades.wake = lambda: woken.append(1)
@@ -509,3 +533,114 @@ async def test_api_and_miniapp(aiohttp_client, grades, settings, budget, journal
     assert (await client.patch("/app/api/grades", headers=headers, json={"pdf_pages": 3})).status == 400
     response = await client.patch("/app/api/grades", headers=headers, json={"window_days": 14})
     assert (await response.json())["window_days"] == 14
+
+
+# --- the owner's hand (р. 44) ------------------------------------------------------------------------
+
+async def test_the_view_and_the_owners_layout(grades, llm, now):
+    await grades.apply(sheet())
+    view = grades.view("abc123")
+    dz, _ = view["tabs"]
+    assert (view["course"], dz["tab"], dz["own_row"], dz["by"], dz["header_rows"]) == (
+        "DM", "ДЗ-1А", 5, "haiku", [1, 2])
+    assert [(c["column"], c["header"], c["value"]) for c in dz["columns"]] == [
+        ("D", "7 / 1а", "1"), ("E", "0 / 1б", "0.7"), ("F", "Балл", "5.9"), ("G", "Балл*", "1")]
+    assert dz["works"] == [{"column": "F", "label": "HW 1A", "max": 7, "bonus_column": "G", "header": "Балл",
+                            "raw": 5.9, "value": 8.43}]
+    assert all("Образцов" not in str(tab) for tab in view["tabs"])  # another student's row is not kept
+
+    woken = []
+    grades.wake = lambda: woken.append(1)
+    mine = [{"column": "F", "label": "HW 1A", "max": 7, "bonus_column": "G"},
+            {"column": "D", "label": "Problem 1a", "max": 1, "bonus_column": None}]
+    found = grades.set_layout("abc123", "ДЗ-1А", False, mine)
+    assert found["by"] == "you" and [w["value"] for w in found["works"]] == [8.43, 10] and woken == [1]
+    assert grades.view("abc123")["tabs"][0]["by"] == "you"
+    now.moment += dt.timedelta(hours=1)
+    await grades.apply(sheet(total="Итог"))  # the header changed: the owner's layout stands, nothing is asked
+    assert len(llm.prompts) == 2
+    assert [i["label"] for i in grades.items("abc123")] == ["DM HW 1A", "DM Problem 1a", "DM Quiz 1"]
+    with pytest.raises(ValueError, match="no such column"):
+        grades.set_layout("abc123", "ДЗ-1А", False, [{**mine[0], "column": "Z"}])
+    with pytest.raises(ValueError, match="a label is needed"):
+        grades.set_layout("abc123", "ДЗ-1А", False, [{**mine[0], "label": "x" * 40}])
+    assert grades.set_layout("abc123", "Нет такой", True, []) is None
+
+    found = grades.clear_layout("abc123", "ДЗ-1А")
+    assert found["by"] == "haiku" and [w["label"] for w in found["works"]] == ["HW 1A"] and woken == [1, 1]
+    await grades.apply(sheet(total="Итог"))  # Haiku is asked again: its cached layout watched another header
+    assert [i["label"] for i in grades.items("abc123")] == ["DM HW 1A", "DM Quiz 1"]
+
+    grades.set_layout("abc123", "Квизы", True, [])
+    grades.forget({"abc123"})
+    assert grades.view("abc123") == {"course": "", "tabs": []}
+    assert grades.store.get_json(f"{g.OWN_LAYOUT}abc123|Квизы") is None
+
+
+def test_the_owners_grades(grades, now):
+    grades.record("abc123", "ДМ", [item("k1", "DM HW 1", 8)])
+    now.moment += dt.timedelta(hours=1)
+    assert grades.change_grade("k1", None, 9.5)
+    [shown] = grades.items("abc123")
+    assert (shown["id"], shown["value"], shown["edited"], shown["sheet_value"], shown["new"]) == ("k1", 9.5, True, 8,
+                                                                                                  True)
+    assert [(x["key"], x["label"], x["value"]) for x in grades.new()] == [("k1", "DM HW 1", 9.5)]
+    grades.record("abc123", "ДМ", [item("k1", "DM HW 1", 8)])  # the sheet has the same grade: the change stands
+    assert grades.items("abc123")[0]["value"] == 9.5
+    now.moment += dt.timedelta(hours=1)
+    grades.record("abc123", "ДМ", [item("k1", "DM HW 1", 7)])  # the sheet changed it: the sheet wins
+    assert (grades.items("abc123")[0]["value"], grades.items("abc123")[0]["edited"]) == (7, False)
+
+    added = grades.add_grade("Eng", "Essay", 8.5)
+    assert grades.manual() == [{"id": f"own-{added}", "course": "Eng", "label": "Essay", "value": 8.5, "new": True}]
+    assert ("Eng Essay", 8.5) in {(x["label"], x["value"]) for x in grades.new()}
+    assert grades.change_grade(f"own-{added}", "Essay 2", 9) and grades.manual()[0]["label"] == "Essay 2"
+    assert not grades.change_grade("nope", None, 5) and not grades.drop_grade("own-99")
+    now.moment += dt.timedelta(days=8)
+    assert not grades.manual()[0]["new"] and grades.new() == []
+    assert grades.drop_grade(f"own-{added}") and grades.manual() == []
+
+    grades.change_grade("k1", None, 10)
+    grades.forget({"abc123"})
+    assert grades.db.execute("select count(*) n from own_grades").fetchone()["n"] == 0
+
+
+async def test_miniapp_gradebook(aiohttp_client, grades, settings, budget, journal, schedule, merged):
+    from urllib.parse import quote
+
+    await grades.apply(sheet())
+    status = {"sheets": {"abc123": {"title": "ДМ ПИ", "ok_at": "2026-10-20T12:00:00", "error": None, "tabs": 2,
+                                    "items": 2}}, "llm": True}
+    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, None,
+                                                     {**TWIN, "grades": lambda: status}, schedule.subjects, schedule,
+                                                     None, merged, settings, grade_list=grades))
+    headers, woken = owner(), []
+    grades.wake = lambda: woken.append(1)
+    path = "/app/api/grades/sheets/abc123"
+    assert (await client.get(path)).status == 401
+    body = await (await client.get(path, headers=headers)).json()
+    assert (body["title"], body["course"], body["label_budget"], body["student"], body["items"]) == (
+        "ДМ ПИ", "DM", 20, "Иванов Иван", 2)
+    assert [t["tab"] for t in body["tabs"]] == ["ДЗ-1А", "Квизы"]
+    assert (await client.get("/app/api/grades/sheets/zzz999", headers=headers)).status == 404
+
+    body = await (await client.patch(path, json={"name": " Discrete  maths "}, headers=headers)).json()
+    assert body["name"] == "Discrete maths" and settings.get("grades_sheets")[0]["name"] == "Discrete maths"
+    assert (await client.patch(path, json={"label": "Discrete Math"}, headers=headers)).status == 400
+    assert (await client.patch(path, json={"title": "x"}, headers=headers)).status == 400
+    await client.post(path + "/read", headers=headers)
+    assert woken
+
+    tab = f"{path}/tabs/{quote('ДЗ-1А')}"
+    layout = {"skip": False, "works": [{"column": "F", "label": "HW 1A", "max": 7, "bonus_column": "G"},
+                                       {"column": "D", "label": "Problem 1a", "max": 1, "bonus_column": None}]}
+    body = await (await client.put(tab, json=layout, headers=headers)).json()
+    assert body["tabs"][0]["by"] == "you" and len(body["tabs"][0]["works"]) == 2
+    for bad in ({"skip": False}, {"skip": "no", "works": []}, {"skip": False, "works": [{"column": "F"}]},
+                {"skip": False, "works": [layout["works"][0], layout["works"][0]]},
+                {"skip": False, "works": [{**layout["works"][0], "max": 0}]},
+                {"skip": False, "works": [{**layout["works"][0], "column": "Z"}]}):
+        assert (await client.put(tab, json=bad, headers=headers)).status == 400
+    assert (await client.put(f"{path}/tabs/x", json=layout, headers=headers)).status == 404
+    body = await (await client.delete(tab, headers=headers)).json()
+    assert body["tabs"][0]["by"] == "haiku"

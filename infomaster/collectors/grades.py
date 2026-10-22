@@ -39,8 +39,8 @@ TIMEOUT = 120               # seconds
 STALE_AFTER = dt.timedelta(hours=12)
 TOP_ROWS = 15               # rows of a tab above the own row the model sees: the header is somewhere among them
 COURSE_FROM_TITLE = 8       # characters of the sheet's title that name the course when its label is not set
-NO_ROW = Phrase("the own row is on no tab: check the name on the «Grades» screen",
-                "своей строки нет ни на одной вкладке: проверьте ФИО на экране «Оценки»")
+NO_ROW = Phrase("the own row is on no tab: check the name in the Mini App, Settings → Gradebooks",
+                "своей строки нет ни на одной вкладке: проверьте ФИО в Mini App, Настройки → Таблицы оценок")
 
 
 def sheet_id(url: str) -> str:

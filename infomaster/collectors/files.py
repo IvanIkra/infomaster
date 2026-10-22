@@ -9,17 +9,21 @@ message in the queue for its next run (NotNow). What Haiku read on an image (pro
 lives in the same row. Files and rows go with their messages after 14 days (р. 29); a sheet made of a file keeps its
 text (processing/sheets.py), and the file lives on in the forum.
 
-Only messages of the twin's chats: letters keep their attachments in the mailbox.
+Only messages of the twin's chats: letters keep their attachments in the mailbox. And the PDFs the owner uploads in the
+Mini App as sheets of their own (р. 44): kept the same way, in rows of source `own` of the chat OWN_CHAT.
 """
 
 import asyncio
+import datetime as dt
 import hashlib
 import json
 import logging
+import secrets
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from .. import clock
+from ..i18n import Phrase
 from ..processing import pdf
 from ..store import Store
 from .inbox import RETENTION
@@ -27,6 +31,8 @@ from .inbox import RETENTION
 log = logging.getLogger(__name__)
 
 MAX_SIZE = 50 * 1024 * 1024  # bytes: a bigger PDF is a book, not a sheet, and is not downloaded
+UPLOAD_MAX_SIZE = 20 * 1024 * 1024  # bytes of a PDF the owner uploads
+OWN_CHAT = -1                # the chat of the owner's own sheets: no chat has this id (the mailbox is 0)
 IMAGE_MAX_SIZE = 3_750_000   # bytes: in base64 it stays within the API's 5 MB for an image
 FIRST_PAGE_CHARS = 4000      # kept of the first page
 
@@ -124,6 +130,31 @@ class Files:
         with self.db:
             self.db.execute("update files set reading = ?, error = ? where id = ?", (value, error, row["id"]))
         return {**row, "reading": value, "error": error}
+
+    async def keep(self, data: bytes, name: str, at: dt.datetime) -> dict:
+        """A PDF the owner uploads: stored as a downloaded one, its first page read; the row of source `own` goes
+        after 14 days like the others. ValueError when it is too big or no PDF that can be read."""
+        if len(data) > UPLOAD_MAX_SIZE:
+            mb = UPLOAD_MAX_SIZE // 2**20
+            raise ValueError(Phrase(f"the file is over {mb} MB", f"файл больше {mb} МБ"))
+        self.directory.mkdir(mode=0o700, exist_ok=True)
+        part = self.directory / f"own_{secrets.token_hex(6)}.part"
+        await asyncio.to_thread(part.write_bytes, data)
+        try:
+            values = await asyncio.to_thread(self._store, part, "pdf")
+        except pdf.PdfError as e:
+            raise ValueError(Phrase(f"not a PDF that can be read: {e}",
+                                    f"это не PDF или его не прочитать: {e}")) from None
+        finally:
+            part.unlink(missing_ok=True)
+        with self.db:
+            msg_id = self.db.execute("select coalesce(max(msg_id), 0) + 1 n from files where source = 'own'"
+                                     ).fetchone()["n"]
+            self.db.execute("insert into files(source, chat_id, msg_id, at, name, size, sha256, path, pages, "
+                            "first_page, error, kind) values('own', ?, ?, ?, ?, ?, ?, ?, ?, ?, null, 'pdf')",
+                            (OWN_CHAT, msg_id, clock.local_iso(at), name, len(data), values["sha256"], values["path"],
+                             values["pages"], values["first_page"]))
+        return dict(self.db.execute("select * from files where source = 'own' and msg_id = ?", (msg_id,)).fetchone())
 
     async def _fetch(self, message: dict, meta: dict, kind: str) -> dict | None:
         if message["source"] != "tg":

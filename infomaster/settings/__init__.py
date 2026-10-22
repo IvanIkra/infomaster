@@ -78,6 +78,7 @@ def _clock_time(value: Any) -> str:
 
 
 GOOGLE_SHEET = re.compile(r"/spreadsheets/d/([A-Za-z0-9_-]+)")  # the id of a Google Sheet in its link
+SHEET_NAME_CHARS = 60
 SHEET_LABEL_CHARS = 10  # the course in front of a grade's label: "DM HW 1A" (Tablo's budget of 23 is for both)
 
 
@@ -89,14 +90,15 @@ def _student(value: Any) -> str:
 
 
 def _grade_sheets(value: Any) -> list[dict]:
-    """[{url, label}]: Google Sheets open to anyone with the link; label is the course's short name, "" for the
-    start of the sheet's title."""
+    """[{url, label, name?}]: Google Sheets open to anyone with the link; label is the course's short name, "" for
+    the start of the sheet's title; name is the owner's for the Mini App (р. 44), kept only when given."""
     if not isinstance(value, list):
         raise SettingsError("expected a list of {url, label}")
     sheets, ids = [], set()
     for sheet in value:
-        if not isinstance(sheet, dict) or set(sheet) - {"url", "label"} or not isinstance(sheet.get("url"), str) \
-                or not isinstance(sheet.get("label", ""), str):
+        if not isinstance(sheet, dict) or set(sheet) - {"url", "label", "name"} or \
+                not isinstance(sheet.get("url"), str) or not isinstance(sheet.get("label", ""), str) or \
+                not isinstance(sheet.get("name", ""), str):
             raise SettingsError("expected a list of {url, label}")
         url = sheet["url"].strip()
         found = GOOGLE_SHEET.search(url)
@@ -108,7 +110,10 @@ def _grade_sheets(value: Any) -> list[dict]:
         label = " ".join(sheet.get("label", "").split())
         if len(label) > SHEET_LABEL_CHARS:
             raise SettingsError(f"a course label has at most {SHEET_LABEL_CHARS} characters, got {label!r}")
-        sheets.append({"url": url, "label": label})
+        name = " ".join(sheet.get("name", "").split())
+        if len(name) > SHEET_NAME_CHARS:
+            raise SettingsError(f"a sheet's name has at most {SHEET_NAME_CHARS} characters")
+        sheets.append({"url": url, "label": label, **({"name": name} if name else {})})
     return sheets
 
 

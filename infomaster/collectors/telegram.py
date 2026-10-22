@@ -5,9 +5,10 @@ chats: new ones live, edits, deletions and pins as they happen. After a restart 
 its `last_id`; edits and deletions made while the service was down are not caught up. A file (a PDF, an image) is
 downloaded only when a batch asks for it (collectors/files.py).
 
-The account logs in and out in the Mini App, screen «Чаты»: the phone, the code Telegram sends to the account, the
-cloud password if it has one (`send_code`, `sign_in`, `logout`). The service runs on without it and starts reading
-as soon as the login is done, without a restart. A terminal works too: `python -m infomaster login` (see `login`).
+The account logs in and out in the Mini App, Settings → Twin and chats: the phone, the code Telegram sends to the
+account, the cloud password if it has one (`send_code`, `sign_in`, `logout`). The service runs on without it and
+starts reading as soon as the login is done, without a restart. A terminal works too: `python -m infomaster login`
+(see `login`).
 """
 
 import asyncio
@@ -111,9 +112,10 @@ class Twin:
         self.login_needed, self.error = True, why
         log.warning("%s; log in in the Mini App or with: %s", why, LOGIN_HINT)
         (self.notify_login or self.notify)(Phrase(
-            f"The chats are not read: {why.en}.\nLog in in the Mini App, screen «Chats» (or on the server: "
+            f"The chats are not read: {why.en}.\nLog in in the Mini App, Settings → Twin and chats (or on the server: "
             f"{LOGIN_HINT}).",
-            f"Чаты не читаются: {why.ru}.\nВойти — в Mini App, экран «Чаты» (или на сервере: {LOGIN_HINT})."))
+            f"Чаты не читаются: {why.ru}.\nВойти — в Mini App, Настройки → Твинк и чаты "
+            f"(или на сервере: {LOGIN_HINT})."))
         return False
 
     # --- login and logout from the Mini App ---------------------------------------

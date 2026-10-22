@@ -15,6 +15,10 @@
    diff of the texts and says what changed. The summary and the changes are written in the forum's language (р. 41),
    as it is when the sheet is prepared.
 
+4. The owner changes a sheet's course, number, due date and summary in the Mini App, and adds sheets of their own:
+   a PDF uploaded there, of the chat OWN_CHAT (р. 44). An own sheet is posted as a chat's, gets newer versions by
+   the same rules among the own ones, and is the only kind the owner may delete.
+
 The forum side is outputs/sheets.py. Writing methods commit themselves, except `add`: the batch calls it inside its
 own transaction.
 """
@@ -26,7 +30,7 @@ import re
 from collections.abc import Callable
 
 from .. import clock
-from ..collectors.files import Files
+from ..collectors.files import OWN_CHAT, Files
 from ..collectors.inbox import Inbox
 from ..i18n import Phrase, tr
 from ..llm.budget import CHARS_PER_TOKEN, PAGE_TOKENS, BudgetExceeded
@@ -144,6 +148,46 @@ class Sheets:
             (chat_id, message["msg_id"], file["name"] or "sheet.pdf", file["sha256"],
              sheet["course"] or None, sheet["number"], sheet["due"], clock.local_iso(at)))
         return cursor.lastrowid
+
+    def add_own(self, file: dict, course: str | None, number: str, due: str | None, at: dt.datetime) -> int:
+        """An own sheet of an uploaded PDF (`file`: its files row); it waits for the forum as a chat's."""
+        with self.db:
+            return self.db.execute(
+                "insert into sheets(chat_id, msg_id, name, sha256, course, number, due, status, created_at) "
+                "values(?, ?, ?, ?, ?, ?, ?, 'new', ?)",
+                (OWN_CHAT, file["msg_id"], file["name"] or "sheet.pdf", file["sha256"], course or None, number, due,
+                 clock.local_iso(at))).lastrowid
+
+    def edit(self, sheet_id: int, fields: dict) -> dict | None:
+        """The owner's change: course, number and due date of the sheet as it is now (its newest version), the
+        summary of its first version, which the caption carries. The sheet, or None for no such sheet."""
+        sheet = self.get(sheet_id)
+        if sheet is None:
+            return None
+        with self.db:
+            for name in ("course", "number", "due"):
+                if name in fields:
+                    self.db.execute(f"update sheets set {name} = ? where id = ?", (fields[name], sheet_id))
+            if "summary" in fields:
+                self.db.execute("update sheets set summary = ? where id = ?", (fields["summary"],
+                                                                               self.first(sheet)["id"]))
+        return self.get(sheet_id)
+
+    def remove_own(self, sheet_id: int) -> list[dict] | None:
+        """An own sheet deleted with every version of it: the rows deleted (the forum's posts of them go too), or
+        None when it is no own sheet."""
+        sheet = self.get(sheet_id)
+        if sheet is None or sheet["chat_id"] != OWN_CHAT:
+            return None
+        chain = [self.first(sheet)]
+        while (newer := self.db.execute("select * from sheets where previous = ?", (chain[-1]["id"],)).fetchone()):
+            chain.append(dict(newer))
+        if any(s["chat_id"] != OWN_CHAT for s in chain):
+            return None  # a chat's sheet joined to it: that one is not the owner's to delete
+        with self.db:
+            self.db.execute(f"delete from sheets where id in ({', '.join('?' * len(chain))})",
+                            [s["id"] for s in chain])
+        return chain
 
     def waiting(self) -> list[dict]:
         """Sheets the forum has not got yet, oldest first."""
@@ -363,7 +407,8 @@ class Sheets:
                 "error": first["error"], "course": latest["course"],
                 "title": self.subjects.title(latest["course"]) if latest["course"] else None,
                 "number": latest["number"], "name": latest["name"], "due": latest["due"],
-                "chat": chat["title"] if chat else None, "created_at": first["created_at"],
+                "chat": chat["title"] if chat else None, "own": first["chat_id"] == OWN_CHAT,
+                "created_at": first["created_at"],
                 "updated_at": latest["created_at"], "summary": first["summary"],
                 "file": self.files.by_hash(latest["sha256"]) is not None,
             })

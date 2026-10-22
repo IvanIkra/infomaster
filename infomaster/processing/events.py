@@ -10,6 +10,10 @@ something else) brings back the newest version before it that is not withdrawn i
 one; a superseded version whose messages are deleted is withdrawn too, so it never comes back. The owner's choices
 (`required` once `chosen`, `hidden`) pass to every newer version.
 
+The owner's own events and corrections come from the Mini App (source `own`, р. 44). An own correction of a class wins
+over the chats' corrections of it; the chats' versions go on under it, so they apply again once it is undone. The
+batches never see the own ones: the model is not to move them, nor a chat's message to supersede them.
+
 Writing methods of the processing do not commit: call them inside `with store.db`. The owner's choices commit
 themselves.
 """
@@ -17,6 +21,7 @@ themselves.
 import datetime as dt
 import hashlib
 import json
+import secrets
 
 from .. import clock
 from ..store import Store
@@ -25,6 +30,7 @@ from .deadlines import same_label
 FIELDS = ("uid", "source", "chat_id", "msg_ids", "class_uid", "course", "title", "kind", "start", "end", "room",
           "required", "chosen", "hidden", "cancelled")
 IN_FORCE = "replaced_by is null and gone_at is null"
+OWN = "own"  # the source of the owner's own events and corrections
 
 
 def event_uid(source: str, chat_id: int, msg_id: int, n: int = 0) -> str:
@@ -32,6 +38,11 @@ def event_uid(source: str, chat_id: int, msg_id: int, n: int = 0) -> str:
     several events of one message."""
     key = f"{chat_id}:{msg_id}" + (f":{n}" if n else "")
     return f"{source}-{hashlib.sha1(key.encode()).hexdigest()[:16]}@infomaster"
+
+
+def own_uid() -> str:
+    """UID of an own event or correction: no message to hash, it is the same through its versions."""
+    return f"{OWN}-{secrets.token_hex(8)}@infomaster"
 
 
 class Events:
@@ -60,19 +71,28 @@ class Events:
         return [_decode(row) for row in rows]
 
     def upcoming(self, today: dt.date) -> list[dict]:
-        """Events of their own in force from today on, by time: the batches show them to the model."""
+        """Events of their own in force from today on, by time: the batches show them to the model. The owner's own
+        are left out: they are not the model's to move."""
         rows = self.db.execute(f"select * from events where {IN_FORCE} and class_uid is null and start >= ? "
-                               "order by start, id", (today.isoformat(),))
+                               "and source != ? order by start, id", (today.isoformat(), OWN))
         return [_decode(row) for row in rows]
 
     def corrections(self) -> dict[str, dict]:
-        """The correction in force of each corrected class, by its uid."""
-        rows = self.db.execute(f"select * from events where {IN_FORCE} and class_uid is not null order by id")
+        """The correction in force of each corrected class, by its uid: the owner's own one, else the chats'
+        newest."""
+        rows = self.db.execute(f"select * from events where {IN_FORCE} and class_uid is not null "
+                               "order by source = ?, id", (OWN,))
         return {row["class_uid"]: _decode(row) for row in rows}
 
     def correction(self, class_uid: str) -> dict | None:
-        row = self.db.execute(f"select * from events where {IN_FORCE} and class_uid = ? order by id desc",
-                              (class_uid,)).fetchone()
+        """The chats' correction in force of a class: the one a chat's new message supersedes."""
+        row = self.db.execute(f"select * from events where {IN_FORCE} and class_uid = ? and source != ? "
+                              "order by id desc", (class_uid, OWN)).fetchone()
+        return _decode(row) if row else None
+
+    def own_correction(self, class_uid: str) -> dict | None:
+        row = self.db.execute(f"select * from events where {IN_FORCE} and class_uid = ? and source = ?",
+                              (class_uid, OWN)).fetchone()
         return _decode(row) if row else None
 
     def find(self, title: str, start: str) -> dict | None:
@@ -151,6 +171,11 @@ class Events:
                 self.db.execute("update events set replaced_by = null where id = ?", (earlier["id"],))
                 restored.append(earlier["id"])
         return restored
+
+    def withdraw(self, uid: str, at: dt.datetime) -> None:
+        """Every version of an own event or correction is gone: none comes back, as with a deleted message."""
+        self.db.execute("update events set gone_at = ? where uid = ? and source = ? and gone_at is null",
+                        (clock.local_iso(at), uid, OWN))
 
     def overrule(self, class_uid: str, at: dt.datetime) -> list[int]:
         """RUZ changed the class itself, so it wins (§6.5): every correction of it is gone for good.
