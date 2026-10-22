@@ -26,6 +26,8 @@ services:
 
   # Its own node in the personal tailnet, tagged, the only one allowed Funnel (р. 31). Userspace networking:
   # no tun device, no routes and no DNS changes in the host or in other containers.
+  # A fixed address the host's awg-router leaves out of the AmneziaWG tunnel, as it does the host's own
+  # tailscaled: DERP and Let's Encrypt die in the tunnel after two minutes (see the comment above TS_FORCE_NOISE_443).
   tailscale:
     image: tailscale/tailscale:stable
     container_name: infomaster-tailscale
@@ -44,7 +46,9 @@ services:
     volumes:
       - ./data/tailscale:/var/lib/tailscale
       - ./tailscale:/config:ro
-    networks: [uni]
+    networks:
+      uni:
+        ipv4_address: 172.30.77.10
     mem_limit: 128m
     logging:
       driver: json-file
@@ -55,3 +59,7 @@ services:
 networks:
   uni:
     name: infomaster  # Tablo joins it as an external network when it switches to us (stage 10)
+    ipam:
+      config:
+        - subnet: 172.30.77.0/24
+          ip_range: 172.30.77.128/25  # dynamic addresses, away from the sidecar's
