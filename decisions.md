@@ -1,5 +1,7 @@
 # Решения по uni-master
 
+> Проект переименован в **infomaster** (инфомастер). Ниже местами осталось старое имя uni-master — новые имена пакета, контейнеров, сети, базы и полей iCal в [decisions.md](decisions.md), р. 42.
+
 Живой документ: что решили и что нельзя забыть при интеграции с Tablo. Описание самого Tablo — в [sources-overview.md](sources-overview.md).
 
 ## Принятые решения
@@ -52,6 +54,7 @@
 39. **Длина текстов при переходе — по символам**, лишнее Tablo обрезает «…». Проверку по шрифту Tablo (`pixelfont.py`) перенести в uni-master позже, отдельной задачей.
 40. **Расход LLM смотрим только в нашем Mini App.** Датчики LLM в HA и блок LLM на экране диагностики Tablo убираем без замены. В Mini App — отдельный экран «Расход LLM» (§8.4): сегодня, неделя, месяц, по задачам и по чатам, лимит.
 41. **Языки: английский по умолчанию, русский — переключателем.** Два отдельных переключателя на вкладке «Общие»: язык Mini App (интерфейс, ошибки и состояния от сервиса, страница входа HSE App X) и язык форума (всё, что пишет бот, плюс тексты Haiku для форума: ежедневная сводка, краткое содержание листочка и «что изменилось»). `/summary` может назвать язык самой сводки (`en`, `ru`). Переключение действует только на новое: отправленные сообщения не переписываются, закрепы меняются при следующей правке. Новости, метки дедлайнов, названия курсов и iCal всегда английские — их получает Tablo.
+42. **Проект переименован в infomaster (инфомастер), 22.10.2026.** В коде и конфигурации старого имени нет: пакет `uni_master/` → `infomaster/` (`python -m infomaster`), пакет в `pyproject.toml` `uni-master` → `infomaster`, сервис, образ и контейнер Compose `uni-master` → `infomaster` (сайдкар — `infomaster-tailscale`), имя узла Tailscale и адрес Funnel `https://uni-master.<tailnet>.ts.net` → `https://infomaster.<tailnet>.ts.net`, сеть Docker `uni-master` → `infomaster` (внутренний адрес для Tablo — `http://infomaster:8081`), база `data/uni-master.db` → `data/infomaster.db`, поля iCal `X-UNI-SOURCE`, `X-UNI-LINK`, `X-UNI-OPTIONAL` → `X-INFOMASTER-SOURCE`, `X-INFOMASTER-LINK`, `X-INFOMASTER-OPTIONAL`, домен UID событий `@uni-master` → `@infomaster`. Документы, кроме README, не переписывались: «uni-master» в них — это infomaster, имена из них читать по этой таблице (в том числе тег Tailscale — `tag:infomaster`, источник в Tablo — «infomaster»). В Tablo (`tablo-t75`) тоже: источник `unimaster` → `infomaster` (модуль, секция конфига, ключи в базе, имя в `tablo.refresh_data`), `TABLO_UNIMASTER_TOKEN` → `TABLO_INFOMASTER_TOKEN`; таблица — в начале его `tablo-software.md`. Сервис ещё не развёрнут, переносить данные не нужно.
 
 ## Открытые вопросы
 

@@ -3,7 +3,7 @@ import datetime as dt
 import pytest
 from conftest import spend
 
-from uni_master.llm.budget import BudgetExceeded, Level, cost_usd
+from infomaster.llm.budget import BudgetExceeded, Level, cost_usd
 
 HAIKU = {"input": 0.10, "output": 0.50, "long_input": 0.50, "long_output": 2.50}
 

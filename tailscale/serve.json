@@ -5,7 +5,7 @@
   "Web": {
     "${TS_CERT_DOMAIN}:443": {
       "Handlers": {
-        "/": {"Proxy": "http://uni-master:8080"}
+        "/": {"Proxy": "http://infomaster:8080"}
       }
     }
   },

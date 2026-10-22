@@ -4,14 +4,14 @@ import datetime as dt
 import pytest
 from conftest import Press, labels
 
-from uni_master import clock
-from uni_master.collectors.inbox import Inbox
-from uni_master.outputs import feed as feed_module
-from uni_master.outputs.feed import BUTTON, Feed, split
-from uni_master.processing.batches import Changes
-from uni_master.processing.news import News
-from uni_master.settings import Settings
-from uni_master.store import Store
+from infomaster import clock
+from infomaster.collectors.inbox import Inbox
+from infomaster.outputs import feed as feed_module
+from infomaster.outputs.feed import BUTTON, Feed, split
+from infomaster.processing.batches import Changes
+from infomaster.processing.news import News
+from infomaster.settings import Settings
+from infomaster.store import Store
 
 CHANNEL = -1001234567890
 OWNER = 42
@@ -146,7 +146,7 @@ async def test_hiding_an_alert_whose_item_is_past(feed):
 
 
 def test_old_news_table_gets_hidden(tmp_path):
-    path = tmp_path / "uni-master.db"
+    path = tmp_path / "infomaster.db"
     store = Store(path)
     with store.db:
         store.db.execute("drop table news")

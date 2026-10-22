@@ -8,11 +8,11 @@ from zoneinfo import ZoneInfo
 import icalendar
 import pytest
 
-from uni_master.collectors.ruz import Diff, parse
-from uni_master.config import Env
-from uni_master.outputs import api
-from uni_master.outputs.ical_feed import CalendarFeed
-from uni_master.processing.events import event_uid
+from infomaster.collectors.ruz import Diff, parse
+from infomaster.config import Env
+from infomaster.outputs import api
+from infomaster.outputs.ical_feed import CalendarFeed
+from infomaster.processing.events import event_uid
 
 FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
 CHAT = -1001234567890
@@ -117,20 +117,22 @@ def test_tablo_feed(feed):
     events = events_of(feed.render("tablo"))
     assert len(events) == 9 + 3  # the classes, and the events that are not hidden
     fair = next(e for e in events.values() if str(e["SUMMARY"]) == "Career fair")
-    assert (str(fair["STATUS"]), str(fair["X-UNI-OPTIONAL"]), str(fair["X-UNI-SOURCE"])) == ("TENTATIVE", "TRUE", "tg")
-    assert str(fair["X-UNI-LINK"]) == "https://t.me/c/1234567890/2" and str(fair["LOCATION"]) == \
+    assert (str(fair["STATUS"]), str(fair["X-INFOMASTER-OPTIONAL"]), str(fair["X-INFOMASTER-SOURCE"])) == (
+        "TENTATIVE", "TRUE", "tg")
+    assert str(fair["X-INFOMASTER-LINK"]) == "https://t.me/c/1234567890/2" and str(fair["LOCATION"]) == \
         "https://events.hse.ru/fair"
     assert all("URL" not in e for e in events.values())  # Tablo would take it for an online class
 
     calc = events["2000001@ruz.hse.ru"]
     assert (str(calc["SUMMARY"]), str(calc["DESCRIPTION"]), str(calc["LOCATION"]), str(calc["STATUS"])) == (
         "Calculus", "Seminar", "D208", "CONFIRMED")
-    assert str(calc["X-UNI-SOURCE"]) == "ruz" and "X-UNI-LINK" not in calc and "X-UNI-OPTIONAL" not in calc
+    assert str(calc["X-INFOMASTER-SOURCE"]) == "ruz"
+    assert "X-INFOMASTER-LINK" not in calc and "X-INFOMASTER-OPTIONAL" not in calc
     assert calc.decoded("DTSTART") == dt.datetime(2026, 10, 19, 6, 30, tzinfo=dt.UTC)  # UTC, any calendar reads it
 
     moved = events["2000005@ruz.hse.ru"]
     assert str(moved["DESCRIPTION"]) == "Seminar\nMoved from Fri Oct 23 09:30 in a chat"
-    assert (str(moved["LOCATION"]), str(moved["X-UNI-SOURCE"]), str(moved["X-UNI-LINK"])) == (
+    assert (str(moved["LOCATION"]), str(moved["X-INFOMASTER-SOURCE"]), str(moved["X-INFOMASTER-LINK"])) == (
         "R301", "tg", "https://t.me/c/1234567890/5")
     cancelled = events["2000002@ruz.hse.ru"]
     assert str(cancelled["STATUS"]) == "CANCELLED" and str(cancelled["DESCRIPTION"]) == "Lecture\nCancelled in a chat"

@@ -1,6 +1,6 @@
-"""Run the service: python -m uni_master [--data data]; log the twin in once: python -m uni_master login; copy the own
-and hidden deadlines and the manual dictionary entries from Tablo once: python -m uni_master import-tablo --tablo-db
-<tablo.db> (uni_master/tablo.py)."""
+"""Run the service: python -m infomaster [--data data]; log the twin in once: python -m infomaster login; copy the own
+and hidden deadlines and the manual dictionary entries from Tablo once: python -m infomaster import-tablo --tablo-db
+<tablo.db> (infomaster/tablo.py)."""
 
 import argparse
 import asyncio
@@ -17,7 +17,7 @@ from .store import Store
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="uni_master")
+    parser = argparse.ArgumentParser(prog="infomaster")
     parser.add_argument("command", nargs="?", choices=("run", "login", "import-tablo"), default="run")
     parser.add_argument("--data", type=Path, default=Path("data"), help="directory for the database and sessions")
     parser.add_argument("--log-level", default="INFO")
@@ -32,7 +32,7 @@ def main() -> None:
     try:
         env = Env.from_environ()
     except ConfigError as e:
-        sys.exit(f"uni-master: {e}")
+        sys.exit(f"infomaster: {e}")
     if args.command == "login":
         asyncio.run(telegram.login(env, twin_session(args.data)))
     else:
@@ -42,13 +42,13 @@ def main() -> None:
 def import_tablo(args: argparse.Namespace) -> str | None:
     """Needs no secrets: only the two databases. Run it with the service stopped."""
     if args.tablo_db is None:
-        return "uni-master: import-tablo needs --tablo-db <tablo.db>"
+        return "infomaster: import-tablo needs --tablo-db <tablo.db>"
     try:
         source = tablo.open_tablo(args.tablo_db)
     except (tablo.TabloError, sqlite3.Error) as e:
-        return f"uni-master: {e}"
+        return f"infomaster: {e}"
     args.data.mkdir(parents=True, exist_ok=True)
-    store = Store(args.data / "uni-master.db")
+    store = Store(args.data / "infomaster.db")
     try:
         counts = tablo.import_tablo(store, source, clock.local_day(clock.now_utc()))
     finally:

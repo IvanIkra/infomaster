@@ -5,9 +5,9 @@ import hashlib
 
 import pytest
 
-from uni_master.processing import merge
-from uni_master.processing.merge import drop_done, drop_hidden, merge_deadlines, visible
-from uni_master.processing.todo import Deadline, uid
+from infomaster.processing import merge
+from infomaster.processing.merge import drop_done, drop_hidden, merge_deadlines, visible
+from infomaster.processing.todo import Deadline, uid
 
 D = dt.date
 TODAY = D(2026, 10, 20)  # the `now` fixture: Tue noon in Moscow

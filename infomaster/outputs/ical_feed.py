@@ -6,12 +6,12 @@ routes are off.
 
 - main: the classes and the events one has to attend;
 - optional: the events one may attend;
-- tablo: both; an optional one is STATUS:TENTATIVE with X-UNI-OPTIONAL:TRUE. Tablo's ical.py skips only CANCELLED,
-  so it reads the feed as it is now and ignores the X- fields until it learns them.
+- tablo: both; an optional one is STATUS:TENTATIVE with X-INFOMASTER-OPTIONAL:TRUE. Tablo's ical.py skips only
+  CANCELLED, so it reads the feed as it is now and ignores the X- fields until it learns them.
 
 Every event has an English SUMMARY, a DESCRIPTION whose first line is the type (Lecture, Seminar, Consultation, Event,
-Interim assessment...), LOCATION with the room or the link, a stable UID, X-UNI-SOURCE (ruz, tg, mail, pdf) and,
-when there is a source message, X-UNI-LINK. Never URL: Tablo takes an event with URL for an online class (§4.2).
+Interim assessment...), LOCATION with the room or the link, a stable UID, X-INFOMASTER-SOURCE (ruz, tg, mail, pdf) and,
+when there is a source message, X-INFOMASTER-LINK. Never URL: Tablo takes an event with URL for an online class (§4.2).
 Times are in UTC, which every calendar converts by itself. A cancelled event stays with STATUS:CANCELLED, so a
 calendar that has it shows the cancellation.
 """
@@ -38,7 +38,7 @@ def utc(local: dt.datetime) -> dt.datetime:
 def build(entries: list[Entry], feed: str, stamp: dt.datetime) -> bytes:
     """One of FEEDS as iCalendar text."""
     calendar = icalendar.Calendar()
-    calendar.add("prodid", "-//uni-master//timetable//EN")
+    calendar.add("prodid", "-//infomaster//timetable//EN")
     calendar.add("version", "2.0")
     calendar.add("calscale", "GREGORIAN")
     calendar.add("method", "PUBLISH")
@@ -62,10 +62,10 @@ def build(entries: list[Entry], feed: str, stamp: dt.datetime) -> bytes:
             event.add("location", entry.location)
         event.add("status", "CANCELLED" if entry.cancelled else "TENTATIVE" if optional else "CONFIRMED")
         if optional:
-            event.add("x-uni-optional", "TRUE")
-        event.add("x-uni-source", entry.source)
+            event.add("x-infomaster-optional", "TRUE")
+        event.add("x-infomaster-source", entry.source)
         if entry.link:
-            event.add("x-uni-link", entry.link)
+            event.add("x-infomaster-link", entry.link)
         calendar.add_component(event)
     return calendar.to_ical()
 

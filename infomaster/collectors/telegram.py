@@ -7,7 +7,7 @@ downloaded only when a batch asks for it (collectors/files.py).
 
 The account logs in and out in the Mini App, screen «Чаты»: the phone, the code Telegram sends to the account, the
 cloud password if it has one (`send_code`, `sign_in`, `logout`). The service runs on without it and starts reading
-as soon as the login is done, without a restart. A terminal works too: `python -m uni_master login` (see `login`).
+as soon as the login is done, without a restart. A terminal works too: `python -m infomaster login` (see `login`).
 """
 
 import asyncio
@@ -31,7 +31,7 @@ from .inbox import RETENTION, Inbox
 log = logging.getLogger(__name__)
 
 QUOTE_LIMIT = 500  # characters of a replied message that is not stored itself
-LOGIN_HINT = "docker compose run --rm uni-master python -m uni_master login"
+LOGIN_HINT = "docker compose run --rm infomaster python -m infomaster login"
 
 
 class LoginError(ValueError):

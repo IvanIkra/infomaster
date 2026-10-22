@@ -8,17 +8,17 @@ import pytest
 from conftest import spend
 from test_http import OWNER, env, init_data
 
-from uni_master.collectors import files as files_module
-from uni_master.collectors.files import Files, NotNow, image_file, media_type
-from uni_master.collectors.hseapp import CALLBACK_PATH, HseApp
-from uni_master.llm.budget import IMAGE_TOKENS, BudgetExceeded
-from uni_master.llm.client import BadAnswer, Haiku, Image, LLMError, Rejected
-from uni_master.outputs import miniapp
-from uni_master.processing.batches import Batches, Changes
-from uni_master.processing.images import Images
-from uni_master.processing.news import News
-from uni_master.processing.summaries import Summaries
-from uni_master.settings import ChatSettings, Settings
+from infomaster.collectors import files as files_module
+from infomaster.collectors.files import Files, NotNow, image_file, media_type
+from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
+from infomaster.llm.budget import IMAGE_TOKENS, BudgetExceeded
+from infomaster.llm.client import BadAnswer, Haiku, Image, LLMError, Rejected
+from infomaster.outputs import miniapp
+from infomaster.processing.batches import Batches, Changes
+from infomaster.processing.images import Images
+from infomaster.processing.news import News
+from infomaster.processing.summaries import Summaries
+from infomaster.settings import ChatSettings, Settings
 
 CHAT = -1001234567890
 JPEG = b"\xff\xd8\xff\xe0\x00\x10JFIF" + b"timetable" * 20

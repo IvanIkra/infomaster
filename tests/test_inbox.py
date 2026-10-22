@@ -2,8 +2,8 @@ import datetime as dt
 
 import pytest
 
-from uni_master import clock
-from uni_master.collectors.inbox import Inbox, message_link
+from infomaster import clock
+from infomaster.collectors.inbox import Inbox, message_link
 
 NOW = dt.datetime(2026, 10, 20, 9, 0, tzinfo=dt.UTC)
 

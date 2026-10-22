@@ -6,11 +6,11 @@ import pytest
 from telethon import errors
 from telethon.tl import types
 
-from uni_master import clock
-from uni_master.collectors import telegram
-from uni_master.collectors.files import NotNow
-from uni_master.collectors.inbox import Inbox
-from uni_master.settings import ChatSettings
+from infomaster import clock
+from infomaster.collectors import telegram
+from infomaster.collectors.files import NotNow
+from infomaster.collectors.inbox import Inbox
+from infomaster.settings import ChatSettings
 
 CHANNEL = -1000000000010  # marked id of PeerChannel(10)
 

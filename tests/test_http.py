@@ -9,15 +9,15 @@ from urllib.parse import urlencode
 
 import pytest
 
-from uni_master import clock
-from uni_master.collectors.hseapp import CALLBACK_PATH, HseApp
-from uni_master.collectors.inbox import Inbox
-from uni_master.collectors.ruz import parse
-from uni_master.config import ConfigError, Env
-from uni_master.outputs import api, miniapp
-from uni_master.outputs.ical_feed import CalendarFeed
-from uni_master.processing.news import News
-from uni_master.settings import ChatSettings, Settings
+from infomaster import clock
+from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
+from infomaster.collectors.inbox import Inbox
+from infomaster.collectors.ruz import parse
+from infomaster.config import ConfigError, Env
+from infomaster.outputs import api, miniapp
+from infomaster.outputs.ical_feed import CalendarFeed
+from infomaster.processing.news import News
+from infomaster.settings import ChatSettings, Settings
 
 BOT_TOKEN = "123:secret"
 OWNER = 42
@@ -28,7 +28,7 @@ TWIN = {"telegram": lambda: {"ok_at": None, "error": None, "login_needed": False
 
 def env(**extra) -> Env:
     return Env(api_id=1, api_hash="h", bot_token=BOT_TOKEN, owner_id=OWNER, forum_id=-100, api_token="tok",
-               public_url="https://uni-master.example.ts.net", **extra)
+               public_url="https://infomaster.example.ts.net", **extra)
 
 
 def mini(budget, journal, store, schedule, inbox=None, merged=None, sources=None):
@@ -112,7 +112,7 @@ async def test_miniapp_twin_login(aiohttp_client, budget, journal, store, schedu
     """Phone, code, logout from the «Чаты» screen; the twin's errors come back as 400 with their text."""
     from test_telegram import FakeClient
 
-    from uni_master.collectors import telegram
+    from infomaster.collectors import telegram
 
     FakeClient.made, FakeClient.password = [], False
     monkeypatch.setattr(telegram, "TelegramClient", FakeClient)
@@ -279,10 +279,10 @@ async def test_miniapp_schedule(aiohttp_client, budget, journal, store, schedule
     client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
     events = schedule.events
     with store.db:
-        own = events.add({"uid": "tg-1@uni-master", "source": "tg", "chat_id": None, "msg_ids": [5],
+        own = events.add({"uid": "tg-1@infomaster", "source": "tg", "chat_id": None, "msg_ids": [5],
                           "course": "Алгебра", "title": "Alg consult", "kind": "consultation",
                           "start": "2026-10-23T18:10:00", "end": None, "room": "R205", "required": True}, now())
-        events.add({"uid": "tg-2@uni-master", "source": "tg", "chat_id": None, "msg_ids": [6], "course": "",
+        events.add({"uid": "tg-2@infomaster", "source": "tg", "chat_id": None, "msg_ids": [6], "course": "",
                     "title": "Old talk", "kind": "talk", "start": "2026-10-19T18:10:00", "end": None, "room": "",
                     "required": False}, now())
     assert (await client.get("/app/api/schedule")).status == 401
@@ -403,8 +403,8 @@ async def test_miniapp_deadlines(aiohttp_client, budget, journal, store, schedul
 
 
 async def test_miniapp_summaries(aiohttp_client, budget, journal, store, schedule, merged, forum, now):
-    from uni_master.outputs.summaries import SummaryTopic
-    from uni_master.processing.summaries import Summaries
+    from infomaster.outputs.summaries import SummaryTopic
+    from infomaster.processing.summaries import Summaries
 
     inbox, chat_settings, settings = schedule.inbox, ChatSettings(store), Settings(store)
     inbox.put_chat(-1001, "Матан", "supergroup", None, 0)

@@ -22,7 +22,7 @@ Letters of the university mailbox (collectors/mail.py, §5.2) are parsed the sam
 schema: the mailbox is one more chat (`MAILBOX`), study (every letter is, §6.2), without a filter or urgency, on the
 general schedule while mail is on or letters wait. The prompt says it is the student's mailbox and gives each letter's
 subject; a letter may be twice as long as a chat message (8000 characters, as Tablo gave them). What letters give has
-the source "mail", and its events go to the feeds with X-UNI-SOURCE mail.
+the source "mail", and its events go to the feeds with X-INFOMASTER-SOURCE mail.
 
 Events (§6.5) are consultations, talks, meetings: things to attend that are not in the timetable. The model sees the
 upcoming chat events (e...) and, in a study chat, the RUZ classes of the next weeks (c...), so it can point a move or

@@ -2,10 +2,10 @@ from pathlib import Path
 
 import pytest
 
-from uni_master.collectors.ruz import Change, Diff, parse
-from uni_master.outputs.timetable import BUTTON, Timetable
-from uni_master.processing.batches import Changes
-from uni_master.processing.events import event_uid
+from infomaster.collectors.ruz import Change, Diff, parse
+from infomaster.outputs.timetable import BUTTON, Timetable
+from infomaster.processing.batches import Changes
+from infomaster.processing.events import event_uid
 
 FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
 CHAT = -1001234567890

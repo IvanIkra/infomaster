@@ -8,18 +8,18 @@ import pytest
 from conftest import make_pdf
 from test_http import env, init_data
 
-from uni_master import clock
-from uni_master.collectors.files import Files
-from uni_master.collectors.hseapp import CALLBACK_PATH, HseApp
-from uni_master.llm.budget import BudgetExceeded
-from uni_master.llm.client import Document, Haiku
-from uni_master.outputs import miniapp
-from uni_master.outputs.sheets import SheetTopic, hashtag
-from uni_master.processing import pdf
-from uni_master.processing.batches import Batches, Changes, check
-from uni_master.processing.news import News
-from uni_master.processing.sheets import Sheets, number_key
-from uni_master.settings import ChatSettings, Settings
+from infomaster import clock
+from infomaster.collectors.files import Files
+from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
+from infomaster.llm.budget import BudgetExceeded
+from infomaster.llm.client import Document, Haiku
+from infomaster.outputs import miniapp
+from infomaster.outputs.sheets import SheetTopic, hashtag
+from infomaster.processing import pdf
+from infomaster.processing.batches import Batches, Changes, check
+from infomaster.processing.news import News
+from infomaster.processing.sheets import Sheets, number_key
+from infomaster.settings import ChatSettings, Settings
 
 CHAT = -1001234567890
 SHEET3 = make_pdf(["Calculus. Sheet 3. Series\nHand in by 29.10 23:59 in the LMS", "Task 1. Prove that the series"])

@@ -3,11 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from uni_master.collectors.ruz import Change, Diff, parse
-from uni_master.llm.client import LLMError
-from uni_master.processing.events import event_uid
-from uni_master.processing.schedule import type_of
-from uni_master.store import Store
+from infomaster.collectors.ruz import Change, Diff, parse
+from infomaster.llm.client import LLMError
+from infomaster.processing.events import event_uid
+from infomaster.processing.schedule import type_of
+from infomaster.store import Store
 
 FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
 CHAT = -1001234567890
@@ -256,7 +256,7 @@ def test_listing(loaded, now):
 
 
 def test_new_tables_join_an_older_database(tmp_path):
-    path = tmp_path / "uni-master.db"
+    path = tmp_path / "infomaster.db"
     store = Store(path)
     with store.db:
         store.db.execute("insert into deadlines(source, label, due, created_at) values('tg', 'DM HW 3', "

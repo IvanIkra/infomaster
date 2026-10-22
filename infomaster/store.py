@@ -12,7 +12,7 @@ create table if not exists kv (
 );
 create table if not exists settings (
     name text primary key,
-    value text not null         -- JSON; no row means the default from uni_master.settings
+    value text not null         -- JSON; no row means the default from infomaster.settings
 );
 create table if not exists llm_runs (   -- every LLM call, also a failed one, kept for good (§7)
     id integer primary key,
@@ -42,7 +42,7 @@ create table if not exists chats (      -- every chat of the twin's account, ena
 create table if not exists chat_settings (
     chat_id integer not null,
     name text not null,
-    value text not null,        -- JSON; no row means the default from uni_master.settings
+    value text not null,        -- JSON; no row means the default from infomaster.settings
     primary key (chat_id, name)
 );
 create table if not exists messages (   -- raw messages and mail, kept 14 days (р. 29)

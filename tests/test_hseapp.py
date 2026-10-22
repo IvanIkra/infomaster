@@ -12,17 +12,17 @@ from aiohttp import web
 from conftest import FakeNamer
 from test_http import env, init_data, owner
 
-from uni_master.collectors import hseapp
-from uni_master.collectors.hseapp import HseApp, Raw, parse
-from uni_master.llm.budget import BudgetExceeded
-from uni_master.llm.client import BadAnswer, LLMError
-from uni_master.outputs import miniapp
-from uni_master.processing import hseapp as labels_module
-from uni_master.processing.hseapp import HseAppDeadlines
-from uni_master.processing.subjects import Subjects
-from uni_master.settings import ChatSettings, Settings
+from infomaster.collectors import hseapp
+from infomaster.collectors.hseapp import HseApp, Raw, parse
+from infomaster.llm.budget import BudgetExceeded
+from infomaster.llm.client import BadAnswer, LLMError
+from infomaster.outputs import miniapp
+from infomaster.processing import hseapp as labels_module
+from infomaster.processing.hseapp import HseAppDeadlines
+from infomaster.processing.subjects import Subjects
+from infomaster.settings import ChatSettings, Settings
 
-CALLBACK = "https://uni-master.example.ts.net/hseapp/callback"
+CALLBACK = "https://infomaster.example.ts.net/hseapp/callback"
 
 
 def item(title, expires_at, discipline=None, status="ACTIVE", id=None):

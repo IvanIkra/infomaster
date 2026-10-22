@@ -4,19 +4,19 @@ from email.utils import format_datetime
 
 import pytest
 
-from uni_master.collectors.inbox import MAILBOX, Inbox
-from uni_master.collectors.mail import NOT_SET, STATE_KEY, Mail, parse
-from uni_master.config import Env
-from uni_master.processing.batches import Batches, Changes
-from uni_master.processing.news import News
-from uni_master.settings import ChatSettings, Settings
+from infomaster.collectors.inbox import MAILBOX, Inbox
+from infomaster.collectors.mail import NOT_SET, STATE_KEY, Mail, parse
+from infomaster.config import Env
+from infomaster.processing.batches import Batches, Changes
+from infomaster.processing.news import News
+from infomaster.settings import ChatSettings, Settings
 
 PASSWORD = "app-password-123"
 
 
 def env(user: str = "student@edu.hse.ru", password: str = PASSWORD) -> Env:
     return Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, forum_id=-100, api_token="tok",
-               public_url="https://uni-master.example.ts.net", mail_user=user, mail_password=password)
+               public_url="https://infomaster.example.ts.net", mail_user=user, mail_password=password)
 
 
 def letter(subject="ДЗ 3 по алгебре", body="Сдать до пятницы 23:59.", at=None, html=None, files=(),

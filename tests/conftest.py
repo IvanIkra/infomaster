@@ -3,20 +3,20 @@ import datetime as dt
 
 import pytest
 
-from uni_master import clock
-from uni_master.collectors.inbox import Inbox
-from uni_master.collectors.ruz import Ruz
-from uni_master.i18n import say, tr
-from uni_master.llm.budget import Budget
-from uni_master.llm.journal import Journal
-from uni_master.processing.deadlines import Deadlines
-from uni_master.processing.events import Events
-from uni_master.processing.hseapp import HseAppDeadlines
-from uni_master.processing.merge import DeadlineList
-from uni_master.processing.schedule import Schedule
-from uni_master.processing.subjects import Subjects
-from uni_master.settings import Settings
-from uni_master.store import Store
+from infomaster import clock
+from infomaster.collectors.inbox import Inbox
+from infomaster.collectors.ruz import Ruz
+from infomaster.i18n import say, tr
+from infomaster.llm.budget import Budget
+from infomaster.llm.journal import Journal
+from infomaster.processing.deadlines import Deadlines
+from infomaster.processing.events import Events
+from infomaster.processing.hseapp import HseAppDeadlines
+from infomaster.processing.merge import DeadlineList
+from infomaster.processing.schedule import Schedule
+from infomaster.processing.subjects import Subjects
+from infomaster.settings import Settings
+from infomaster.store import Store
 
 NAMES = {
     "Математический анализ": ("Calculus", "Calc"),

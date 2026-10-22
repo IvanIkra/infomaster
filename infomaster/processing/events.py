@@ -31,7 +31,7 @@ def event_uid(source: str, chat_id: int, msg_id: int, n: int = 0) -> str:
     """Stable UID of an event told by a message (§6.5): a hash of the chat and the message; `n` tells apart
     several events of one message."""
     key = f"{chat_id}:{msg_id}" + (f":{n}" if n else "")
-    return f"{source}-{hashlib.sha1(key.encode()).hexdigest()[:16]}@uni-master"
+    return f"{source}-{hashlib.sha1(key.encode()).hexdigest()[:16]}@infomaster"
 
 
 class Events:

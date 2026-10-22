@@ -1,6 +1,6 @@
 import json
 
-from uni_master.i18n import Phrase, json_default, reason, say, tr
+from infomaster.i18n import Phrase, json_default, reason, say, tr
 
 
 def test_phrase():

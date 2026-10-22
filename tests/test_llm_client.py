@@ -2,8 +2,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from uni_master.llm.budget import BudgetExceeded
-from uni_master.llm.client import Haiku, LLMError
+from infomaster.llm.budget import BudgetExceeded
+from infomaster.llm.client import Haiku, LLMError
 
 SCHEMA = {"type": "object", "properties": {"x": {"type": "integer"}}, "required": ["x"]}
 

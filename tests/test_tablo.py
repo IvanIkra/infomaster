@@ -3,9 +3,9 @@ import sqlite3
 
 import pytest
 
-from uni_master import tablo
-from uni_master.outputs.deadlines import SHOWN_KEY
-from uni_master.processing.todo import Deadline, uid
+from infomaster import tablo
+from infomaster.outputs.deadlines import SHOWN_KEY
+from infomaster.processing.todo import Deadline, uid
 
 TODAY = dt.date(2026, 10, 20)
 SCHEMA = """

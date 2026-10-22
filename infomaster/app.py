@@ -63,7 +63,7 @@ class Service:
         data_dir.mkdir(parents=True, exist_ok=True)
         data_dir.chmod(0o700)  # sessions and tokens: the owner only (§10)
         self.env = env
-        self.store = Store(data_dir / "uni-master.db")
+        self.store = Store(data_dir / "infomaster.db")
         self.settings = Settings(self.store)
         self.journal = Journal(self.store)
         self.budget = Budget(self.settings, self.journal, self.store)
@@ -227,7 +227,7 @@ class Service:
                      self.env.internal_port)
             if not self.env.calendar_secret:
                 log.info("CALENDAR_SECRET is not set: the iCal feeds are off")
-            await self.forum.post("system", Phrase("uni-master is up.", "uni-master запущен."))
+            await self.forum.post("system", Phrase("infomaster is up.", "infomaster запущен."))
             await self.twin.start()  # without a login the service runs on, and the twin says so
             tasks.append(asyncio.create_task(self._prune()))
             tasks.append(asyncio.create_task(self.batches.run()))

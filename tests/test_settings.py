@@ -1,7 +1,7 @@
 import pytest
 
-from uni_master.settings import ChatSettings, Settings, SettingsError
-from uni_master.store import Store
+from infomaster.settings import ChatSettings, Settings, SettingsError
+from infomaster.store import Store
 
 
 @pytest.fixture

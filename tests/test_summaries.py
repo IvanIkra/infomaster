@@ -6,15 +6,15 @@ import pytest
 from conftest import labels, spend
 from telethon.tl import types
 
-from uni_master import clock
-from uni_master.collectors.inbox import Inbox
-from uni_master.llm.budget import BudgetExceeded, DoesNotFit, Level
-from uni_master.llm.client import BadAnswer, LLMError
-from uni_master.outputs import summaries as topic_module
-from uni_master.outputs.summaries import BUTTON, COMMAND, DONE, LIMIT_SPENT, SummaryTopic, forwarded_chat, split_args
-from uni_master.processing import summaries as summaries_module
-from uni_master.processing.summaries import PeriodError, Summaries, parse_period, span
-from uni_master.settings import ChatSettings, Settings, SettingsError
+from infomaster import clock
+from infomaster.collectors.inbox import Inbox
+from infomaster.llm.budget import BudgetExceeded, DoesNotFit, Level
+from infomaster.llm.client import BadAnswer, LLMError
+from infomaster.outputs import summaries as topic_module
+from infomaster.outputs.summaries import BUTTON, COMMAND, DONE, LIMIT_SPENT, SummaryTopic, forwarded_chat, split_args
+from infomaster.processing import summaries as summaries_module
+from infomaster.processing.summaries import PeriodError, Summaries, parse_period, span
+from infomaster.settings import ChatSettings, Settings, SettingsError
 
 CHAT = -1001234567890     # a supergroup: its messages have t.me/c links
 OTHER = -1009876543210

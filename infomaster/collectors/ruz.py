@@ -101,7 +101,7 @@ def parse(text: str | bytes) -> list[Class]:
         description = str(event.get("DESCRIPTION", ""))
         location, url = str(event.get("LOCATION", "")), str(event.get("URL", ""))
         uid = str(event.get("UID", "")).strip() or \
-            f"ruz-{hashlib.sha1(f'{subject}|{start.isoformat()}'.encode()).hexdigest()[:16]}@uni-master"
+            f"ruz-{hashlib.sha1(f'{subject}|{start.isoformat()}'.encode()).hexdigest()[:16]}@infomaster"
         classes.append(Class(uid, subject, start, end, description.split("\n", 1)[0].strip(),
                              room(location, description, url), meeting_link(location, description, url),
                              str(event.get("STATUS", "")).upper() == "CANCELLED"))

@@ -4,12 +4,12 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
-from uni_master.app import Service
-from uni_master.collectors.ruz import parse
-from uni_master.config import Env
-from uni_master.outputs import api
-from uni_master.outputs import forum as forum_module
-from uni_master.processing.batches import Changes
+from infomaster.app import Service
+from infomaster.collectors.ruz import parse
+from infomaster.config import Env
+from infomaster.outputs import api
+from infomaster.outputs import forum as forum_module
+from infomaster.processing.batches import Changes
 
 FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
 

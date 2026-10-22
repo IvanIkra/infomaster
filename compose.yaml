@@ -3,10 +3,10 @@
 # Tablo reaches the internal port by service name over the shared network.
 # Bridge network with explicit DNS, as Tablo: the host's routing sends container traffic into AmneziaWG.
 services:
-  uni-master:
+  infomaster:
     build: .
-    image: uni-master:latest
-    container_name: uni-master
+    image: infomaster:latest
+    container_name: infomaster
     restart: unless-stopped
     dns:
       - ${CONTAINER_DNS_1:?set CONTAINER_DNS_1 in .env}
@@ -28,15 +28,15 @@ services:
   # no tun device, no routes and no DNS changes in the host or in other containers.
   tailscale:
     image: tailscale/tailscale:stable
-    container_name: uni-master-tailscale
-    hostname: uni-master
+    container_name: infomaster-tailscale
+    hostname: infomaster
     restart: unless-stopped
     dns:
       - ${CONTAINER_DNS_1:?set CONTAINER_DNS_1 in .env}
       - ${CONTAINER_DNS_2:?set CONTAINER_DNS_2 in .env}
     environment:
       TS_AUTHKEY: ${TS_AUTHKEY:-}
-      TS_HOSTNAME: uni-master
+      TS_HOSTNAME: infomaster
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "true"
       TS_ACCEPT_DNS: "false"
@@ -54,4 +54,4 @@ services:
 
 networks:
   uni:
-    name: uni-master  # Tablo joins it as an external network when it switches to us (stage 10)
+    name: infomaster  # Tablo joins it as an external network when it switches to us (stage 10)

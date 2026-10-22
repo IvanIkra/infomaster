@@ -1,5 +1,7 @@
 # uni-master
 
+> Проект переименован в **infomaster** (инфомастер). Ниже местами осталось старое имя uni-master — новые имена пакета, контейнеров, сети, базы и полей iCal в [decisions.md](decisions.md), р. 42.
+
 Читает учебные чаты и источники вуза, всё считает сам и отдаёт готовое в форум Telegram, Mini App и API для Tablo. Устройство — [architecture.md](architecture.md), решения — [decisions.md](decisions.md).
 
 ## Первый запуск

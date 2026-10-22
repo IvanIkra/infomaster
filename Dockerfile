@@ -9,8 +9,8 @@ RUN python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml
     && pip install --no-cache-dir -r /tmp/req.txt tzdata \
     && rm /tmp/req.txt
 
-COPY uni_master uni_master
+COPY infomaster infomaster
 
 # 8080: public (Mini App, behind Funnel); 8081: internal (API for Tablo and HA)
 EXPOSE 8080 8081
-CMD ["python", "-m", "uni_master", "--data", "data"]
+CMD ["python", "-m", "infomaster", "--data", "data"]

@@ -1,6 +1,6 @@
 """The move from Tablo (stage 10, the checklist of decisions.md): what only Tablo's database holds comes here once.
 
-python -m uni_master import-tablo --tablo-db <tablo.db> copies, from a copy of Tablo's SQLite file (§9 of
+python -m infomaster import-tablo --tablo-db <tablo.db> copies, from a copy of Tablo's SQLite file (§9 of
 sources-overview.md; the service is stopped, the file is opened read-only):
 - the own deadlines of HA's to-do lists (`own_deadlines`): those not here yet (the same title, date and list), so a
   second run adds nothing. HA reads the list anew after the switch, so the new ids (ha-<id>) do not matter;

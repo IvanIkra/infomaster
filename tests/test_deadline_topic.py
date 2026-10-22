@@ -6,11 +6,11 @@ import datetime as dt
 import pytest
 from conftest import Press, labels
 
-from uni_master import clock
-from uni_master.collectors.inbox import Inbox
-from uni_master.outputs import deadlines as topic_module
-from uni_master.outputs.deadlines import BUTTON, DeadlineTopic, due_mark, hide_button
-from uni_master.processing.todo import Deadline
+from infomaster import clock
+from infomaster.collectors.inbox import Inbox
+from infomaster.outputs import deadlines as topic_module
+from infomaster.outputs.deadlines import BUTTON, DeadlineTopic, due_mark, hide_button
+from infomaster.processing.todo import Deadline
 
 CHAT = -1001234567890
 OWNER = 42

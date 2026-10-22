@@ -2,9 +2,9 @@ import asyncio
 
 import pytest
 
-from uni_master.llm.budget import BudgetExceeded
-from uni_master.llm.client import LLMError
-from uni_master.processing.subjects import Subject, SubjectError, Subjects, clean
+from infomaster.llm.budget import BudgetExceeded
+from infomaster.llm.client import LLMError
+from infomaster.processing.subjects import Subject, SubjectError, Subjects, clean
 
 
 @pytest.fixture

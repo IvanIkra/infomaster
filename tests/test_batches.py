@@ -4,16 +4,16 @@ from pathlib import Path
 
 import pytest
 
-from uni_master import clock
-from uni_master.collectors.ruz import parse
-from uni_master.llm.budget import BudgetExceeded
-from uni_master.llm.client import BadAnswer, LLMError
-from uni_master.outputs.timetable import Timetable
-from uni_master.processing import batches as batches_module
-from uni_master.processing.batches import Batches, Changes, check
-from uni_master.processing.events import event_uid
-from uni_master.processing.news import News
-from uni_master.settings import ChatSettings, Settings
+from infomaster import clock
+from infomaster.collectors.ruz import parse
+from infomaster.llm.budget import BudgetExceeded
+from infomaster.llm.client import BadAnswer, LLMError
+from infomaster.outputs.timetable import Timetable
+from infomaster.processing import batches as batches_module
+from infomaster.processing.batches import Batches, Changes, check
+from infomaster.processing.events import event_uid
+from infomaster.processing.news import News
+from infomaster.settings import ChatSettings, Settings
 
 CHAT = -1001
 FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
@@ -438,7 +438,7 @@ async def test_move_and_cancel_a_class(timetable):
 
 
 def _class_line_of(batches, class_id):
-    from uni_master.processing.batches import _class_line
+    from infomaster.processing.batches import _class_line
     return next(_class_line(c) for c in batches.schedule.upcoming_classes(dt.date(2026, 10, 20))
                 if c["id"] == class_id)
 

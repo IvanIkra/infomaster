@@ -8,16 +8,16 @@ from aiohttp import web
 from openpyxl import Workbook
 from test_http import TWIN, env, owner
 
-from uni_master import clock
-from uni_master.collectors import grades as collector
-from uni_master.collectors.grades import GradeSheets, Read, Sheet
-from uni_master.llm.budget import BudgetExceeded
-from uni_master.llm.client import BadAnswer
-from uni_master.outputs import api, miniapp
-from uni_master.outputs.grades import GradeTopic, line, mark
-from uni_master.processing import grades as g
-from uni_master.processing.grades import Grades, Item
-from uni_master.settings import Settings, SettingsError
+from infomaster import clock
+from infomaster.collectors import grades as collector
+from infomaster.collectors.grades import GradeSheets, Read, Sheet
+from infomaster.llm.budget import BudgetExceeded
+from infomaster.llm.client import BadAnswer
+from infomaster.outputs import api, miniapp
+from infomaster.outputs.grades import GradeTopic, line, mark
+from infomaster.processing import grades as g
+from infomaster.processing.grades import Grades, Item
+from infomaster.settings import Settings, SettingsError
 
 URL = "https://docs.google.com/spreadsheets/d/abc123/edit#gid=0"
 OTHER = "https://docs.google.com/spreadsheets/d/zzz999/edit"
@@ -358,7 +358,7 @@ async def test_topic_posts_a_message_per_sheet_and_keeps_failures(grades, forum,
 
 
 async def test_a_failure_halfway_posts_nothing_twice(grades, forum, now, monkeypatch):
-    from uni_master.outputs import grades as topic_module
+    from infomaster.outputs import grades as topic_module
 
     monkeypatch.setattr(topic_module, "MESSAGE_LIMIT", 140)  # the header and two lines
     topic = GradeTopic(forum, grades.store, grades, now=now)

@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 from aiohttp import web
 
-from uni_master import clock
-from uni_master.collectors import ruz as ruz_module
-from uni_master.collectors.ruz import Ruz, parse
-from uni_master.outputs.timetable import Timetable
+from infomaster import clock
+from infomaster.collectors import ruz as ruz_module
+from infomaster.collectors.ruz import Ruz, parse
+from infomaster.outputs.timetable import Timetable
 
 FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
 
