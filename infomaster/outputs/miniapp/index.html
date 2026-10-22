@@ -506,8 +506,8 @@
           "Названия предметов ждут Haiku: ") + ruz.subjects_error));
       }
       if (!data.calendar) {
-        parts.push(el("div", {className: "card warn"}, L("The iCal feeds are off: set CALENDAR_SECRET in .env.",
-          "Ленты iCal выключены: задайте CALENDAR_SECRET в .env.")));
+        parts.push(el("div", {className: "card warn"}, L("The iCal feeds are off: set CALENDAR_SECRET or CALENDAR_PUBLIC_SECRET in .env.",
+          "Ленты iCal выключены: задайте CALENDAR_SECRET или CALENDAR_PUBLIC_SECRET в .env.")));
       }
       if (!data.events.length) {
         parts.push(el("p", {className: "hint"}, L("No events from the chats or corrections of classes ahead.",

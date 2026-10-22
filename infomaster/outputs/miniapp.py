@@ -18,7 +18,8 @@ the page's own; what the service says here (errors, the reasons of a failed logi
 App's language too.
 
 The same port serves /hseapp/callback, where the browser comes back after the HSE login. It has no initData: the
-PKCE state of the login link is its protection, and it answers with a short page in the Mini App's language.
+PKCE state of the login link is its protection, and it answers with a short page in the Mini App's language. And
+/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics and optional.ics for one's own calendar (see ical_feed, р. 43).
 """
 
 import calendar
@@ -49,6 +50,7 @@ from ..processing.schedule import Schedule
 from ..processing.subjects import ABBR_CHARS, TITLE_CHARS, SubjectError, Subjects
 from ..processing.todo import CATEGORIES, uid
 from ..settings import BATCH_HOURS, SHEET_LABEL_CHARS, SPECS, ChatSettings, Settings, SettingsError
+from . import ical_feed
 from .api import SOURCES_KEY, Sources
 from .sheets import SheetTopic
 from .summaries import SummaryTopic
@@ -236,7 +238,8 @@ async def schedule(request: web.Request) -> web.Response:
     """The Расписание screen: events from chats and corrections of classes from today on, hidden ones too."""
     timetable = request.app[SCHEDULE_KEY]
     return respond(request, {"ruz": request.app[SOURCES_KEY]["ruz"](),
-                              "calendar": bool(request.app[ENV_KEY].calendar_secret),
+                              "calendar": bool(request.app[ENV_KEY].calendar_secret or
+                                               request.app[ENV_KEY].calendar_public_secret),
                               "events": timetable.listing(clock.local_day(timetable.now()))})
 
 
@@ -649,9 +652,11 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
                sources: Sources, dictionary: Subjects, timetable: Schedule, hse: HseApp,
                merged: DeadlineList, settings: Settings | None = None,
                sheet_topic: SheetTopic | None = None, summary_topic: SummaryTopic | None = None,
-               grade_list: Grades | None = None, twin: Twin | None = None) -> web.Application:
+               grade_list: Grades | None = None, twin: Twin | None = None,
+               calendar_feed: ical_feed.CalendarFeed | None = None) -> web.Application:
     """The Mini App's port; without the settings and the sheets' topic the Листочки screen has no API, without the
-    settings and the summaries' topic the Сводки screen has none, without the grades the Оценки screen has none."""
+    settings and the summaries' topic the Сводки screen has none, without the grades the Оценки screen has none,
+    without the calendar feed there are no public feeds."""
     app = web.Application(middlewares=[owner_only])
     app[ENV_KEY], app[BUDGET_KEY], app[JOURNAL_KEY] = env, budget, journal
     app[INBOX_KEY], app[CHAT_SETTINGS_KEY], app[SOURCES_KEY] = inbox, chat_settings, sources
@@ -701,4 +706,6 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
     app.router.add_post("/app/api/hseapp/link", hseapp_link)
     app.router.add_post("/app/api/hseapp/login", hseapp_login)
     app.router.add_get(CALLBACK_PATH, hseapp_callback)
+    if calendar_feed is not None:
+        ical_feed.add_routes(app, env.calendar_public_secret, calendar_feed, ical_feed.PUBLIC_FEEDS)
     return app

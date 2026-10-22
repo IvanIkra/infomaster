@@ -34,7 +34,8 @@ class Env:
     public_port: int = 8080
     internal_port: int = 8081
     ruz_ical_url: str = ""      # optional: without it the timetable has no RUZ classes
-    calendar_secret: str = ""   # optional: without it the iCal feeds are off
+    calendar_secret: str = ""   # optional: without it the iCal feeds of the internal port are off
+    calendar_public_secret: str = ""  # optional: without it no feeds behind Funnel
     mail_user: str = ""         # optional, with the password: without both the mail source is off
     mail_password: str = field(default="", repr=False)  # an app password of the box (Yandex 360)
     mail_host: str = "imap.yandex.ru"
@@ -69,9 +70,12 @@ class Env:
             if not re.match(r"https?://", ruz):
                 raise ConfigError("RUZ_ICAL_URL must be an http(s):// link")
             values["ruz_ical_url"] = ruz
-        if secret := environ.get("CALENDAR_SECRET", "").strip():
-            # A path segment that cannot be guessed: calendars send no headers, the secret is all the protection.
-            if not re.fullmatch(r"[A-Za-z0-9_-]{16,}", secret):
-                raise ConfigError("CALENDAR_SECRET must be at least 16 characters of A-Z, a-z, 0-9, _ and -")
-            values["calendar_secret"] = secret
+        for name, var in (("calendar_secret", "CALENDAR_SECRET"), ("calendar_public_secret", "CALENDAR_PUBLIC_SECRET")):
+            if secret := environ.get(var, "").strip():
+                # A path segment that cannot be guessed: calendars send no headers, the secret is all the protection.
+                if not re.fullmatch(r"[A-Za-z0-9_-]{16,}", secret):
+                    raise ConfigError(f"{var} must be at least 16 characters of A-Z, a-z, 0-9, _ and -")
+                values[name] = secret
+        if (public := values.get("calendar_public_secret")) and public == values.get("calendar_secret"):
+            raise ConfigError("CALENDAR_PUBLIC_SECRET must differ from CALENDAR_SECRET")
         return cls(**values)

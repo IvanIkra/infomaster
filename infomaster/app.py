@@ -214,7 +214,7 @@ class Service:
             for app, port in ((miniapp.create_app(self.env, self.budget, self.journal, self.inbox, self.chat_settings,
                                                   self.sources, self.subjects, self.schedule, self.hseapp,
                                                   self.merged, self.settings, self.sheet_topic,
-                                                  self.summary_topic, self.grades, self.twin),
+                                                  self.summary_topic, self.grades, self.twin, self.calendar),
                                self.env.public_port),
                               (api.create_app(self.env, self.budget, self.sources, self.calendar, self.merged,
                                               self.grades, self.news, self.settings),
@@ -226,7 +226,9 @@ class Service:
             log.info("public port %d (Mini App), internal port %d (API)", self.env.public_port,
                      self.env.internal_port)
             if not self.env.calendar_secret:
-                log.info("CALENDAR_SECRET is not set: the iCal feeds are off")
+                log.info("CALENDAR_SECRET is not set: the iCal feeds for Tablo are off")
+            if not self.env.calendar_public_secret:
+                log.info("CALENDAR_PUBLIC_SECRET is not set: no iCal feeds behind Funnel")
             await self.forum.post("system", Phrase("infomaster is up.", "infomaster запущен."))
             await self.twin.start()  # without a login the service runs on, and the twin says so
             tasks.append(asyncio.create_task(self._prune()))

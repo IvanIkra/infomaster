@@ -1,8 +1,10 @@
-"""Our iCal feeds (§6.5, §8.1, §8.2, р. 2, р. 28, р. 32), on the internal port only.
+"""Our iCal feeds (§6.5, §8.1, §8.2, р. 2, р. 28, р. 32, р. 43).
 
-GET /calendar/<CALENDAR_SECRET>/main.ics, optional.ics and tablo.ics. Calendars send no headers, so the secret in the
-path is all the protection: it is compared in constant time, and anything else is 404. Without CALENDAR_SECRET the
-routes are off.
+On the internal port, for Tablo: GET /calendar/<CALENDAR_SECRET>/main.ics, optional.ics and tablo.ics. On the public
+port, behind Funnel, for one's own calendar: GET /calendar/<CALENDAR_PUBLIC_SECRET>/main.ics and optional.ics, never
+tablo.ics. Calendars send no headers, so the secret in the path is all the protection: it is compared in constant
+time, and anything else is 404. The two secrets are different, so a leaked public link is changed without Tablo; a
+port without its secret has no routes.
 
 - main: the classes and the events one has to attend;
 - optional: the events one may attend;
@@ -27,6 +29,7 @@ from .. import clock
 from ..processing.schedule import Entry, Schedule
 
 FEEDS = ("main", "optional", "tablo")
+PUBLIC_FEEDS = ("main", "optional")  # tablo.ics with its X- fields is Tablo's, it stays inside
 NAMES = {"main": "Study", "optional": "Study: optional", "tablo": "Study for Tablo"}
 REFRESH = "PT1H"  # RUZ is polled hourly; a calendar that honours the hint asks as often
 
@@ -80,19 +83,21 @@ class CalendarFeed:
 
 FEED_KEY = web.AppKey("calendar", CalendarFeed)
 SECRET_KEY = web.AppKey("calendar_secret", str)
+SERVED_KEY = web.AppKey("calendar_feeds", tuple)
 
 
 async def calendar(request: web.Request) -> web.Response:
     secret, given = request.app[SECRET_KEY], request.match_info["secret"]
-    if not hmac.compare_digest(given.encode(), secret.encode()) or request.match_info["feed"] not in FEEDS:
+    if not hmac.compare_digest(given.encode(), secret.encode()) or \
+            request.match_info["feed"] not in request.app[SERVED_KEY]:
         raise web.HTTPNotFound()
     return web.Response(body=request.app[FEED_KEY].render(request.match_info["feed"]), content_type="text/calendar",
                         charset="utf-8", headers={"Cache-Control": "no-cache"})
 
 
-def add_routes(app: web.Application, secret: str, feed: CalendarFeed) -> None:
-    """The feeds on the internal app; nothing without a secret."""
+def add_routes(app: web.Application, secret: str, feed: CalendarFeed, feeds: tuple[str, ...] = FEEDS) -> None:
+    """The feeds on the internal app, or PUBLIC_FEEDS on the public one; nothing without a secret."""
     if not secret:
         return
-    app[SECRET_KEY], app[FEED_KEY] = secret, feed
+    app[SECRET_KEY], app[FEED_KEY], app[SERVED_KEY] = secret, feed, feeds
     app.router.add_get("/calendar/{secret}/{feed}.ics", calendar)

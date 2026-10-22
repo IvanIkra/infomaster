@@ -236,13 +236,15 @@ def test_env():
         Env.from_environ({**base, "TG_BOT_TOKEN": ""})
     with pytest.raises(ConfigError):
         Env.from_environ({**base, "PUBLIC_URL": "http://x"})
-    assert (loaded.ruz_ical_url, loaded.calendar_secret) == ("", "")  # optional: absent is fine
+    assert (loaded.ruz_ical_url, loaded.calendar_secret, loaded.calendar_public_secret) == ("", "", "")  # optional
     secret = "s3cr3t-calendar_link"
     loaded = Env.from_environ({**base, "RUZ_ICAL_URL": " https://api.hseapp.ru/v3/ruz/cal/abc ",
                                "CALENDAR_SECRET": secret})
     assert loaded.ruz_ical_url == "https://api.hseapp.ru/v3/ruz/cal/abc" and loaded.calendar_secret == secret
+    assert Env.from_environ({**base, "CALENDAR_PUBLIC_SECRET": secret}).calendar_public_secret == secret
     for bad in ({"RUZ_ICAL_URL": "api.hseapp.ru/cal"}, {"CALENDAR_SECRET": "short"},
-                {"CALENDAR_SECRET": "with/slash-and-long-enough"}):
+                {"CALENDAR_SECRET": "with/slash-and-long-enough"}, {"CALENDAR_PUBLIC_SECRET": "short"},
+                {"CALENDAR_SECRET": secret, "CALENDAR_PUBLIC_SECRET": secret}):
         with pytest.raises(ConfigError):
             Env.from_environ({**base, **bad})
 

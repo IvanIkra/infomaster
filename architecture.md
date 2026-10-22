@@ -271,12 +271,14 @@ settings/     хранение и проверка настроек
 
 ### 8.1 Два HTTP-порта
 
-Через Funnel наружу открыт **только публичный порт**. API для Tablo и HA висит на отдельном порту, который доступен лишь в локальной сети. Так секретная лента и API не торчат в интернет.
+Через Funnel наружу открыт **только публичный порт**. API для Tablo и HA висит на отдельном порту, который доступен лишь в локальной сети. Так API и лента Tablo не торчат в интернет. Ленты `main` и `optional` для своего календаря (Apple, Google) открыты и через Funnel, но по другому секрету (р. 43): Google и подписки iCloud забирают ленту со своих серверов, до внутреннего порта и до tailnet им не дотянуться.
 
 | Порт | Пути | Защита |
 |---|---|---|
-| публичный (Funnel) | `/app/*` — Mini App, `/hseapp/callback` | Mini App: проверка `initData`, пускаем только свой Telegram id. Callback: `state` из PKCE |
-| внутренний | `/api/*`, `/calendar/<секрет>.ics` | Bearer-токен; у ленты — секрет в пути, потому что календари не умеют заголовки |
+| публичный (Funnel) | `/app/*` — Mini App, `/hseapp/callback`, `/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics` и `optional.ics` | Mini App: проверка `initData`, пускаем только свой Telegram id. Callback: `state` из PKCE. Ленты: секрет в пути; `tablo.ics` здесь нет |
+| внутренний | `/api/*`, `/calendar/<CALENDAR_SECRET>/main.ics`, `optional.ics`, `tablo.ics` | Bearer-токен; у ленты — секрет в пути, потому что календари не умеют заголовки |
+
+Секреты разные: утёкшую ссылку своего календаря меняют, не трогая Tablo. Без `CALENDAR_PUBLIC_SECRET` лент на публичном порту нет, совпадать с `CALENDAR_SECRET` он не может.
 
 ### 8.2 API для Tablo и HA (внутренний)
 
@@ -376,7 +378,8 @@ API отдаёт полное текущее состояние, курсоро�
 | `MAIL_USER`, `MAIL_PASSWORD` | IMAP |
 | `RUZ_ICAL_URL` | лента РУЗ |
 | `API_TOKEN` | Bearer для внутреннего API |
-| `CALENDAR_SECRET` | секрет в пути ленты |
+| `CALENDAR_SECRET` | секрет в пути лент на внутреннем порту |
+| `CALENDAR_PUBLIC_SECRET` | другой секрет: ленты `main` и `optional` для своего календаря через Funnel (р. 43) |
 | `PUBLIC_URL` | адрес Funnel публичного порта (`https://uni-master.<tailnet>.ts.net`): кнопка Mini App, callback HSE App X |
 | `TS_AUTHKEY` | ключ личной сети Tailscale для сайдкара, нужен только при первом запуске |
 | `HTTP_PUBLIC_PORT`, `HTTP_INTERNAL_PORT` | порты внутри контейнера, по умолчанию 8080 и 8081 |
