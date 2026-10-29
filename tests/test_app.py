@@ -4,6 +4,8 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
+from telethon.tl import types
+
 from infomaster.app import Service
 from infomaster.collectors.ruz import parse
 from infomaster.config import Env
@@ -173,6 +175,10 @@ async def test_hseapp_wiring(tmp_path):
         assert button.type.url == "https://t.me/example_bot?start=hseapp" and button.text == "Log in to HSE App X"
         assert forum_module.start_screen("/start hseapp") == "hseapp" and forum_module.start_screen("/start") is None
         assert forum_module.start_screen("/start other") is None
+        several = [types.Username("old_bot", editable=True, active=False), types.Username("main", active=True)]
+        assert forum_module.bot_username(types.User(id=1, usernames=several)) == "main"
+        assert forum_module.bot_username(types.User(id=1, username="one_bot")) == "one_bot"
+        assert forum_module.bot_username(types.User(id=1)) is None
         assert service.forum.screen_url("hseapp") == "https://x.ts.net/app/?screen=hseapp"
 
         service.forum.username = None  # before the bot has started: the line goes without the button

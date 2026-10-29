@@ -42,6 +42,12 @@ def start_screen(text: str) -> str | None:
     return words[1] if len(words) > 1 and words[1] in SCREENS else None
 
 
+def bot_username(me: types.User) -> str | None:
+    """The bot's username for t.me links. A bot with more than one username has them in `usernames`, and `username`
+    is empty then; the first active one is the main one."""
+    return me.username or next((u.username for u in me.usernames or () if u.active), None)
+
+
 class Forum:
     def __init__(self, env: Env, store: Store, budget: Budget, session: Path):
         self.env, self.store, self.budget = env, store, budget
@@ -82,7 +88,7 @@ class Forum:
         if session_file.exists():
             session_file.chmod(0o600)
         self._forum = await self.client.get_input_entity(self.env.forum_id)
-        self.username = (await self.client.get_me()).username
+        self.username = bot_username(await self.client.get_me())
         self.client.add_event_handler(self._on_start, events.NewMessage(pattern=r"^/start\b",
                                                                         func=lambda e: e.is_private))
         self.client.add_event_handler(self._on_raise, events.CallbackQuery(data=RAISE_LIMIT))
