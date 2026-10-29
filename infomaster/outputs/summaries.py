@@ -6,11 +6,11 @@ daily summary is an optional LLM task: above 80 % of the limit it is not made, a
 (as after a failed call; an answer the model cannot give for them is not retried). A slot missed while the service was
 down is made up at the start; the very first start only remembers the slot.
 
-/summary [chat] [period] [language]: from the owner, in the chat with the bot or in the forum. The chat is a part of
-its name, or the chat of a forwarded message the command answers; without one the bot shows the enabled chats as
-buttons. Without a period the summary runs since the chat's last one. It goes to the topic like the daily one, and
-the bot's answer to the command links to it. It is no optional task: it runs above 80 % of the limit, but a summary
-too big for what is left is refused alone and stops no other call.
+/summary [chat] [period] [language] (or /tldr): from the owner, in the chat with the bot or in the forum. The chat
+is a part of its name, or the chat of a forwarded message the command answers; without one the bot shows the enabled
+chats as buttons. Without a period the summary runs since the chat's last one. It goes to the topic like the daily
+one, and the bot's answer to the command links to it. It is no optional task: it runs above 80 % of the limit, but a
+summary too big for what is left is refused alone and stops no other call.
 
 Languages (D41): the bot speaks the forum's language, and the daily summary is written in it too. /summary may name
 the summary's own language, `en` or `ru`, at the end of the arguments, before or after the period; without it the
@@ -41,7 +41,7 @@ from .forum import Forum
 log = logging.getLogger(__name__)
 
 TOPIC = "summaries"
-COMMAND = re.compile(r"^/summary(?:@(?P<bot>\w+))?(?:\s+(?P<args>.*))?$", re.DOTALL | re.IGNORECASE)
+COMMAND = re.compile(r"^/(?:summary|tldr)(?:@(?P<bot>\w+))?(?:\s+(?P<args>.*))?$", re.DOTALL | re.IGNORECASE)
 BUTTON = re.compile(rb"^sm:(-?\d+):([0-9hd.\-]*)(?::(en|ru))?$")  # the chat, the period, the summary's language
 DONE = "summaries.done"   # the date of the last daily slot made
 SLOT_DELAY = 5            # seconds past the summary time

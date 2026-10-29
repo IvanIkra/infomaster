@@ -30,7 +30,8 @@ TOPICS = {"system": Phrase("System", "Система"), "news": Phrase("News", "
           "summaries": Phrase("Summaries", "Сводки")}
 # The bot's commands for Telegram's menu: name -> description
 COMMANDS = {"summary": Phrase("Chat summary: /summary [chat] [3h | 2d | 20.10-22.10] [en | ru]",
-                              "Сводка чата: /summary [чат] [3h | 2d | 20.10-22.10] [en | ru]")}
+                              "Сводка чата: /summary [чат] [3h | 2d | 20.10-22.10] [en | ru]"),
+            "tldr": Phrase("The same as /summary", "То же, что /summary")}
 RAISE_LIMIT = re.compile(rb"^llm:raise:(\d{4}-\d{2}-\d{2})$")  # the day is in the data: the button raises only that day
 # Mini App screens a post can open (see app_button) -> what the bot says above the Mini App's button
 SCREENS = {"hseapp": Phrase("The HSE App X login is in the Mini App.", "Вход в HSE App X — в Mini App."),

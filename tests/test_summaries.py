@@ -308,6 +308,8 @@ async def test_command_by_name(topic, summaries, inbox, forum, now):
     assert reply.edits == [f'Сводка «Матан 2026» — <a href="https://t.me/c/5555555555/{post}">в теме «Сводки»</a>.']
     assert summaries.llm.calls[0]["asked"]
     assert len(summaries.collect(CHAT, None).seen) == 1  # a period asked for marks nothing
+    assert COMMAND.match("/tldr@UniBot матан 3h").group("args") == "матан 3h"  # /tldr is /summary
+    assert COMMAND.match("/TLDR").group("args") is None and not COMMAND.match("/tldrx")
 
     command = Command("/summary матан")  # since the last summary: marks
     summaries.llm.answers = [points()]
