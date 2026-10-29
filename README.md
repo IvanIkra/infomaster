@@ -1,75 +1,158 @@
 # infomaster
 
-> Проект переименован в **infomaster** (инфомастер), раньше назывался uni-master — соответствие имён в [decisions.md](decisions.md), р. 42.
+[![CI](https://github.com/IvanIkra/infomaster/actions/workflows/ci.yml/badge.svg)](https://github.com/IvanIkra/infomaster/actions/workflows/ci.yml)
+![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Читает учебные чаты и источники вуза, всё считает сам и отдаёт готовое в форум Telegram, Mini App и API для Tablo. Устройство — [architecture.md](architecture.md), решения — [decisions.md](decisions.md).
+A self-hosted study assistant for university students. infomaster reads course chats, the university
+mailbox and the university's own services, works out what matters with an LLM, and publishes the result to a
+Telegram forum, a Telegram Mini App, iCal feeds and a read-only HTTP API.
 
-## Первый запуск
+It was built for HSE University (RUZ timetable, HSE App X, an `@edu.hse.ru` mailbox) and as the data backend of
+Tablo, a home dashboard; both integrations are optional.
 
-1. **Бот.** Создать в @BotFather, токен — в `TG_BOT_TOKEN`. `TG_API_ID` и `TG_API_HASH` взять на my.telegram.org.
-2. **Форум.** Создать группу и включить в ней темы. Добавить бота админом с правами «Управление темами», «Закрепление сообщений» и «Удаление сообщений». Id группы вида `-100…` записать в `TG_FORUM_ID`, свой id — в `TG_OWNER_ID`. Темы «Система», «Новости», «Дедлайны», «Расписание», «Листочки», «Оценки» и «Сводки» бот создаст сам.
-3. **Tailscale (личная сеть).** В админке личного tailnet включить HTTPS-сертификаты и Funnel (атрибут `funnel` в политике). Создать auth key и записать в `TS_AUTHKEY`. После первого запуска адрес `https://infomaster.<tailnet>.ts.net` записать в `PUBLIC_URL` и перезапустить.
-4. **РУЗ и календарь** (необязательно). Ссылку на свою ленту РУЗ (`https://api.hseapp.ru/v3/ruz/cal/<uuid>`) записать в `RUZ_ICAL_URL`. Секрет для своих лент — в `CALENDAR_SECRET` (`python3 -c "import secrets; print(secrets.token_urlsafe(24))"`), для лент в своём календаре — другой, в `CALENDAR_PUBLIC_SECRET`. Без ссылки в расписании только события из чатов, без секрета ленты выключены.
-5. Заполнить остальное в `.env` по образцу `.env.example` и запустить `docker compose up -d --build`.
-6. Написать боту `/start`: появятся кнопка «Open» и кнопка меню «Settings» — это Mini App (по-русски «Открыть» и «Настройки», если язык форума русский; см. «Языки» ниже).
-7. **Твинк.** Отдельный аккаунт Telegram (не основной и не бот). Вход — в Mini App: «Настройки → Твинк и чаты»: телефон, код (приходит в Telegram твинка или по SMS; не пересылайте его в Telegram — он перестанет действовать) и облачный пароль, если он есть. Чаты начинают читаться сразу, без перезапуска; сессия ложится в `data/twin.session`. Там же — «Выйти»: сессия закрывается и в Telegram, чаты и их настройки остаются. Запасной путь — из терминала: `docker compose run --rm infomaster python -m infomaster login`, затем `docker compose restart infomaster`.
+## Features
 
-8. В Mini App («Настройки → Твинк и чаты») включить нужные чаты и отметить учебные. Новые чаты появляются выключенными, о каждом бот пишет в «Систему».
-9. **HSE App X** (необязательно). Если Tablo сам ходит в HSE App X, сначала выключить опрос там (`hseapp.enabled: false` в его конфиге): `refresh_token` ротируется при каждом обновлении, и два клиента выбьют друг друга. Потом войти: в «Системе» лежит «Нужен вход в HSE App X» с кнопкой «Войти в HSE App X». Она открывает чат с ботом, бот отвечает кнопкой Mini App на экране «HSE App X» (он же — «Настройки → HSE App X»). «Войти» открывает вход ВШЭ в браузере; после входа браузер сам возвращается на `PUBLIC_URL/hseapp/callback` и пишет «Вход в HSE App X выполнен». Не вернулся — раздел «Браузер не вернулся» на том же экране: вставить адрес возврата вручную. HSE App X не нужен — выключить там же «Опрашивать HSE App X».
-10. **Почта** (необязательно). Адрес `@edu.hse.ru` — в `MAIL_USER`, пароль приложения Яндекс 360 — в `MAIL_PASSWORD`. Если Tablo сам читает почту, выключить её там (`mail.enabled: false`), иначе письма разберутся дважды.
-11. **Оценки** (необязательно). Если Tablo сам читает таблицы оценок, выключить их там (убрать `grades.sheets` из его конфига), иначе оценки придут дважды. В Mini App («Настройки → Таблицы оценок») указать ФИО как в таблицах и добавить ссылки на таблицы (доступ — «все, у кого есть ссылка») с коротким именем курса.
+- **Telegram reader.** A separate user account (the "twin") reads the chosen chats and channels over MTProto.
+  Messages are processed in batches every N hours; in chats marked urgent, soon after a pin, a PDF or a message
+  from an important person.
+- **News and deadlines from free text.** Claude Haiku turns batches of messages and letters into news items,
+  deadlines and events with JSON-schema structured output; a course dictionary keeps course names consistent.
+- **One deadline list.** Deadlines from HSE App X, RUZ midterms, mail, chats and the owner's own entries are merged,
+  de-duplicated and can be hidden; the same list goes to the forum, the Mini App and the API.
+- **Timetable.** Classes from the RUZ iCal feed plus events and class changes found in chats, published as
+  `main.ics` (where one has to be) and `optional.ics` (where one may go), ready for Apple or Google Calendar.
+- **Problem sheets.** PDFs from chats are downloaded on demand, read within a page limit and versioned; a new
+  version edits the old forum message and says what changed.
+- **Grades.** Teachers' Google Sheets are read as xlsx; Haiku maps each tab's header once (cached with the header),
+  grades are normalised to a 0–10 scale and only new or changed ones are announced.
+- **Daily summaries** of chats and the `/summary` command for any chat and period.
+- **Images.** Pictures in messages are read by Haiku within a daily count and the budget.
+- **LLM budget.** Every call is journaled with its cost; a daily dollar limit with priorities (study chats first,
+  then mail, then the rest) and a 30-day spending chart in the Mini App.
+- **Two languages.** The forum and the Mini App switch independently between English and Russian.
 
-Что должно получиться: в теме «System» («Система», если язык форума русский) сообщение «infomaster is up.» («infomaster запущен.»), Mini App показывает расход LLM и все чаты твинка, а сообщения из включённых чатов копятся в базе (`messages`). Пока твинк не вошёл, сервис работает без чатов и напоминает о входе в «Системе».
+## How it works
 
-Разбор пачек (нужен `ANTHROPIC_API_KEY`): каждый включённый чат разбирается в часы, кратные N (по умолчанию 3: 0, 3, 6…), а у чата со «срочно» — вскоре после закрепа, PDF или сообщения важного человека: когда в чате минуту тихо, но не позже чем через 5 минут. В теме «Новости» появляется закреплённый список живых новостей за 24 ч (бот правит его на месте), плюс короткое уведомление о каждой новости с важностью 4–5; кнопка «Скрыть» под уведомлением убирает новость из списка насовсем. Очередь и последняя ошибка разбора видны в `GET /api/status` (`batches`).
+```mermaid
+flowchart LR
+    subgraph Sources
+        TG[Telegram chats<br/>via the twin]
+        MAIL[University mail<br/>IMAP]
+        RUZ[RUZ timetable<br/>iCal]
+        HSE[HSE App X]
+        GS[Google Sheets<br/>grades]
+    end
+    subgraph infomaster
+        DB[(SQLite)]
+        LLM[Batch processing<br/>Claude Haiku]
+        MERGE[Course dictionary,<br/>deadline merge]
+    end
+    subgraph Outputs
+        FORUM[Telegram forum<br/>topics and pins]
+        APP[Mini App]
+        ICS[iCal feeds]
+        API[Read-only API]
+    end
+    TG --> DB
+    MAIL --> DB
+    DB --> LLM --> DB
+    RUZ --> MERGE
+    HSE --> MERGE
+    GS --> LLM
+    DB --> MERGE
+    MERGE --> FORUM
+    MERGE --> APP
+    MERGE --> ICS
+    MERGE --> API
+```
 
-Словарь и расписание: РУЗ опрашивается раз в час. После первого опроса, в котором есть пары, в «Системе» появится «РУЗ подключён: в расписании N пар», названия предметов переводит Haiku (одним вызовом, вместе со всем словарём), а у каждого рубежного контроля появляется дедлайн `<abbr> Midterm` в закреплённом списке «Дедлайнов» (без отдельных сообщений: первый опрос — не новость); он идёт за парой, в том числе за её переносом или отменой из чата. Дальше в «Расписание» приходят изменения: что РУЗ сам перенёс, отменил или убрал (одним сообщением за опрос), а также консультации и события из чатов, их переносы и отмены и переносы и отмены пар из чатов — со ссылкой на сообщение и кнопками «Основной / Необязательный» и «Скрыть» («Не применять» у правки пары). Если РУЗ потом сам изменит пару, правка из чата перестаёт действовать. В Mini App вкладка «Расписание» показывает то же, что ленты: пары с правками, события и свои; нажатие на пару или событие — карточка, где его можно перенести, отменить, сделать необязательным, убрать или поправить правку чата, а «+» добавляет своё событие (р. 44). В «Настройки → Словарь предметов» — ручные записи (Haiku их не трогает; удалённую запись Haiku назовёт заново; `<abbr> Midterm` переименовывается сразу после правки). Если сменить `RUZ_ICAL_URL`, следующий опрос считается первым: в «Системе» — «Ссылка РУЗ сменилась: в расписании N пар», без потока «убрана» в «Расписании». Состояние РУЗ — в `GET /api/status` (`ruz`: число пар последней ленты, ошибка опроса без ссылки, ошибка перевода названий).
+A single asyncio process runs the collectors, the processing pipeline and two HTTP servers:
 
-HSE App X: после входа в «Системе» — «Вход в HSE App X выполнен: дедлайны обновляются». Приложение опрашивается раз в 15 минут, вход продлевается сам; токены лежат в базе (`kv`) и больше никуда не попадают: ни в статус, ни в лог, ни в Mini App. Названия дедлайнов переводит Haiku — одним вызовом на все новые, с кэшем навсегда; пока она недоступна, у новых дедлайнов русские названия. Активные дедлайны идут в общий список, выполненные убирают свои копии из почты, чатов и РУЗ (§5.5); первый опрос — без отдельных сообщений, дедлайны просто появляются в закрепе «Дедлайнов». Если вход кончился (три недели без опроса или выход), в «Систему» один раз приходит «Вход в HSE App X больше не действует» с той же кнопкой; если API недоступен 3 часа — тоже одно сообщение и одно, когда снова доступен. Состояние — на экране «HSE App X» и в `GET /api/status` (`hseapp`: `logged_in`, `login_needed`, `ok_at`, `error`, `items`, `done`, `labels_error`).
+| Port | Exposed | Serves |
+|---|---|---|
+| public, `8080` | through Tailscale Funnel | Mini App (Telegram `initData` check, owner only), HSE App X login callback, personal iCal feeds |
+| internal, `8081` | Docker network only | `/api/deadlines`, `/api/news`, `/api/grades`, `/api/status` (Bearer token), feeds for Tablo |
 
-Дедлайны: в теме «Дедлайны» закреплён общий список после склейки (§5.5) — HSE App X, рубежный контроль РУЗ, почта и чаты, свои; тот же список и в том же порядке получает Tablo. В строке — значок источника (🎓 HSE App X, 📅 РУЗ, ✉️ почта, 💬 чат, 🏠 свой), название, срок («сегодня», «завтра», «просрочен (пн 19.10)» или день и дата) и курс; просроченные видны 3 дня (из почты и чатов — 1 день). Бот правит список на месте. Каждый новый или перенесённый дедлайн из любого источника приходит отдельным сообщением, снятый источником — сообщением «снят»; что сделал сам владелец (свой дедлайн, скрытие, правка в Mini App), только правит список; переименование (английская метка HSE App X, `<abbr> Midterm` после словаря) только правит список, а копия той же работы из другого источника — не новость. Под сообщением кнопка «Скрыть» (у своего — «Удалить»): скрытый не вернётся, даже если источник пришлёт его снова; «Вернуть» отменяет. Свои, скрытые и сам список — на вкладке «Дедлайны» в Mini App, у каждого видно, из какого чата или письма он пришёл: там же добавить, изменить или удалить свой дедлайн, изменить чужой (он станет своим), скрыть и вернуть скрытый. Свои и скрытые через 30 дней после срока удаляются сами.
+The full design is in [docs/architecture.md](docs/architecture.md) (in Russian); the reasoning behind each choice is in
+[docs/decisions.md](docs/decisions.md).
 
-Почта: ящик проверяется раз в 5 минут, только для чтения (письма не помечаются прочитанными); первый опрос берёт письма за последние 24 ч. Письма разбираются вместе с чатами по общему расписанию N: после учебных чатов и до остальных, каждое письмо учебное. Новости, дедлайны и события из писем помечены ✉️, а вместо ссылки у них тема письма. В «Настройках» Mini App — число писем за 14 дней и время последней проверки; если ящик не отвечает 3 часа, в «Систему» приходит одно сообщение (пароль в нём, в логе и в статусе не появляется). Состояние — в `GET /api/status` (`mail`: `configured`, `ok_at`, `error`, `last`, `letters`).
+## Tech stack
 
-Внутренний API (Bearer-токен) для Tablo, ответы как у Tablo (§8): `GET /api/deadlines` — `{"items": [{uid, title, due, category, source, overdue}]}`, только чтение: свои и скрытые дедлайны ведутся в Mini App и кнопками форума. Живые новости для Tablo — `GET /api/news`: `{"items": [{id, source, study, posted_at, full, short, importance}], "ttl_hours"}` в порядке ранга, те же, что в закрепе «Новостей» (без заменённых, снятых и скрытых).
+Python 3.12 · asyncio · [Telethon](https://github.com/LonamiWebs/Telethon) · aiohttp · SQLite ·
+[Anthropic SDK](https://github.com/anthropics/anthropic-sdk-python) · pypdf · openpyxl · icalendar ·
+Docker Compose · Tailscale Funnel. The Mini App is plain HTML and JavaScript with no build step.
 
-Листочки: PDF из включённого чата твинк скачивает, когда до сообщения доходит разбор (файлы больше 50 МБ — нет), первая страница читается на месте, а скан уходит в модель картинкой. Что из PDF — листок (ДЗ, задачи, вариант), решает разбор пачки, и бот присылает файл в тему «Листочки» с подписью: предмет и номер, срок, ссылка на сообщение, хэштег предмета (#Calc). Тот же файл второй раз — не новый листок. Новая версия (тот же чат и предмет и тот же номер или почти то же имя файла, старому листку не больше 30 дней; или то же сообщение с заменённым файлом) заменяет файл в старом сообщении, а ответом на него приходит «Листок обновлён». С «PDF целиком» в настройках чата Haiku читает листок (до 10 страниц и 30 тыс. токенов, настраивается в «Настройки → PDF целиком»): краткое содержание — в подписи, дедлайны со всех страниц — в общий список, у новой версии — что изменилось (в модель уходит только разница текстов). Чтение — необязательная задача: выше 80 % дневного лимита листок приходит без него. В Mini App («Учёба → Листочки») версию, которую не узнали, можно присоединить к старому листку, у листочка — поправить предмет, номер, срок и описание (подпись сообщения правится), а «+» загружает свой PDF как листочек (р. 44). Скачанные файлы удаляются через 14 дней, листочки остаются в форуме. Очередь и ошибка чтения — в `GET /api/status` (`sheets`: `waiting`, `error`).
+## Getting started
 
-Сводки: в 21:00 по Москве (время — «Настройки → Ежедневная сводка» в Mini App) в тему «Сводки» приходит по сообщению на каждый включённый чат с переключателем «Сводка»: что в нём было с прошлой сводки, пунктами на языке форума, у каждого пункта ссылка «→» на сообщение. Чаты, где ничего важного не было, собраны в одну строку. Сводка строится по сырым сообщениям и пачку не ждёт; длинный промежуток Haiku сначала сжимает по дням. У чата с фильтром «только важное» в сводку идут только отобранные сообщения. Ежедневная сводка — необязательная задача: выше 80 % дневного лимита она не собирается, и её сообщения войдут в следующую. По команде боту (в личке или в форуме) — `/summary [чат] [промежуток] [язык]`: чат — часть названия, промежуток — `3h`, `2d`, `20.10` или `20.10-22.10` (не больше 7 дней; без него — с прошлой сводки этого чата), язык — `en` или `ru` в конце, до или после промежутка (без него — язык форума; кнопки выбора чата его помнят). Без чата бот показывает включённые чаты кнопками; можно переслать боту сообщение из чата и ответить на него `/summary`. Сводка по команде тоже приходит в тему «Сводки», бот отвечает ссылкой на неё; она работает и выше 80 % лимита, а слишком большая для остатка просто отклоняется, не останавливая разбор. Только сводка «с прошлой» сдвигает начало следующей. Состояние — в `GET /api/status` (`summaries`: `ok_at`, `error`, `done`, `time`).
-
-Оценки: таблицы преподавателей в Google читаются раз в 30 минут (и сразу после правки в «Настройки → Таблицы оценок» или по «Прочитать сейчас»). В каждой видимой вкладке сервис ищет свою строку по ФИО; Haiku видит верх вкладки (до 15 строк над своей, вместе с чужими) и свою строку, сама находит шапку и говорит, какие столбцы — оценки за работы, их максимум и бонус (ответ кэшируется вместе с шапкой: пока она не меняется, Haiku не вызывается, как бы ни менялись чужие оценки). Оценки приводятся к шкале 0–10. Первое чтение таблицы — снимок: в «Систему» приходит «Таблица оценок … подключена», без сообщений об оценках. Дальше каждая новая или изменённая оценка приходит в тему «Оценки» — сообщением на таблицу: метка (`DM HW 1A`), оценка, бонус, баллы таблицы и прежняя оценка (`DM HW 1A — 9 +1 (6.3 из 7; было 8.4)`). Ноль у работы, которой раньше не было, считается «ещё не оценено». Таблица, которая не читается 12 часов (закрыта, своей строки нет, лимит LLM), — одна строка в «Систему» и одна, когда снова читается; оценки из неё при этом остаются. Убранная таблица и смена ФИО стирают оценки: следующее чтение — снова снимок. У каждой таблицы в Mini App свой экран: название, проверка и разметка вкладок, которую можно поправить (своя стоит поверх ответа Haiku); на вкладке «Учёба» оценку можно изменить (держится, пока таблица сама её не поменяет) или добавить свою (р. 44). Новые оценки за 7 дней (окно настраивается), и свои тоже, — `GET /api/grades` на внутреннем порту, состояние таблиц — в `GET /api/status` (`grades`).
-
-Ленты iCal отдаются без Bearer, по секрету в пути. На внутреннем порту — `http://infomaster:8081/calendar/<CALENDAR_SECRET>/main.ics` (пары и то, где нужно быть), `optional.ics` (куда можно прийти) и `tablo.ics` (всё вместе, необязательное с `STATUS:TENTATIVE` и `X-INFOMASTER-OPTIONAL:TRUE`, у каждого события `X-INFOMASTER-SOURCE` и `X-INFOMASTER-LINK`). Названия английские, первая строка описания — тип занятия, время в UTC. Tablo читает `tablo.ics` своим `ical.py` без доработок.
-
-Свой календарь (р. 43): с `CALENDAR_PUBLIC_SECRET` те же `main.ics` и `optional.ics` (не `tablo.ics`) отдаются и на публичном порту, через Funnel: `https://infomaster.<tailnet>.ts.net/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics`. Ссылку добавить как подписку: в Apple «Календарь» — «Файл → Новая подписка на календарь» (на iPhone — «Настройки → Календарь → Учётные записи → Новая учётная запись → Другое → Подписной календарь», или открыть ссылку с `webcal://` вместо `https://`), в Google Calendar — «Другие календари → Добавить по URL». Apple обновляет ленту примерно раз в час, Google — раз в несколько часов, подсказку ленты он не слушает. Секрет — единственная защита: ссылкой не делиться. Если она утекла — заменить `CALENDAR_PUBLIC_SECRET` в `.env`, `docker compose up -d` и подписаться заново; Tablo это не задевает. Включить на сервере, когда этот код уже выложен; потом взять ссылку — `grep ^CALENDAR_PUBLIC_SECRET= ~/infomaster/.env`:
+You need a Telegram bot, a forum group, a spare Telegram account for the twin, an Anthropic API key and a Tailscale
+account with Funnel enabled.
 
 ```bash
-ssh server 'cd ~/infomaster && printf "\nCALENDAR_PUBLIC_SECRET=%s\n" "$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")" >> .env && docker compose up -d --build'
+git clone https://github.com/IvanIkra/infomaster.git
+cd infomaster
+cp .env.example .env    # fill in the values, every variable is commented
+docker compose up -d --build
 ```
 
-Расход LLM — «Настройки → Расход и лимит» в Mini App: сегодня, неделя и месяц с прогнозом, график за 30 дней с линией лимита, задачи и чаты выбранного периода, дневной лимит и «поднять на сегодня». В Tablo и HA расход больше не показывается (р. 40).
+Then send `/start` to the bot, open the Mini App and log the twin in under **Settings → Twin and chats**.
+The step-by-step guide (bot rights, Tailscale policy, every optional source) is in [docs/setup.md](docs/setup.md)
+(in Russian).
 
-Все настройки — вкладка «Настройки» в Mini App: источники, обработка (пачки и новости, сводка, PDF, картинки, словарь), расход LLM и цены моделей, языки; наверху — «Требует внимания», что сломалось. В `.env` только секреты.
+### Configuration
 
-Языки (р. 41): английский или русский, по умолчанию английский; два переключателя в «Настройки → Язык». **Mini App** — весь интерфейс, ошибки и состояния, которые присылает сервис, и страница возврата после входа в HSE App X; меняется сразу. **Форум** — всё, что пишет бот: темы, закрепы, сообщения, кнопки, ответы на кнопки и `/summary`, «Система», а также ежедневная сводка, краткое содержание листочка и «что изменилось» (их пишет Haiku на этом языке). Действует на то, что бот напишет после переключения: старые сообщения остаются как были, закрепы «Новостей» и «Дедлайнов» перепишутся при следующей правке, темы, созданные раньше, не переименовываются, а описание команды и кнопка меню бота меняются после перезапуска. Новости, метки дедлайнов, названия курсов и ленты iCal всегда английские: их же получает Tablo.
+Secrets live in `.env`; everything else is set in the Mini App.
 
-## Переход Tablo
+| Variable | Required | Purpose |
+|---|---|---|
+| `TG_API_ID`, `TG_API_HASH` | yes | Telegram application from my.telegram.org |
+| `TG_BOT_TOKEN` | yes | bot from @BotFather, an admin of the forum |
+| `TG_OWNER_ID` | yes | the only Telegram user the bot and the Mini App let in |
+| `TG_FORUM_ID` | yes | the forum group, `-100…` |
+| `ANTHROPIC_API_KEY` | yes | batch processing, sheets, grades, summaries, images |
+| `API_TOKEN` | yes | Bearer token of the internal API |
+| `PUBLIC_URL` | yes | Funnel address, `https://infomaster.<tailnet>.ts.net` |
+| `TS_AUTHKEY` | first start | auth key for the Tailscale sidecar |
+| `CONTAINER_DNS_1`, `CONTAINER_DNS_2` | yes | DNS servers of the containers |
+| `RUZ_ICAL_URL` | no | personal RUZ feed |
+| `CALENDAR_SECRET`, `CALENDAR_PUBLIC_SECRET` | no | secret path segments of the internal and public iCal feeds |
+| `MAIL_USER`, `MAIL_PASSWORD` | no | university mailbox with an app password |
 
-Переход одним шагом, с полной остановкой (р. 35). Свои и скрытые дедлайны и ручные записи словаря живут в базе Tablo; перенести их один раз, остановив Tablo (infomaster при этом тоже остановлен, база Tablo открывается только на чтение):
+## Development
 
-```sh
-docker compose stop infomaster
-cp ~/tablo/data/tablo.db data/tablo.db
-docker compose run --rm infomaster python -m infomaster import-tablo --tablo-db data/tablo.db
-rm data/tablo.db && docker compose start infomaster
-```
-
-Команда печатает, сколько перенесено и пропущено; повторный запуск ничего не дублирует. Свои дедлайны получают новые `uid` (`ha-<id>`). Ручная запись словаря, уже заданная в Mini App, главнее записи Tablo. Скопированные свои дедлайны появятся в закрепе «Дедлайнов» без отдельных сообщений. Дальше — infomaster со всеми источниками, потом переделанный Tablo; что поменять в Tablo и в интеграции HA — «Передать в Tablo» в [decisions.md](decisions.md).
-
-## Разработка
-
-```sh
+```bash
 python3.12 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/pytest -q
 .venv/bin/ruff check .
 ```
+
+Run locally with `.venv/bin/python -m infomaster --data data`. Other commands: `login` logs the twin in from a
+terminal, `import-tablo --tablo-db <tablo.db>` moves own and hidden deadlines from Tablo once.
+
+```
+infomaster/
+├── collectors/   # Telegram twin, mail, RUZ, HSE App X, files, grade sheets
+├── processing/   # batches, deadlines and merge, events, schedule, sheets, grades, summaries, images
+├── outputs/      # forum bot and its topics, Mini App, iCal feeds, internal API
+├── llm/          # client with structured output, daily budget, journal
+├── settings/     # general and per-chat settings
+├── store.py      # SQLite
+└── app.py        # wiring
+tests/            # pytest
+docs/             # architecture, decisions, setup guide, notes on Tablo
+```
+
+## Status
+
+Stages 1–9 of the plan ([docs/architecture.md](docs/architecture.md), §11) are done and covered by tests: the
+twin and chat settings, batch processing, the course dictionary and timetable, deadlines, problem sheets,
+summaries, grades and images. The API for Tablo (stage 10) is done on the infomaster side, and the service runs
+next to Tablo.
+
+Not yet verified on live Telegram, Haiku and Google Sheets: problem sheets, summaries, grades, images, the
+reworked Mini App and the language switch. Text length is checked in characters rather than by the rendered
+width of the Inter font.
+
+## License
+
+[MIT](LICENSE)
