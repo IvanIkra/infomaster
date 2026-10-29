@@ -2,7 +2,20 @@
 name = "infomaster"
 version = "0.1.0"
 description = "Study chats, mail and university sources processed for Tablo, a Telegram forum and a Mini App"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "IvanIkra" }]
 requires-python = ">=3.12"
+keywords = ["telegram", "telethon", "llm", "anthropic", "ical", "university", "mini-app"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: AsyncIO",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Chat",
+]
 dependencies = [
     "aiohttp>=3.10",
     "anthropic>=1.15",
@@ -12,11 +25,14 @@ dependencies = [
     "telethon>=1.45",  # layer 229: KeyboardInlineButton with a button type
 ]
 
+[project.urls]
+Repository = "https://github.com/IvanIkra/infomaster"
+
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-aiohttp>=1.0", "ruff>=0.15"]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
