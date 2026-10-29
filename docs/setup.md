@@ -43,6 +43,13 @@ Mini App use the Russian names.
     config), or grades arrive twice. In the Mini App (**Settings → Gradebooks**) enter your full name as the sheets
     spell it and add the sheet links (shared with "anyone with the link") with a short course name.
 
+12. **Own emoji** (optional, the bot's owner needs Telegram Premium). At start the bot creates the emoji pack
+    `infomaster_by_<bot>` in the owner's name from `infomaster/outputs/emoji-pack/` (MDI glyphs, as on Tablo's
+    screen) and shows the emoji of its posts as the pack's ones, in the colour of the text. Without Premium Telegram
+    shows the ordinary emoji. A bot may set only Telegram's own topic icons, so the pack's ones are set by hand:
+    a topic → **Edit** → its icon → the pack (System ⚙️, News 📰, Deadlines ⏰, Timetable 📅, Sheets 📄, Grades 📊,
+    Summaries 📝).
+
 What you should see: "infomaster is up." in the System topic, the Mini App shows LLM spending and all the twin's
 chats, and messages from the enabled chats pile up in the database (`messages`). Until the twin logs in, the service
 runs without chats and reminds you about the login in System.

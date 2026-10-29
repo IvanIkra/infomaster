@@ -10,7 +10,8 @@ import re
 from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
 
-from telethon import Button, TelegramClient, errors, events, functions
+from telethon import Button, TelegramClient, errors, events, functions, utils
+from telethon.extensions import html as html_text
 from telethon.tl import types
 
 from .. import clock
@@ -18,6 +19,7 @@ from ..config import Env
 from ..i18n import Phrase, say, tr
 from ..llm.budget import SOFT_SHARE, Budget, Level, Notice
 from ..store import Store
+from . import emoji
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +57,7 @@ class Forum:
         self.client = TelegramClient(str(session), env.api_id, env.api_hash)
         self._forum: types.TypeInputPeer | None = None
         self.username: str | None = None  # the bot's, for links that open its chat
+        self.emoji: dict[str, int] = {}  # emoji -> the pack's custom emoji for it (see emoji.py)
         self._topics_lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
 
@@ -89,6 +92,7 @@ class Forum:
             session_file.chmod(0o600)
         self._forum = await self.client.get_input_entity(self.env.forum_id)
         self.username = bot_username(await self.client.get_me())
+        await self._load_emoji()
         self.client.add_event_handler(self._on_start, events.NewMessage(pattern=r"^/start\b",
                                                                         func=lambda e: e.is_private))
         self.client.add_event_handler(self._on_raise, events.CallbackQuery(data=RAISE_LIMIT))
@@ -120,12 +124,12 @@ class Forum:
                    reply_to: int | None = None) -> int:
         """Send to a topic; returns the message id. With `html` the text is HTML and links get no preview; with
         `reply_to` it answers that message of the topic. A Phrase goes in the forum's language."""
-        text = say(text, self.lang)
+        text, formatting = self._formatted(say(text, self.lang), html)
         for attempt in (1, 2):
             topic_id = await self._topic(topic)
             try:
                 message = await self.client.send_message(self._forum, text, reply_to=reply_to or topic_id,
-                                                         buttons=buttons, **self._html(html))
+                                                         buttons=buttons, **formatting, **self._preview(html))
                 return message.id
             except errors.TopicDeletedError:
                 if attempt == 2:
@@ -136,12 +140,13 @@ class Forum:
 
     async def post_file(self, topic: str, path: Path, name: str, caption: str) -> int:
         """Send a file under its own name to a topic, with an HTML caption; returns the message id."""
+        caption, formatting = self._formatted(caption, html=True)
         for attempt in (1, 2):
             topic_id = await self._topic(topic)
             try:
                 message = await self.client.send_file(
-                    self._forum, str(path), caption=caption, parse_mode="html", reply_to=topic_id, force_document=True,
-                    attributes=[types.DocumentAttributeFilename(name)])
+                    self._forum, str(path), caption=caption, reply_to=topic_id, force_document=True,
+                    attributes=[types.DocumentAttributeFilename(name)], **formatting)
                 return message.id
             except errors.TopicDeletedError:
                 if attempt == 2:
@@ -152,9 +157,10 @@ class Forum:
 
     async def edit_file(self, msg_id: int, path: Path, name: str, caption: str) -> bool:
         """Replace a message's file and caption; False when the message is gone."""
+        caption, formatting = self._formatted(caption, html=True)
         try:
-            await self.client.edit_message(self._forum, msg_id, caption, file=str(path), parse_mode="html",
-                                           force_document=True, attributes=[types.DocumentAttributeFilename(name)])
+            await self.client.edit_message(self._forum, msg_id, caption, file=str(path), force_document=True,
+                                           attributes=[types.DocumentAttributeFilename(name)], **formatting)
         except errors.MessageNotModifiedError:
             pass
         except (errors.MessageIdInvalidError, errors.MessageEditTimeExpiredError):
@@ -163,8 +169,9 @@ class Forum:
 
     async def edit(self, msg_id: int, text: str, *, html: bool = False) -> bool:
         """Replace a message's text; False when the message is gone (deleted by hand, or with its topic)."""
+        text, formatting = self._formatted(text, html)
         try:
-            await self.client.edit_message(self._forum, msg_id, text, **self._html(html))
+            await self.client.edit_message(self._forum, msg_id, text, **formatting, **self._preview(html))
         except errors.MessageNotModifiedError:
             pass
         except (errors.MessageIdInvalidError, errors.MessageEditTimeExpiredError):
@@ -181,9 +188,18 @@ class Forum:
         except errors.RPCError as e:  # without the right to pin the list still works, just unpinned
             log.warning("cannot pin message %d: %s", msg_id, e)
 
+    def _formatted(self, text: str, html: bool) -> tuple[str, dict]:
+        """The text and how to send it: HTML with `html`, else the client's Markdown; with the pack loaded the
+        text goes parsed, its emoji as the pack's."""
+        if not self.emoji:
+            return text, {"parse_mode": "html"} if html else {}
+        text, found = (html_text if html else self.client.parse_mode).parse(text)
+        return text, {"formatting_entities": emoji.entities(text, found, self.emoji)}
+
     @staticmethod
-    def _html(html: bool) -> dict:
-        return {"parse_mode": "html", "link_preview": False} if html else {}
+    def _preview(html: bool) -> dict:
+        """HTML posts carry links to sources: no previews under them."""
+        return {"link_preview": False} if html else {}
 
     def spawn(self, coro: Coroutine) -> None:
         """Run a post in the background from synchronous code; failures go to the log."""
@@ -236,6 +252,44 @@ class Forum:
                 log.info("created topic %r: %d", title, message.id)
                 return message.id  # the topic's id is the id of the message that opened it
         raise RuntimeError(f"Telegram did not return the new topic {title!r}")
+
+    # --- own emoji -----------------------------------------------------------------
+
+    async def _load_emoji(self) -> None:
+        """The pack's emoji for the posts; a pack that is not there yet is created, one that lacks some of
+        emoji.ICONS is completed. On a failure the posts keep the ordinary emoji."""
+        if not self.username:
+            return
+        name = emoji.pack_name(self.username)
+        try:
+            try:
+                pack = await self.client(functions.messages.GetStickerSetRequest(
+                    types.InputStickerSetShortName(name), hash=0))
+            except errors.StickersetInvalidError:
+                pack = None
+            ids = emoji.pack_ids(pack.documents) if pack else {}
+            if keys := emoji.missing(ids):
+                items = [types.InputStickerSetItem(await self._upload_emoji(key), emoji.ICONS[key]) for key in keys]
+                if pack is None:
+                    owner = utils.get_input_user(await self.client.get_input_entity(self.env.owner_id))
+                    pack = await self.client(functions.stickers.CreateStickerSetRequest(
+                        owner, emoji.TITLE, name, items, emojis=True, text_color=True))
+                else:
+                    for item in items:
+                        pack = await self.client(functions.stickers.AddStickerToSetRequest(
+                            types.InputStickerSetShortName(name), item))
+                log.info("emoji pack %s: %d added", name, len(items))
+                ids = emoji.pack_ids(pack.documents)
+        except (ValueError, errors.RPCError) as e:
+            log.warning("own emoji are off: %s", e)
+            return
+        self.emoji = ids
+
+    async def _upload_emoji(self, key: str) -> types.InputDocument:
+        path = emoji.ASSETS / f"{key}.webp"
+        media = await self.client(functions.messages.UploadMediaRequest(self._forum, types.InputMediaUploadedDocument(
+            await self.client.upload_file(path), "image/webp", [types.DocumentAttributeFilename(path.name)])))
+        return utils.get_input_document(media.document)
 
     # --- the owner's side -------------------------------------------------------
 

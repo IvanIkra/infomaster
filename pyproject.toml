@@ -39,7 +39,7 @@ build-backend = "setuptools.build_meta"
 include = ["infomaster*"]
 
 [tool.setuptools.package-data]
-"infomaster.outputs" = ["miniapp/*"]
+"infomaster.outputs" = ["miniapp/*", "emoji-pack/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
