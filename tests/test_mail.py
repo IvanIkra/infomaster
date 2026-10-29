@@ -120,7 +120,7 @@ async def test_batches_parse_letters_as_study_mail(store, now, schedule, mail):
     schedule.inbox.put_chat(-1003, "Алгебра", "supergroup", None, 0)
     chat_settings.update(-1002, {"enabled": True})
     chat_settings.update(-1003, {"enabled": True, "study": True})
-    assert batches._ordered(batches._boxes()) == [-1003, MAILBOX, -1002]  # р. 30
+    assert batches._ordered(batches._boxes()) == [-1003, MAILBOX, -1002]  # D30
 
     changes = Changes()
     await batches.parse_chat(MAILBOX, changes)

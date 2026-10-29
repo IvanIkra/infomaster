@@ -437,7 +437,7 @@
       if (tg.themeParams.secondary_bg_color) tg.setBackgroundColor(tg.themeParams.secondary_bg_color);
     } catch (error) { /* an older client keeps its own colours */ }
     const $ = (id) => document.getElementById(id);
-    // The Mini App's language (р. 41): English until /api/me tells the setting; every text is L(english, russian).
+    // The Mini App's language (D41): English until /api/me tells the setting; every text is L(english, russian).
     let lang = "en";
     const L = (en, ru) => lang === "ru" ? ru : en;
     const LANGUAGE_NAMES = {en: "English", ru: "Русский"};  // each in its own language

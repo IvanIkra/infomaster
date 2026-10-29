@@ -1,4 +1,4 @@
-"""Events from chats and chat corrections of RUZ classes (§6.1, §6.5, р. 28).
+"""Events from chats and chat corrections of RUZ classes (§6.1, §6.5, D28).
 
 An event of its own is a consultation, a talk, a meeting: something to attend that is not in the timetable. A
 correction is a chat message that moves or cancels a RUZ class: it carries the class's `class_uid` and the class's
@@ -10,7 +10,7 @@ something else) brings back the newest version before it that is not withdrawn i
 one; a superseded version whose messages are deleted is withdrawn too, so it never comes back. The owner's choices
 (`required` once `chosen`, `hidden`) pass to every newer version.
 
-The owner's own events and corrections come from the Mini App (source `own`, р. 44). An own correction of a class wins
+The owner's own events and corrections come from the Mini App (source `own`, D44). An own correction of a class wins
 over the chats' corrections of it; the chats' versions go on under it, so they apply again once it is undone. The
 batches never see the own ones: the model is not to move them, nor a chat's message to supersede them.
 

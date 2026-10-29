@@ -1,4 +1,4 @@
-"""One list of deadlines for every consumer (§5.5, §5.6, §6.4, р. 4, р. 8, р. 10): the port of Tablo's merge.
+"""One list of deadlines for every consumer (§5.5, §5.6, §6.4, D4, D8, D10): the port of Tablo's merge.
 
 Sources, the most reliable first: HSE App X (kv "hseapp.deadlines", processing/hseapp.py), the Midterms of RUZ
 (source "ical"), then every deadline from mail and every one from the chats as a group of its own (two posts may carry

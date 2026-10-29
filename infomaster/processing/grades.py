@@ -22,7 +22,7 @@ sheet removed in the settings, or a new name, drops its grades, so the next read
 The «Оценки» topic posts the events (outputs/grades.py); the API gives the newest event of each work within
 grades_window_days, newest first (Tablo's §3.7).
 
-The owner's hand (р. 44). Every read keeps a view of each tab for the Mini App: the own row's cells under their headers
+The owner's hand (D44). Every read keeps a view of each tab for the Mini App: the own row's cells under their headers
 and the works laid out in them, never another student's row. The owner may lay out a tab themselves: that layout stands
 over Haiku's, whatever the header does, until given back. The owner adds grades by hand and changes a sheet's grade:
 a changed one stands until the sheet itself changes that grade. Both go to the API with the sheets' new grades, not to
@@ -371,7 +371,7 @@ class Grades:
                            "new": row["key"] in fresh or (mine is not None and mine["created_at"] >= since)})
         return listed
 
-    # --- the owner's grades (р. 44) ------------------------------------------------------------
+    # --- the owner's grades (D44) ------------------------------------------------------------
 
     def _label(self, row) -> str:
         return f"{row['course']} {row['label']}" if row["key"] is None and row["course"] else row["label"]
@@ -419,7 +419,7 @@ class Grades:
                                        (int(grade_id[4:]),)).rowcount > 0
             return self.db.execute("delete from own_grades where key = ?", (grade_id,)).rowcount > 0
 
-    # --- the owner's view and layout of a sheet (р. 44) ---------------------------------------------
+    # --- the owner's view and layout of a sheet (D44) ---------------------------------------------
 
     def view(self, sid: str) -> dict:
         """What the last read found in each tab: {course, tabs}; no tabs before the first read."""

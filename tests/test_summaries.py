@@ -93,7 +93,7 @@ def test_periods(now):
     assert split_args("Матан 2026 3h", moment)[1].label == "3h"
     assert split_args("Матан 2026", moment) == ("Матан 2026", None, None)
     assert split_args("", moment) == ("", None, None)
-    # the language at the end, before or after the period (р. 41)
+    # the language at the end, before or after the period (D41)
     query, period, lang = split_args("Матан 2026 18.10 - 19.10 EN", moment)
     assert (query, period.label, lang) == ("Матан 2026", "18.10-19.10", "en")
     query, period, lang = split_args("Матан 2026 ru 3h", moment)
@@ -439,7 +439,7 @@ def test_point_length():
 
 
 async def test_languages(topic, summaries, inbox, forum, now):
-    """The bot speaks the forum's language, the summary is in the one /summary names, else in the forum's (р. 41)."""
+    """The bot speaks the forum's language, the summary is in the one /summary names, else in the forum's (D41)."""
     add(inbox, now, 1, "Семинар переносится")
     summaries.llm.answers = [points(("Seminar moved.", 1))]
     command = Command("/summary матан 3h en")  # the forum is Russian, the summary English

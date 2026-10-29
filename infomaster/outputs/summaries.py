@@ -1,4 +1,4 @@
-"""The «Summaries» topic, «Сводки» in Russian (§6.6, §8.3, р. 17, р. 20): the daily summary and /summary.
+"""The «Summaries» topic, «Сводки» in Russian (§6.6, §8.3, D17, D20): the daily summary and /summary.
 
 Daily: at `summary_time` (Moscow, 21:00 by default) every enabled chat with `summary` on gets a summary of what it said
 since its last one, a message of its own in the topic. Chats where nothing of substance was said share one line. The
@@ -12,7 +12,7 @@ buttons. Without a period the summary runs since the chat's last one. It goes to
 the bot's answer to the command links to it. It is no optional task: it runs above 80 % of the limit, but a summary
 too big for what is left is refused alone and stops no other call.
 
-Languages (р. 41): the bot speaks the forum's language, and the daily summary is written in it too. /summary may name
+Languages (D41): the bot speaks the forum's language, and the daily summary is written in it too. /summary may name
 the summary's own language, `en` or `ru`, at the end of the arguments, before or after the period; without it the
 summary is in the forum's language.
 """

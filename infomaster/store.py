@@ -45,7 +45,7 @@ create table if not exists chat_settings (
     value text not null,        -- JSON; no row means the default from infomaster.settings
     primary key (chat_id, name)
 );
-create table if not exists messages (   -- raw messages and mail, kept 14 days (р. 29)
+create table if not exists messages (   -- raw messages and mail, kept 14 days (D29)
     id integer primary key,
     source text not null,       -- tg, mail
     chat_id integer not null,   -- a letter: 0, the mailbox (collectors/mail.py)
@@ -99,7 +99,7 @@ create table if not exists deadlines (  -- deadlines from the chats, mail and RU
     sheet_id integer            -- read in the pages of a sheet: an edit of its message does not withdraw it
 );
 create index if not exists deadlines_due on deadlines(due);
-create table if not exists own_deadlines (     -- the owner's own, from HA's to-do lists or the Mini App (§5.4, р. 8)
+create table if not exists own_deadlines (     -- the owner's own, from HA's to-do lists or the Mini App (§5.4, D8)
     id integer primary key,     -- the uid is ha-<id>
     title text not null,
     due text not null,          -- YYYY-MM-DD
@@ -128,7 +128,7 @@ create table if not exists subjects (   -- the course dictionary, one for everyt
     name text primary key,      -- as a source gives it, cleaned
     title text not null,        -- short English: the timetable, the iCal feed
     abbr text not null,         -- at most 6 characters: the prefix of deadline labels
-    manual integer not null default 0  -- set in the Mini App (р. 3): Haiku never overwrites it
+    manual integer not null default 0  -- set in the Mini App (D3): Haiku never overwrites it
 );
 create table if not exists classes (    -- the RUZ timetable (§5.2, §4.2): the current feed and the past classes
     id integer primary key,     -- c<id> in the batch prompt
@@ -157,7 +157,7 @@ create table if not exists events (     -- events from chats and chat correction
     start text not null,
     end text,                   -- null when the source does not say
     room text not null default '',  -- a room or a link
-    required integer not null,  -- the main calendar (1) or the optional one (0), р. 28
+    required integer not null,  -- the main calendar (1) or the optional one (0), D28
     chosen integer not null default 0,  -- `required` set by the owner: moves and edits keep it
     hidden integer not null default 0,  -- out of the feeds; a hidden correction is not applied
     cancelled integer not null default 0,
@@ -169,7 +169,7 @@ create index if not exists events_uid on events(uid);
 create index if not exists events_class on events(class_uid);
 
 create table if not exists files (      -- PDFs and images of chat messages, fetched when a batch needs them;
-                                        -- kept 14 days (р. 29)
+                                        -- kept 14 days (D29)
     id integer primary key,
     source text not null,       -- tg
     chat_id integer not null,
@@ -187,7 +187,7 @@ create table if not exists files (      -- PDFs and images of chat messages, fet
     unique (source, chat_id, msg_id)
 );
 create index if not exists files_sha256 on files(sha256);
-create table if not exists sheets (     -- листочки (§6.3, р. 14): kept for good, the files live in the forum
+create table if not exists sheets (     -- листочки (§6.3, D14): kept for good, the files live in the forum
     id integer primary key,
     chat_id integer not null,
     msg_id integer not null,    -- the message with the PDF
@@ -201,7 +201,7 @@ create table if not exists sheets (     -- листочки (§6.3, р. 14): kep
     text text,                  -- its pages read locally, for the diff of a newer version; null until prepared
     summary text,               -- what the model read in it (pdf_content)
     changes text,               -- of a newer version: what changed, from the diff
-    previous integer,           -- the version it updates: the same message, or the rules of р. 14, or the owner
+    previous integer,           -- the version it updates: the same message, or the rules of D14, or the owner
     version integer not null default 1,
     post_id integer,            -- the bot's message in «Листочки»; every version of a sheet edits the first one's
     created_at text not null
@@ -241,7 +241,7 @@ create table if not exists grade_events (       -- new and changed grades: the �
     post_id integer             -- the bot's message in «Оценки»; null while it waits
 );
 create index if not exists grade_events_seen on grade_events(seen_at);
-create table if not exists own_grades (         -- the owner's grades (р. 44): added by hand, or a sheet's changed
+create table if not exists own_grades (         -- the owner's grades (D44): added by hand, or a sheet's changed
     id integer primary key,
     key text unique,            -- the sheet's work it changes (grade_items.key); null for one added by hand
     sheet_id text,              -- of that work

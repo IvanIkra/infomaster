@@ -1,4 +1,4 @@
-"""Images (р. 12): the image of a message fetched for its batch, read by Haiku within the daily number and the budget,
+"""Images (D12): the image of a message fetched for its batch, read by Haiku within the daily number and the budget,
 what was read in the batch's prompt and in the summaries; the daily number on the Mini App's «Чаты»."""
 
 import datetime as dt

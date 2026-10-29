@@ -1,4 +1,4 @@
-"""Our iCal feeds (§6.5, §8.1, §8.2, р. 2, р. 28, р. 32, р. 43).
+"""Our iCal feeds (§6.5, §8.1, §8.2, D2, D28, D32, D43).
 
 On the internal port, for Tablo: GET /calendar/<CALENDAR_SECRET>/main.ics, optional.ics and tablo.ics. On the public
 port, behind Funnel, for one's own calendar: GET /calendar/<CALENDAR_PUBLIC_SECRET>/main.ics and optional.ics, never

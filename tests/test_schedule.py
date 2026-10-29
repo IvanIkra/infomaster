@@ -266,7 +266,7 @@ def test_agenda(loaded, now):
 
 
 async def test_own_events_and_corrections(loaded, now):
-    """The owner's own events and corrections (р. 44)."""
+    """The owner's own events and corrections (D44)."""
     talk = add(loaded, now)
     own = loaded.add_event({"title": "Supervisor", "kind": "Event", "start": "2026-10-24T15:00:00",
                             "end": "2026-10-24T16:00:00", "room": "R205", "required": False})

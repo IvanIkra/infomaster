@@ -1,4 +1,4 @@
-"""PDFs read locally (§6.3, р. 14): the text of their pages, the first pages as a PDF of their own for the model, the
+"""PDFs read locally (§6.3, D14): the text of their pages, the first pages as a PDF of their own for the model, the
 comparison of two versions. pypdf only (MIT): it cannot render a page, so a scan goes to the model as a PDF of its
 first pages, which the model reads as page images.
 
@@ -82,7 +82,7 @@ def _clean(text: str) -> str:
 
 def diff(old: str, new: str, limit: int) -> str:
     """The changed lines of two texts, '-' old and '+' new, at most `limit` characters; "" when the text is the same.
-    Only this goes to the model when it describes a new version (р. 14)."""
+    Only this goes to the model when it describes a new version (D14)."""
     lines = [line for line in difflib.unified_diff(old.splitlines(), new.splitlines(), lineterm="", n=0)
              if line[:1] in "+-" and not line.startswith(("+++", "---"))]
     text = "\n".join(lines)
@@ -106,7 +106,7 @@ def name_key(name: str) -> str:
 
 
 def similar_names(a: str, b: str) -> bool:
-    """Almost the same name (р. 14): the same numbers in it and most of the letters. "ДЗ3.pdf" and
+    """Almost the same name (D14): the same numbers in it and most of the letters. "ДЗ3.pdf" and
     "ДЗ3_исправленный.pdf" are, "ДЗ3.pdf" and "ДЗ4.pdf" are not."""
     ka, kb = name_key(a), name_key(b)
     if not ka or not kb or re.findall(r"\d+", ka) != re.findall(r"\d+", kb):

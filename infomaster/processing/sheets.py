@@ -1,4 +1,4 @@
-"""Листочки (§6.3, р. 14): PDFs with tasks from the chats, kept as rows here and as files in the forum.
+"""Листочки (§6.3, D14): PDFs with tasks from the chats, kept as rows here and as files in the forum.
 
 1. The batch reads a PDF by its name and its first page (a scan: the first page as an image) and says whether it is a
    sheet, with its course, number and due date (processing/batches.py). The sheet becomes a row here, `new`, in the
@@ -12,11 +12,11 @@
    limit): at most `pdf_pages` pages and `pdf_tokens` tokens, what comes first. It writes a short summary for the post
    and gives the deadlines of its pages; they join the deadlines from the chat (source tg, the sheet's message), and an
    edit of the message's text does not withdraw them, its deletion does. For a newer version the model sees only the
-   diff of the texts and says what changed. The summary and the changes are written in the forum's language (р. 41),
+   diff of the texts and says what changed. The summary and the changes are written in the forum's language (D41),
    as it is when the sheet is prepared.
 
 4. The owner changes a sheet's course, number, due date and summary in the Mini App, and adds sheets of their own:
-   a PDF uploaded there, of the chat OWN_CHAT (р. 44). An own sheet is posted as a chat's, gets newer versions by
+   a PDF uploaded there, of the chat OWN_CHAT (D44). An own sheet is posted as a chat's, gets newer versions by
    the same rules among the own ones, and is the only kind the owner may delete.
 
 The forum side is outputs/sheets.py. Writing methods commit themselves, except `add`: the batch calls it inside its
@@ -43,7 +43,7 @@ from .subjects import Subjects, clean
 
 log = logging.getLogger(__name__)
 
-VERSION_WINDOW = dt.timedelta(days=30)  # р. 14: an older sheet gets no newer version by the rules
+VERSION_WINDOW = dt.timedelta(days=30)  # D14: an older sheet gets no newer version by the rules
 TEXT_PAGES = 50           # read locally for the diff of the next version
 TEXT_CHARS = 200_000
 DIFF_CHARS = 8_000        # of the diff sent to the model
@@ -243,7 +243,7 @@ class Sheets:
         return (self.subjects.abbr(course) or clean(course)).casefold()
 
     def same(self, new: dict, old: dict) -> bool:
-        """A newer version of `old` by the rules of р. 14 (the age is the caller's)."""
+        """A newer version of `old` by the rules of D14 (the age is the caller's)."""
         if (new["chat_id"], new["msg_id"]) == (old["chat_id"], old["msg_id"]):
             return True  # the message's file was replaced
         if new["chat_id"] != old["chat_id"] or self._course_key(new["course"]) != self._course_key(old["course"]):
@@ -343,7 +343,7 @@ class Sheets:
         return (str(answer.get("summary") or "").strip()[:SUMMARY_CHARS] or None), deadlines
 
     async def _describe(self, sheet: dict, old: str, new: str) -> str | None:
-        """What changed against the older version, from the diff alone (р. 14)."""
+        """What changed against the older version, from the diff alone (D14)."""
         changed = pdf.diff(old, new, DIFF_CHARS)
         if not changed:  # a scan has no text to compare
             return tr(self.settings.get("forum_language"), "The text is the same.", "Текст не изменился.") \

@@ -4,9 +4,9 @@ One list of entries serves the iCal feeds, the batch prompt and the Mini App:
 - a RUZ class is always in the main calendar. A correction in force from a chat applies to it: a cancellation
   makes it cancelled, a move gives it the new time and room with a note. RUZ wins: when RUZ itself changes or
   removes the class, its corrections are gone (`after_poll`);
-- an event of its own goes to the main or the optional calendar by `required` (р. 28), unless the owner hid it.
+- an event of its own goes to the main or the optional calendar by `required` (D28), unless the owner hid it.
 
-The owner adds events of their own and corrects classes in the Mini App (р. 44): an own correction wins over the chats'
+The owner adds events of their own and corrects classes in the Mini App (D44): an own correction wins over the chats'
 ones until it is undone or RUZ changes the class; a change of an event from a chat hides it and puts an own copy in its
 place, so the chat's next message changes only the hidden one (as a changed deadline does, §5.4).
 

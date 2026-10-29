@@ -1,4 +1,4 @@
-"""The «Новости» topic (§8.3, р. 23, р. 24), and the pinned lists the forum keeps edited in place.
+"""The «Новости» topic (§8.3, D23, D24), and the pinned lists the forum keeps edited in place.
 
 «Новости»: a pinned list of every live news item, `full`, in rank order, with its source: the chat with a link to the
 message, or for a letter its subject (letters have no link, §8.3). The bot rebuilds it after each batch run and edits

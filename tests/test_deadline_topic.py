@@ -314,7 +314,7 @@ def test_due_marks():
 
 
 async def test_english_forum(topic, merged, forum):
-    """The forum's language (р. 41): the list's frame, the marks and the buttons in English."""
+    """The forum's language (D41): the list's frame, the marks and the buttons in English."""
     forum.lang = "en"
     assert topic.board([]) == ["<b>Deadlines</b>\n\nNo deadlines."]
     d = Deadline("Minor sign-up", clock.local_day(topic.now()), "study", "ha", None, ref="ha:1")

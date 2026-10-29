@@ -1,4 +1,4 @@
-"""Daily LLM limit in dollars for all calls together (§7, р. 21, р. 27). Days are Moscow days.
+"""Daily LLM limit in dollars for all calls together (§7, D21, D27). Days are Moscow days.
 
 Before a call the worst case is reserved: input estimated from the text length plus max_tokens of output.
 A reserve that does not fit what is left is refused. After the answer the journal holds the real cost and the

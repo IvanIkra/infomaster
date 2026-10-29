@@ -501,7 +501,7 @@ async def test_api_and_miniapp(aiohttp_client, grades, settings, budget, journal
                                 "edited": False, "sheet_value": 8, "new": True}]
     assert shown["name"] == "" and body["manual"] == []
 
-    # The owner's grades (р. 44): a sheet's changed, one added by hand; both go to Tablo.
+    # The owner's grades (D44): a sheet's changed, one added by hand; both go to Tablo.
     body = await (await client.patch("/app/api/grades/items/k1", json={"value": 9.5}, headers=headers)).json()
     assert (body["sheets"][0]["grades"][0]["value"], body["sheets"][0]["grades"][0]["edited"]) == (9.5, True)
     body = await (await client.post("/app/api/grades/items", headers=headers,
@@ -535,7 +535,7 @@ async def test_api_and_miniapp(aiohttp_client, grades, settings, budget, journal
     assert (await response.json())["window_days"] == 14
 
 
-# --- the owner's hand (р. 44) ------------------------------------------------------------------------
+# --- the owner's hand (D44) ------------------------------------------------------------------------
 
 async def test_the_view_and_the_owners_layout(grades, llm, now):
     await grades.apply(sheet())

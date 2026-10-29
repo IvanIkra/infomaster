@@ -6,11 +6,11 @@ checked, and a row of `files` keeps the result, also a failure of the file itsel
 message edited later does not download the same file again; a message whose file was replaced gets the new one. A
 download that fails on the way (the twin is offline, the network, a flood wait) is not kept: the batch leaves the
 message in the queue for its next run (NotNow). What Haiku read on an image (processing/images.py)
-lives in the same row. Files and rows go with their messages after 14 days (р. 29); a sheet made of a file keeps its
+lives in the same row. Files and rows go with their messages after 14 days (D29); a sheet made of a file keeps its
 text (processing/sheets.py), and the file lives on in the forum.
 
 Only messages of the twin's chats: letters keep their attachments in the mailbox. And the PDFs the owner uploads in the
-Mini App as sheets of their own (р. 44): kept the same way, in rows of source `own` of the chat OWN_CHAT.
+Mini App as sheets of their own (D44): kept the same way, in rows of source `own` of the chat OWN_CHAT.
 """
 
 import asyncio

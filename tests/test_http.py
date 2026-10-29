@@ -90,7 +90,7 @@ async def test_miniapp_llm(aiohttp_client, budget, journal, store, schedule, mer
     assert today["by_task"] == [{"task": "batch", "runs": 2, "failed": 0, "cost_usd": 0.25, "tokens": 4},
                                 {"task": "subjects", "runs": 1, "failed": 0, "cost_usd": 0.05, "tokens": 2}]
     assert [(c["title"], c["cost_usd"]) for c in today["by_chat"]] == [("Матан", 0.2), ("Mail", 0.05)]
-    settings.set("miniapp_language", "ru")  # what the service names itself follows the Mini App's language (р. 41)
+    settings.set("miniapp_language", "ru")  # what the service names itself follows the Mini App's language (D41)
     body = await (await client.get("/app/api/llm", headers=owner())).json()
     assert [c["title"] for c in body["periods"]["today"]["by_chat"]] == ["Матан", "Почта"]
     settings.reset("miniapp_language")
@@ -152,7 +152,7 @@ async def test_miniapp_general(aiohttp_client, budget, journal, store, schedule,
     assert (await client.patch("/app/api/general", json={"pdf_pages": 3}, headers=owner())).status == 400
     assert (await client.patch("/app/api/general", json={}, headers=owner())).status == 400
 
-    # the languages (р. 41): English by default, each its own
+    # the languages (D41): English by default, each its own
     assert (body["forum_language"], body["miniapp_language"], body["languages"]) == ("en", "en", ["en", "ru"])
     body = await (await client.patch("/app/api/general", json={"miniapp_language": "ru"}, headers=owner())).json()
     assert (body["forum_language"], body["miniapp_language"]) == ("en", "ru")
@@ -279,7 +279,7 @@ async def test_miniapp_subjects(aiohttp_client, budget, journal, store, schedule
 
 async def test_miniapp_agenda(aiohttp_client, budget, journal, store, schedule, now, merged):
     """The Расписание screen: the timetable as the feeds have it; the chats' events switched and hidden, the
-    owner's own events added, changed and deleted, classes moved by the owner (р. 44)."""
+    owner's own events added, changed and deleted, classes moved by the owner (D44)."""
     schedule.ruz._sync(parse(FEED))
     client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
     events = schedule.events
@@ -371,7 +371,7 @@ def add_row(merged, label, due, source="tg", course="Математически�
 
 
 async def test_deadlines_api(aiohttp_client, budget, schedule, merged):
-    """The merged list for Tablo, as Tablo's route gave it; nothing changes it through the API (р. 34)."""
+    """The merged list for Tablo, as Tablo's route gave it; nothing changes it through the API (D34)."""
     client = await aiohttp_client(api.create_app(env(), budget, TWIN, CalendarFeed(schedule), merged))
     today = merged.today()
     add_row(merged, "Calc HW 3", (today + dt.timedelta(days=1)).isoformat(), "mail")
@@ -404,7 +404,7 @@ async def test_miniapp_deadlines(aiohttp_client, budget, journal, store, schedul
     item, essay = body["items"]
     assert item == {"uid": merged.items()[0]["uid"], "title": "Calc HW 3", "due": "2026-10-21", "category": "study",
                     "source": "tg", "course": "Математический анализ", "overdue": False, "from": "Матан",
-                    "link": None}  # where the chat and the letter it came from are known (р. 44)
+                    "link": None}  # where the chat and the letter it came from are known (D44)
     assert (essay["from"], essay["link"]) == ("letter", None)
     with merged.db:
         merged.deadlines.drop([letter], merged.now())

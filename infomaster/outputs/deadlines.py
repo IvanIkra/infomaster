@@ -1,4 +1,4 @@
-"""The «Дедлайны» topic (§6.4, §8.3, р. 24): the merged list pinned, and a message for every new or moved deadline.
+"""The «Дедлайны» topic (§6.4, §8.3, D24): the merged list pinned, and a message for every new or moved deadline.
 
 - The pinned list: every deadline the merge shows (processing/merge.py: the list Tablo and HA get), in its order, with
   its source's icon, the title, when it is due (today, tomorrow, overdue, else the weekday and the date) and the
@@ -14,7 +14,7 @@
   the buttons) only edit the list too.
 - Under the message of a new or moved deadline «Hide» hides it exactly as HA's to-do lists do (an own deadline,
   «Delete», is deleted); a hidden one gets «Restore». Only the owner may press them. Texts and buttons are in the
-  forum's language (р. 41); the titles are the merge's, English.
+  forum's language (D41); the titles are the merge's, English.
 
 Several tasks change deadlines (the batches, the RUZ and HSE App X polls, the owner): one refresh runs at a time under
 a lock and compares the list as it is then, so nothing is told twice. The marks move on at midnight.

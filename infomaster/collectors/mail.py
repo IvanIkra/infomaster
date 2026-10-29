@@ -1,4 +1,4 @@
-"""The university mailbox over IMAP (§5.2, р. 6, р. 30): the port of Tablo's sources/mail.py (§6.2).
+"""The university mailbox over IMAP (§5.2, D6, D30): the port of Tablo's sources/mail.py (§6.2).
 
 Only the @edu.hse.ru box (Yandex 360), with an app password from .env (MAIL_USER, MAIL_PASSWORD; without them the
 source is off and says so). INBOX is opened read-only and letters are fetched with BODY.PEEK, so nothing is marked as
@@ -9,7 +9,7 @@ thread, 60 s per socket operation; one every 5 minutes.
 A letter becomes a message (source "mail") of the mailbox's pseudo chat (`MAILBOX`): the sender, the subject, the
 names of the attachments and the body without HTML, quoted replies and the signature, cleaned and cut at 8000
 characters. The batches parse it with the chats (processing/batches.py): every letter is study, and the mailbox comes
-after the study chats and before the others (р. 30). Its msg_id is the UID plus an offset that grows past every
+after the study chats and before the others (D30). Its msg_id is the UID plus an offset that grows past every
 msg_id given before whenever UIDVALIDITY changes, so a rebuilt box never collides with letters kept from the old
 one. The letters and the state are saved in one transaction: a letter is stored once. One broken letter does not
 stop the others.

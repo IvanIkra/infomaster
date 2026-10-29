@@ -2,9 +2,9 @@
 
 GET /api/deadlines: {"items": [{uid, title, due, category, source, overdue}]}, the merged list in screen order, as
 Tablo's route gave it (§8). Own and hidden deadlines are kept in the Mini App and with the forum's buttons: HA's
-to-do lists are gone (р. 34), and with them the routes that changed the list.
+to-do lists are gone (D34), and with them the routes that changed the list.
 
-GET /api/news: the live news (§8.3, р. 9, р. 23), the items of the «Новости» topic and the same rules, in rank order:
+GET /api/news: the live news (§8.3, D9, D23), the items of the «Новости» topic and the same rules, in rank order:
 {"items": [{id, source, study, posted_at, full, short, importance}], "ttl_hours"}. Replaced, withdrawn and hidden items
 are not given. This is the level Б of §11.4: Tablo only lays them out in its column (§6.6).
 
@@ -55,7 +55,7 @@ async def bearer(request: web.Request, handler):
 
 
 async def status(request: web.Request) -> web.Response:
-    """Every source that has joined so far, and the LLM spending of today. An error kept as a Phrase (р. 41) is
+    """Every source that has joined so far, and the LLM spending of today. An error kept as a Phrase (D41) is
     given in English."""
     return web.json_response({**{name: status() for name, status in request.app[SOURCES_KEY].items()},
                               "llm": request.app[BUDGET_KEY].status()},

@@ -1,4 +1,4 @@
-"""Journal of LLM calls (§7, р. 22): every call, also a failed one, with tokens, cost and duration."""
+"""Journal of LLM calls (§7, D22): every call, also a failed one, with tokens, cost and duration."""
 
 import datetime as dt
 
@@ -30,7 +30,7 @@ class Journal:
         return row["cost"]
 
     def count_since(self, since: dt.datetime, task: str) -> int:
-        """Calls of a task since a moment, failed ones too: the daily number of images counts them (р. 12)."""
+        """Calls of a task since a moment, failed ones too: the daily number of images counts them (D12)."""
         row = self.db.execute("select count(*) n from llm_runs where at >= ? and task = ?",
                               (clock.utc_iso(since), task)).fetchone()
         return row["n"]

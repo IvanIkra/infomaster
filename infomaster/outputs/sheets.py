@@ -1,15 +1,15 @@
-"""The «Sheets» topic, «Листочки» in Russian (§6.3, §8.3, р. 14): every sheet as its file, with a caption.
+"""The «Sheets» topic, «Листочки» in Russian (§6.3, §8.3, D14): every sheet as its file, with a caption.
 
 The caption: the course (its English title) and the number, the due date, the message it came from with a link, the
 course's hashtag (#Calc), and with `pdf_content` the model's summary. A newer version replaces the file and the
 caption in the first version's message (the post stays where it is, with its replies) and answers it «Sheet
 updated», with what changed when the chat's PDFs are read. If that message is gone, the version is posted anew. The
-captions are in the forum's language (р. 41), and so are the summary and the changes the model wrote for them.
+captions are in the forum's language (D41), and so are the summary and the changes the model wrote for them.
 
 The sheets are posted after every batch run, oldest first; one that fails stays waiting for the next run. The owner's
 joining of two sheets in the Mini App goes through here too, under the same lock: the newer sheet's own post is
 deleted, and the older one's message takes its file. So does the owner's change of a sheet, which edits the caption of
-its message, and an own sheet (р. 44): posted at once, deleted with its messages.
+its message, and an own sheet (D44): posted at once, deleted with its messages.
 """
 
 import asyncio

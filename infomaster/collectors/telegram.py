@@ -1,6 +1,6 @@
-"""The twin: a separate Telegram account that reads chats and channels (§5.1). It never writes anywhere (р. 15).
+"""The twin: a separate Telegram account that reads chats and channels (§5.1). It never writes anywhere (D15).
 
-Every chat of the account is listed in `chats`, a new one disabled (р. 11). Messages are stored only from enabled
+Every chat of the account is listed in `chats`, a new one disabled (D11). Messages are stored only from enabled
 chats: new ones live, edits, deletions and pins as they happen. After a restart each enabled chat is caught up from
 its `last_id`; edits and deletions made while the service was down are not caught up. A file (a PDF, an image) is
 downloaded only when a batch asks for it (collectors/files.py).
@@ -183,7 +183,7 @@ class Twin:
             me = await pending.client.get_me()
             self._pending = None
             if me.bot or me.id == self.env.owner_id:
-                await pending.client.log_out()  # the twin is its own account (р. 15)
+                await pending.client.log_out()  # the twin is its own account (D15)
                 raise LoginError(Phrase("this is no twin: a separate account is needed, not a bot and not your own",
                                         "это не твинк: нужен отдельный аккаунт, а не бот и не ваш основной"))
             self.client = pending.client
@@ -428,7 +428,7 @@ async def login(env: Env, session: Path) -> None:
     await client.start()
     me = await client.get_me()
     if me.bot or me.id == env.owner_id:
-        await client.log_out()  # the twin is its own account (р. 15): not the bot, not the owner's
+        await client.log_out()  # the twin is its own account (D15): not the bot, not the owner's
         raise SystemExit("this is no twin: a separate account is needed, not a bot and not TG_OWNER_ID")
     session_file(session).chmod(0o600)
     print(f"The twin logged in: {utils.get_display_name(me)} (id {me.id}). Restart the service.")

@@ -173,7 +173,7 @@ def test_split():
 
 
 async def test_english_forum(feed):
-    """The forum's language (р. 41): the frame in English, the news as the model wrote them."""
+    """The forum's language (D41): the frame in English, the news as the model wrote them."""
     forum = feed.forum
     forum.lang = "en"
     await feed.publish(Changes())

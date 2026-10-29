@@ -1,4 +1,4 @@
-"""The languages of what the owner reads (р. 41): English or Russian, English by default.
+"""The languages of what the owner reads (D41): English or Russian, English by default.
 
 Two general settings: `forum_language` for the bot (its posts, buttons and answers in the forum and in its chat, and
 what the models write for them: the summaries, a sheet's summary and what changed in it) and `miniapp_language` for

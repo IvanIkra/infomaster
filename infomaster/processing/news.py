@@ -1,4 +1,4 @@
-"""Parsed news (§6.1, §8.3, р. 23): one table and one set of rules for the forum and for Tablo.
+"""Parsed news (§6.1, §8.3, D23): one table and one set of rules for the forum and for Tablo.
 
 A live item is neither replaced nor gone nor hidden by the owner and is younger than `news_ttl_hours`. Rank is
 `importance + study`, the newer item first among equals. Hiding passes to the item that replaces a hidden one, so an

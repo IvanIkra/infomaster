@@ -46,7 +46,7 @@ def _prices(value: Any) -> dict:
     return prices
 
 
-BATCH_HOURS = (1, 2, 3, 4, 6, 8, 12, 24)  # batches are tied to the hours of the day (р. 19), so N divides 24
+BATCH_HOURS = (1, 2, 3, 4, 6, 8, 12, 24)  # batches are tied to the hours of the day (D19), so N divides 24
 
 
 def _general_batch_hours(value: Any) -> int:
@@ -91,7 +91,7 @@ def _student(value: Any) -> str:
 
 def _grade_sheets(value: Any) -> list[dict]:
     """[{url, label, name?}]: Google Sheets open to anyone with the link; label is the course's short name, "" for
-    the start of the sheet's title; name is the owner's for the Mini App (р. 44), kept only when given."""
+    the start of the sheet's title; name is the owner's for the Mini App (D44), kept only when given."""
     if not isinstance(value, list):
         raise SettingsError("expected a list of {url, label}")
     sheets, ids = [], set()
@@ -131,24 +131,24 @@ def _language(value: Any) -> str:
 
 # name -> (default, check); the check returns the value to keep or raises SettingsError.
 SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
-    "llm_daily_limit_usd": (0.50, _positive_money),  # р. 27
+    "llm_daily_limit_usd": (0.50, _positive_money),  # D27
     "llm_prices": ({"claude-haiku-5-5": {"input": 0.10, "output": 0.50, "long_input": 0.50, "long_output": 2.50}},
                    _prices),
-    "batch_hours": (3, _general_batch_hours),  # р. 19
+    "batch_hours": (3, _general_batch_hours),  # D19
     "news_ttl_hours": (24, _hours),            # a news item lives this long; older non-study messages are skipped
     # Poll HSE App X (§5.2). One client per token chain: the refresh token rotates, so Tablo's own must be off.
     "hseapp_enabled": (True, _flag),
-    # Reading a PDF whole (§6.3, р. 14): at most so many pages and tokens of a file, what comes first.
+    # Reading a PDF whole (§6.3, D14): at most so many pages and tokens of a file, what comes first.
     "pdf_pages": (10, _whole(1, 50, "a number of pages")),
     "pdf_tokens": (30_000, _whole(1_000, 200_000, "a number of tokens")),
-    # Images read a Moscow day in chats with «Картинки» (р. 12); inside the LLM limit, off above its 80 % (§7).
+    # Images read a Moscow day in chats with «Картинки» (D12); inside the LLM limit, off above its 80 % (§7).
     "images_daily": (30, _whole(0, 500, "a number of images")),
-    "summary_time": ("21:00", _clock_time),   # the daily summary, Moscow time (р. 20)
+    "summary_time": ("21:00", _clock_time),   # the daily summary, Moscow time (D20)
     # Grades from teachers' Google Sheets (§6.7, Tablo's §3.2): the own row is found by the name.
     "grades_student": ("", _student),
     "grades_sheets": ([], _grade_sheets),
     "grades_window_days": (7, _whole(1, 60, "a number of days")),  # a grade is new this long: the API for Tablo
-    # What the owner reads (р. 41): the bot's posts and the models' summaries for them, and the Mini App.
+    # What the owner reads (D41): the bot's posts and the models' summaries for them, and the Mini App.
     "forum_language": ("en", _language),
     "miniapp_language": ("en", _language),
 }
@@ -173,7 +173,7 @@ def _batch_hours(value: Any) -> int | None:
 
 
 CHAT_SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
-    "enabled": (False, _flag),      # a new chat is off (р. 11)
+    "enabled": (False, _flag),      # a new chat is off (D11)
     "study": (False, _flag),
     "filter": ("all", _filter),
     "people": ([], _people),

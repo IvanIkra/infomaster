@@ -3,7 +3,7 @@
 A line is a work: its label, the grade on 0-10 (whole without a fraction, else one digit, as on Tablo's screen, §3.7),
 the bonus, and in brackets the points as the sheet has them when its scale is not 0-10 and the grade before for a
 changed one. The message is headed by the sheet's title, linked to the sheet, and the course's hashtag (#DM), like
-the sheets of «Sheets». The words around the grades are in the forum's language (р. 41). Grades wait in grade_events
+the sheets of «Sheets». The words around the grades are in the forum's language (D41). Grades wait in grade_events
 until posted: a failure of Telegram leaves them for the next poll, as long as they are within grades_window_days.
 """
 

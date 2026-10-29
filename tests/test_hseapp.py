@@ -519,7 +519,7 @@ async def test_miniapp_screen(client, fake, store):
 
     bad = await client.post("/app/api/hseapp/login", json={"url": f"{CALLBACK}?state=x&code=y"}, headers=owner())
     assert bad.status == 400 and await bad.text() == "this login link is out of date: open a new one in the Mini App"
-    client.settings.set("miniapp_language", "ru")  # the reason in the Mini App's language (р. 41)
+    client.settings.set("miniapp_language", "ru")  # the reason in the Mini App's language (D41)
     bad = await client.post("/app/api/hseapp/login", json={"url": f"{CALLBACK}?state=x&code=y"}, headers=owner())
     assert bad.status == 400 and "устарела" in await bad.text()
     assert (await client.post("/app/api/hseapp/login", json={"url": " "}, headers=owner())).status == 400
@@ -543,7 +543,7 @@ async def test_callback_needs_no_init_data(client, fake):
     assert forged.status == 400 and forged.headers["Cache-Control"] == "no-store"
     assert '<html lang="en">' in await forged.text() and "The login failed" in await forged.text()
     assert "This login link is out of date" in await forged.text()
-    client.settings.set("miniapp_language", "ru")  # the page in the Mini App's language (р. 41)
+    client.settings.set("miniapp_language", "ru")  # the page in the Mini App's language (D41)
     forged = await client.get("/hseapp/callback?state=forged&code=code-1")
     assert "Вход не удался" in await forged.text() and "Эта ссылка входа устарела" in await forged.text()
     denied = await client.get(f"/hseapp/callback?error=access_denied&error_description=%3Cscript%3Ex%3C/script%3E"

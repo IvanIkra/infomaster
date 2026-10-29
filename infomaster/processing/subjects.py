@@ -1,4 +1,4 @@
-"""The course dictionary (§6.2, §2.2, р. 3): one for the timetable, the deadlines and the iCal feed.
+"""The course dictionary (§6.2, §2.2, D3): one for the timetable, the deadlines and the iCal feed.
 
 A source names a course its own way: «Математический анализ» in HSE App X, *Calculus* in RUZ, «матан» in a chat.
 Each cleaned name gets a short English `title` (the timetable, Tablo's Classes column) and an `abbr` of up to six

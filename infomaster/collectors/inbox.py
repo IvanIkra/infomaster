@@ -16,7 +16,7 @@ from collections.abc import Callable
 from .. import clock
 from ..store import Store
 
-RETENTION = dt.timedelta(days=14)  # р. 29
+RETENTION = dt.timedelta(days=14)  # D29
 MAILBOX = 0  # chat_id of the letters
 
 # Ids of private chats and basic groups are unique across the account: their deletions come without a chat.
@@ -219,7 +219,7 @@ class Inbox:
         return [dict(row) for row in rows]
 
     def prune(self, now: dt.datetime) -> int:
-        """Remove raw messages older than 14 days (р. 29)."""
+        """Remove raw messages older than 14 days (D29)."""
         with self.db:
             cursor = self.db.execute("delete from messages where at < ?", (clock.local_iso(now - RETENTION),))
         return cursor.rowcount

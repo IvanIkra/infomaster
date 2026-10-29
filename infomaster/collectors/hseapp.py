@@ -1,4 +1,4 @@
-"""HSE App X deadlines (§5.2, §8.1, §8.4, р. 7): the port of Tablo's sources/hseapp.py (§5.1, research/hseapp).
+"""HSE App X deadlines (§5.2, §8.1, §8.4, D7): the port of Tablo's sources/hseapp.py (§5.1, research/hseapp).
 
 The app's own Keycloak client (public, no secret) gives a 3-hour access token and a refresh token whose 21-day window
 slides with every refresh. Both live in kv "hseapp.auth" and go nowhere else: not into the status, the log, the forum

@@ -43,7 +43,7 @@ class Document:
 
 @dataclass(frozen=True)
 class Image:
-    """A picture for the model to look at (§5.1, р. 12): JPEG, PNG, GIF or WebP."""
+    """A picture for the model to look at (§5.1, D12): JPEG, PNG, GIF or WebP."""
     data: bytes
     media_type: str
 

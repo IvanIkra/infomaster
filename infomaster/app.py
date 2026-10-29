@@ -88,7 +88,7 @@ class Service:
                              self.subjects, self.llm)
         self.sheet_topic = SheetTopic(self.forum, self.store, self.inbox, self.sheets)
         self.batches.files, self.batches.sheets = self.files, self.sheets
-        # Images of chats with «Картинки» come the same way and are read by Haiku within their daily number (р. 12).
+        # Images of chats with «Картинки» come the same way and are read by Haiku within their daily number (D12).
         self.images = Images(self.settings, self.budget, self.files, self.llm)
         self.batches.images = self.images
         self.feed = Feed(self.forum, self.store, self.inbox, self.news, self.settings, env.owner_id)

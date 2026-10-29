@@ -227,7 +227,7 @@ async def test_kinds_are_escaped(timetable, forum):
 
 
 async def test_english_forum(timetable, forum):
-    """The forum's language (р. 41): the type, the day and the buttons in English, the titles as they are."""
+    """The forum's language (D41): the type, the day and the buttons in English, the titles as they are."""
     forum.lang = "en"
     timetable.schedule.subjects.set_manual("Алгебра", "Algebra", "Alg")
     event_id = add(timetable, room="online")

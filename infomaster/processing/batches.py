@@ -1,4 +1,4 @@
-"""Batches (§6.1, р. 19, р. 30): new messages of a chat go to Haiku together, news, deadlines and events come back.
+"""Batches (§6.1, D19, D30): new messages of a chat go to Haiku together, news, deadlines and events come back.
 
 When:
 - on schedule: every enabled chat is parsed at the hours of the day that divide by its N (`batch_hours` of the chat,
@@ -16,7 +16,7 @@ parsed without a call. Study messages are never skipped for age: they carry dead
 
 Each message is seen once: `parsed_at` is set when the answer is saved. A failed call leaves the messages in the queue.
 A message edited after its batch is parsed again, and what it gives replaces what its earlier text gave; a deleted
-message withdraws what it gave. Study chats go first, then the mailbox, then the others (р. 30).
+message withdraws what it gave. Study chats go first, then the mailbox, then the others (D30).
 
 Letters of the university mailbox (collectors/mail.py, §5.2) are parsed the same way, with the same prompt and
 schema: the mailbox is one more chat (`MAILBOX`), study (every letter is, §6.2), without a filter or urgency, on the
@@ -27,18 +27,18 @@ the source "mail", and its events go to the feeds with X-INFOMASTER-SOURCE mail.
 Events (§6.5) are consultations, talks, meetings: things to attend that are not in the timetable. The model sees the
 upcoming chat events (e...) and, in a study chat, the RUZ classes of the next weeks (c...), so it can point a move or
 a cancellation at one of them: a chat event gets a new version with the same UID, a class gets a correction (§6.5,
-р. 28). A class counts by the later of its RUZ time and its correction's, so a moved class stays listed until the
+D28). A class counts by the later of its RUZ time and its correction's, so a moved class stays listed until the
 move is past. The model also sees the course dictionary (§6.1, §6.2), so it gives the courses as the dictionary names
 them and the dictionary's abbreviations in labels and titles. Course names of the saved deadlines and events go to
 the dictionary; only names it does not know yet cost a call. After every run the Midterms follow the corrections of
 their classes (§4.4).
 
-Sheets (§6.3, р. 14): a PDF of a chat message is downloaded when its batch comes (collectors/files.py), and the model
+Sheets (§6.3, D14): a PDF of a chat message is downloaded when its batch comes (collectors/files.py), and the model
 sees its first page: the text, or for a scan the page itself as a document. The model says which PDFs are sheets, with
 their course, number and due date; they become rows of processing/sheets.py in the same transaction, and the forum
 gets them after the run.
 
-Images (р. 12): in a chat with «Картинки» on, the image of a message is downloaded when its batch comes and read by
+Images (D12): in a chat with «Картинки» on, the image of a message is downloaded when its batch comes and read by
 Haiku in a call of its own (processing/images.py), within the daily number of images and while optional tasks run. The
 model of the batch sees what was read on it: what it shows and its text.
 """
@@ -351,7 +351,7 @@ def replies_to_important(inbox: Inbox, chat_id: int, message: dict, by_id: dict,
 
 
 def urgent(message: dict, people: Iterable[int]) -> bool:
-    """The `urgent` trigger (р. 19): a pin, a PDF or a listed person."""
+    """The `urgent` trigger (D19): a pin, a PDF or a listed person."""
     return (message["sender_id"] in people or message["pinned"]
             or any(f["kind"] in URGENT_FILES for f in message["files"]))
 
@@ -630,7 +630,7 @@ class Batches:
         self.store.put_json("batches.done", {**self._done(), str(chat_id): slot})
 
     def _ordered(self, chat_ids: Iterable[int]) -> list[int]:
-        """Study chats, the mailbox, the other chats (р. 30); chats by title."""
+        """Study chats, the mailbox, the other chats (D30); chats by title."""
         def key(chat_id: int):
             if chat_id == MAILBOX:
                 return 1, ""

@@ -1,4 +1,4 @@
-"""Own and hidden deadlines (§5.4, р. 8): the port of Tablo's todo.py, the side HA's to-do lists see.
+"""Own and hidden deadlines (§5.4, D8): the port of Tablo's todo.py, the side HA's to-do lists see.
 
 HA shows every deadline of the merged list in two to-do lists, "Tablo · Study" and "Tablo · Personal", and the Mini
 App and the forum buttons act the same way:

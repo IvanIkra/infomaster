@@ -24,7 +24,7 @@ services:
         max-size: 5m
         max-file: "3"
 
-  # Its own node in the personal tailnet, tagged, the only one allowed Funnel (р. 31). Userspace networking:
+  # Its own node in the personal tailnet, tagged, the only one allowed Funnel (D31). Userspace networking:
   # no tun device, no routes and no DNS changes in the host or in other containers.
   # A fixed address the host's awg-router leaves out of the AmneziaWG tunnel, as it does the host's own
   # tailscaled: DERP and Let's Encrypt die in the tunnel after two minutes (see TS_FORCE_NOISE_443 below).

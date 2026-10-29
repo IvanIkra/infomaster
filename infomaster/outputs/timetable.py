@@ -10,7 +10,7 @@ message that told it.
   changed: the System topic only hears how many came.
 
 Past things are left out. What the bot posted is kept in `bot_posts`. Texts and buttons are in the forum's language
-(р. 41); the titles are the dictionary's, English.
+(D41); the titles are the dictionary's, English.
 """
 
 import datetime as dt

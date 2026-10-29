@@ -1,5 +1,5 @@
-"""Summaries of chats (§6.6, р. 17, р. 20): what was said in a chat over a period, as points, in English or Russian
-(р. 41): the daily one in the forum's language, one asked for with /summary in the language it names, if any.
+"""Summaries of chats (§6.6, D17, D20): what was said in a chat over a period, as points, in English or Russian
+(D41): the daily one in the forum's language, one asked for with /summary in the language it names, if any.
 
 They are made from the raw messages (`messages`) and never wait for a batch. A period is either asked for (`3h`, `2d`,
 `20.10`, `20.10-22.10`; at most 7 days) or runs since the chat's last summary: the messages no summary has taken yet
@@ -26,7 +26,7 @@ from ..llm.client import Haiku
 from ..settings import ChatSettings
 from .batches import IMAGE_LIMIT, KINDS, image_size, important, readable, replies_to_important
 
-MAX_DAYS = 7              # р. 17
+MAX_DAYS = 7              # D17
 MAX_TOKENS = 4_000
 CALL_CHARS = 30_000       # of messages in one call: more is split into days
 TEXT_LIMIT = 1_500        # characters of one message in the prompt

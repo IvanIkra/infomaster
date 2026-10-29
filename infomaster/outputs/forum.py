@@ -1,4 +1,4 @@
-"""The bot and its forum group (§8.3). Everything outgoing goes through the bot; the twin never writes (р. 15).
+"""The bot and its forum group (§8.3). Everything outgoing goes through the bot; the twin never writes (D15).
 
 The bot must be an admin of the forum with the "Manage topics" right: it creates its topics itself and keeps
 their ids in kv, so a deleted topic is created again on the next post.
@@ -54,7 +54,7 @@ class Forum:
 
     @property
     def lang(self) -> str:
-        """The forum's language (р. 41): everything the bot says, as it says it."""
+        """The forum's language (D41): everything the bot says, as it says it."""
         return self.budget.settings.get("forum_language")
 
     def tr(self, en: str, ru: str) -> str:

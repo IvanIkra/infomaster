@@ -1,4 +1,4 @@
-"""Images of chat messages (§5.1, р. 12): what Haiku reads on a photo or a screenshot, for the batches.
+"""Images of chat messages (§5.1, D12): what Haiku reads on a photo or a screenshot, for the batches.
 
 In a chat with «Картинки» on, the image of a message waiting for its batch is downloaded by the twin
 (collectors/files.py) and read by Haiku in a call of its own (task `image`): what the picture is and the text on it,

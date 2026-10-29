@@ -1,24 +1,24 @@
 """Mini App on the public port, the only one behind Funnel (§8.1, §8.4).
 
 Every /app/api/ request carries Telegram's initData in `Authorization: tma <initData>`. It is signed with the bot
-token, and only the owner's Telegram id gets in (р. 16).
+token, and only the owner's Telegram id gets in (D16).
 
-Screens (р. 44: four tabs, every change an action on a card): the merged deadlines with the owner's own ones and the
+Screens (D44: four tabs, every change an action on a card): the merged deadlines with the owner's own ones and the
 hidden ones (§5.4, §5.5), the timetable as the feeds have it, with the main/optional switch and hiding of the chats'
 events and corrections, the owner's own events and corrections of classes (§6.5), the grades and the sheets (§6.7,
-§6.3, р. 14), and the settings: the twin's account with its login and logout and the chats with their settings and the
-daily number of images read in them (р. 12), the course dictionary with manual entries (р. 3, р. 33), the HSE App X
-login (§5.2, р. 7), the limits of reading a PDF, the time of the daily summary and its chats (§6.6), the gradebooks:
-the name, the sheets and what was read in them, the LLM spending (§7, р. 40): today, this week and this month by task
+§6.3, D14), and the settings: the twin's account with its login and logout and the chats with their settings and the
+daily number of images read in them (D12), the course dictionary with manual entries (D3, D33), the HSE App X
+login (§5.2, D7), the limits of reading a PDF, the time of the daily summary and its chats (§6.6), the gradebooks:
+the name, the sheets and what was read in them, the LLM spending (§7, D40): today, this week and this month by task
 and by chat, the cost of each of the last 30 days and the daily limit, which can be changed or raised for today. Tablo
 and HA show no spending: this screen is the one place. The general settings: the batches' N, how long news lives, the
-prices of the models and the languages of the forum and the Mini App (р. 41). Every setting is here (р. 33); only the
+prices of the models and the languages of the forum and the Mini App (D41). Every setting is here (D33); only the
 secrets of .env are not. The Mini App's texts are the page's own; what the service says here (errors, the reasons of a
 failed login, the statuses) comes in the Mini App's language too.
 
 The same port serves /hseapp/callback, where the browser comes back after the HSE login. It has no initData: the
 PKCE state of the login link is its protection, and it answers with a short page in the Mini App's language. And
-/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics and optional.ics for one's own calendar (see ical_feed, р. 43).
+/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics and optional.ics for one's own calendar (see ical_feed, D43).
 """
 
 import calendar
@@ -108,7 +108,7 @@ def check_init_data(init_data: str, bot_token: str, now: float | None = None) ->
 
 
 def language(request: web.Request) -> str:
-    """The Mini App's language (р. 41); English where the app has no settings."""
+    """The Mini App's language (D41); English where the app has no settings."""
     settings = request.app.get(SETTINGS_KEY)
     return settings.get("miniapp_language") if settings is not None else "en"
 
@@ -163,7 +163,7 @@ async def chats(request: web.Request) -> web.Response:
 
 
 async def update_images(request: web.Request) -> web.Response:
-    """{daily}: how many images are read a day in chats with «Картинки» (р. 12); 0 reads none."""
+    """{daily}: how many images are read a day in chats with «Картинки» (D12); 0 reads none."""
     values = await _json(request)
     if set(values) != {"daily"}:
         raise web.HTTPBadRequest(text="expected {daily}")
@@ -544,7 +544,7 @@ async def delete_sheet(request: web.Request) -> web.Response:
 
 
 async def join_sheet(request: web.Request) -> web.Response:
-    """{previous: id}: the sheet is a newer version of that one (р. 14); its file replaces the older one's."""
+    """{previous: id}: the sheet is a newer version of that one (D14); its file replaces the older one's."""
     try:
         sheet_id = int(request.match_info["sheet_id"])
     except ValueError:
@@ -818,7 +818,7 @@ def _configured(request: web.Request) -> tuple[list[dict], dict]:
 
 
 def _gradebook_state(request: web.Request) -> dict:
-    """A gradebook's screen (р. 44): its name and course, how its last read went, and each tab with the own row's
+    """A gradebook's screen (D44): its name and course, how its last read went, and each tab with the own row's
     cells, the works laid out in them, and whose the layout is."""
     grades, (_, sheet) = request.app[GRADES_KEY], _configured(request)
     sid = request.match_info["sid"]

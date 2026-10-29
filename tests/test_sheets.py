@@ -1,4 +1,4 @@
-"""Листочки (§6.3, р. 14): the PDF of a message fetched for its batch, the sheet the model finds in it, its versions,
+"""Листочки (§6.3, D14): the PDF of a message fetched for its batch, the sheet the model finds in it, its versions,
 its reading within the limits and its posts in «Листочки»."""
 
 import datetime as dt
@@ -282,7 +282,7 @@ async def test_same_message_new_file_is_a_version(batches, llm, sheets, topic, f
 async def test_reading_the_whole_sheet(batches, llm, sheets, topic, forum, schedule):
     sheets.chat_settings.update(CHAT, {"pdf_content": True})
     sheets.settings.set("pdf_pages", 1)
-    sheets.settings.set("forum_language", "ru")  # the summary is written for the forum (р. 41)
+    sheets.settings.set("forum_language", "ru")  # the summary is written for the forum (D41)
     await schedule.subjects.resolve(["Математический анализ"])
     llm.readings = [{"summary": "Ряды: 6 задач, сдать в LMS.",
                      "deadlines": [{"label": "Calc sheet 3", "due": "2026-10-29"},
@@ -439,7 +439,7 @@ async def test_miniapp_screen(aiohttp_client, batches, llm, sheets, topic, budge
 async def test_owner_changes_and_adds_sheets(aiohttp_client, batches, llm, sheets, topic, forum, budget, journal,
                                             store, schedule, merged):
     """The owner's change of a sheet edits its caption; an own sheet is posted at once and deleted with its message
-    (р. 44)."""
+    (D44)."""
     from aiohttp import FormData
 
     await found(batches, llm, 1, SHEET3)
