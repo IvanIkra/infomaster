@@ -1,95 +1,203 @@
-# Решения по infomaster
+# infomaster decisions
 
-Живой документ: что решили и что нельзя забыть при интеграции с Tablo. Описание самого Tablo — в [sources-overview.md](sources-overview.md).
+A living record of what was decided and what must not be forgotten in the integration with Tablo. Code comments and
+the other documents refer to these decisions as D1, D2 and so on. Tablo itself is described in
+[sources-overview.md](sources-overview.md).
 
-## Принятые решения
+## Decisions
 
-1. **Граница с Tablo.** Все вычисления (разбор, перевод, склейка дублей, выбор нового) делает infomaster. Tablo получает готовое: расписание, дедлайны, оценки (новости — см. ниже) — и только показывает.
-2. **Расписание — iCal-лента на английском.** infomaster сам собирает календарь: пары с портала вуза, консультации и события из чатов, на которых нужно быть. Лента отдаётся по секретной ссылке, в Tablo подключается как обычный iCal-источник.
-3. **Словарь предметов живёт у нас**, включая ручные правки (`subjects` из конфига HA). Это один словарь на все блоки (§2.2 sources-overview.md).
-4. **Склейка дублей — у нас.** Правила из §5.5 sources-overview.md переезжают в infomaster как есть.
-5. **Эндпоинт «обновить сейчас» (`POST /refresh`) в первой версии не делаем.** Обновления идут в реальном времени из Telegram, остальное опрашивается по таймерам.
-6. **Почта `@edu.hse.ru` (IMAP) — у нас.** Логика сбора — §6.2 sources-overview.md.
-7. **HSE App X — у нас**: вход (PKCE), хранение и ротация токенов, страница входа (§5.1).
-8. **Свои и скрытые дедлайны — у нас.** ~~Интеграция HA ходит за списками дел напрямую в infomaster~~ — списков дел в HA больше нет (р. 34).
-9. **Новости отдаём готовыми**: `full`, `short`, `importance`, `study`, `posted_at`, источник, признак замены. Проверку длины по шрифту Inter 16 повторяем у нас. Раскладка по колонке (§6.6) остаётся в Tablo.
-10. **API отдаёт текущее состояние, а не изменения**, поэтому курсоры не нужны.
-11. **Чаты выбираются в настройках** из всех чатов аккаунта (аккаунт новый и чистый). У каждого чата свои настройки: включён ли, учебный или нет, читать ли картинки, фильтр сообщений.
-12. **Картинки читает Haiku.** В настройках чата есть переключатель «читать картинки», плюс общий дневной лимит на число картинок.
-13. **Оценки — у нас.** Таблицы остаются в Google Drive, читаем и разбираем их мы (§3).
-14. **Листочки** — PDF с заданиями из чатов. Выводятся в отдельной общей теме форума «Листочки», хранятся только в Telegram.
-    - **Распознавание:** по имени файла и тексту первой страницы.
-    - **Публикация:** бот присылает сам файл с подписью: предмет, номер, срок (если есть), ссылка на исходное сообщение.
-    - **Переключатель «читать содержимое».** Выключен — разбирается только текст первой страницы. Включён — модель читает файл и пишет краткое содержание, но не больше лимита (страницы и токены), чтобы случайно не прочитать целый учебник.
-    - **Новая версия** заменяет файл в старом сообщении бота, а ответом на него приходит «листок обновлён» и, если чтение включено, кратко, что изменилось (сравниваем тексты локально, в модель уходит только разница).
-    - **Что считается новой версией:** тот же чат и предмет, плюс совпадает номер листка или имя файла почти то же; старому листку не больше 30 дней. Нет уверенности — публикуется как новый; в Mini App можно вручную пометить «это обновление того».
-    - **Лимит чтения по умолчанию:** 10 страниц и 30 тыс. токенов на файл, что наступит раньше. Настраивается.
-    - **Всё прочитанное из PDF идёт дальше по общему разбору**: дедлайны — в дедлайны, учебные новости — в новости, события — в календарь.
-15. **Свой выход в Telegram — группа-форум с темами** (оценки, листочки, новости, дедлайны и т. д.), чтобы разделы не мешали друг другу. Пишет туда бот (Bot API), а не твинк.
-16. **Веб-интерфейс — только Mini App в Telegram**, без своего домена и без входа из браузера. Вход по `initData`, подписанному токеном бота; пускаем только свой Telegram id. Публичный HTTPS-адрес для Mini App даёт Tailscale Funnel на личном аккаунте (постоянный адрес `*.ts.net`, свой домен не нужен; см. р. 31). Через тот же адрес работает callback входа в HSE App X.
-17. **Сводки чатов**: и автоматически раз в день, и по команде `/summary [чат] [промежуток]` (`3h`, `2d`, `20.10-22.10`; без промежутка — с прошлой сводки; лимит 7 дней). В настройках чата есть переключатель «сводка». Он влияет только на сводку: важное извлекается из всех включённых чатов независимо от него.
-18. **Tablo ходит к нам напрямую**: оба сервиса на одном сервере, туннель для этого не нужен.
-19. **Важное извлекается пачками, а не по каждому сообщению.** Общий интервал N часов (по умолчанию 3) и свой у отдельного чата. Разборы привязаны к часам суток (например, 8, 12, 16, 20), а не к моменту запуска. В настройках чата есть переключатель «срочно»: закреп, PDF или сообщение от людей из списка запускают разбор этого чата сразу. `/summary` пачку не ждёт.
-20. **Ежедневная сводка — в 21:00**, время настраивается. Последний плановый разбор пачки идёт до сводки.
-21. **Дневной лимит стоимости LLM в долларах** на все вызовы вместе; лимиты на картинки и PDF работают внутри него. Поведение при достижении — в [architecture.md](architecture.md), §7.
-22. **Журнал всех вызовов LLM**: каждый вызов, включая неудачные, с задачей, чатом, токенами, стоимостью и длительностью (как `llm_runs` в Tablo, §2.1).
-23. **Тема «Новости» — закреп, который бот редактирует.** Новости те же, что уходят в Tablo (одна таблица, одни правила §6.6: живые за 24 ч, без заменённых, ранг `importance + study`), плюс ссылка на исходное сообщение. Ограничения по месту нет: показываются все живые новости текстом `full`; не влезает в 4096 символов — несколько сообщений. Экранные ограничения — только в Tablo.
-24. **Уведомления о важных новостях**: на каждую новую новость с `importance` 4 или 5 бот присылает отдельное короткое сообщение и удаляет его при следующей пересборке закрепа.
-25. **Стек — Python** (подробности в [architecture.md](architecture.md), §3).
-26. **Развёртывание — Docker**, как у Tablo, на том же сервере.
-27. **Дневной лимит LLM по умолчанию — $0,50**, настраивается.
-28. **Два календаря**: `main` (пары и где нужно быть обязательно) и `optional` (можно прийти). Для Tablo — общая лента с пометкой необязательных (`STATUS:TENTATIVE`, `X-INFOMASTER-OPTIONAL:TRUE`).
-29. **Сырые сообщения храним 14 дней.**
-30. **Очередь после исчерпания лимита**: сначала учебные чаты, потом почта, потом остальное; неучебное старше 24 ч пропускается без модели; учебное не выбрасывается никогда.
-31. **Tailscale для Mini App — отдельный контейнер-сайдкар.** ~~Tailscale на хосте — корпоративный VPN~~ — на деле это та же личная сеть (`<tailnet>.ts.net`, проверено 22.10.2026). Сайдкар остаётся: он входит в эту сеть отдельным узлом `infomaster` с тегом, Funnel разрешён только этому тегу, Tailscale хоста не трогаем. Интернет-VPN на хосте — AmneziaWG.
-32. **В ленте для Tablo помечается источник события** (`X-INFOMASTER-SOURCE`) и ссылка на исходное сообщение (`X-INFOMASTER-LINK`).
-33. **Из HA убираем все настройки.** Всё настраивается в Mini App. ~~HA остаются только списки дел~~ — их тоже убираем (р. 34).
-34. **Списки дел HA («Tablo · Study», «Tablo · Personal») убираем.** Свои и скрытые дедлайны ведутся только в Mini App и кнопками форума. HA с infomaster не связан никак, внутренний порт на хост не публикуется.
-35. **Tablo переходит на infomaster одним шагом, с полной остановкой**, без работы двух сервисов параллельно: проект личный и не критичный. Из Tablo уходят HSE App X, почта, Telegram, разбор новостей, оценки, словарь, свои и скрытые дедлайны, склейка — и Haiku целиком. Остаются погода, дом, кнопки, отрисовка, `ical.py` (читает нашу `tablo.ics`) и новый источник «infomaster» (дедлайны, новости, оценки, статус по API).
-36. **Необязательные события** (`X-INFOMASTER-OPTIONAL`) показываются в блоке пар с пометкой. Значок источника события (`X-INFOMASTER-SOURCE`) — позже, в расширенной версии экрана.
-37. **Сбои на экране — по блокам**, по `GET /api/status` infomaster (дедлайны — `hseapp`, пары — `ruz`, новости — `batches`, оценки — `grades`), пороги Tablo прежние. Плюс в Tablo свой значок «infomaster недоступен»: данные — последние сохранённые.
-38. **Вход в HSE App X** — уведомление HA, как сейчас, но со ссылкой на бота (`t.me/<бот>?start=hseapp`) вместо страницы `/hseapp` в Tablo.
-39. **Длина текстов при переходе — по символам**, лишнее Tablo обрезает «…». Проверку по шрифту Tablo (`pixelfont.py`) перенести в infomaster позже, отдельной задачей.
-40. **Расход LLM смотрим только в нашем Mini App.** Датчики LLM в HA и блок LLM на экране диагностики Tablo убираем без замены. В Mini App — отдельный экран «Расход LLM» (§8.4): сегодня, неделя, месяц, по задачам и по чатам, лимит.
-41. **Языки: английский по умолчанию, русский — переключателем.** Два отдельных переключателя на вкладке «Общие»: язык Mini App (интерфейс, ошибки и состояния от сервиса, страница входа HSE App X) и язык форума (всё, что пишет бот, плюс тексты Haiku для форума: ежедневная сводка, краткое содержание листочка и «что изменилось»). `/summary` может назвать язык самой сводки (`en`, `ru`). Переключение действует только на новое: отправленные сообщения не переписываются, закрепы меняются при следующей правке. Новости, метки дедлайнов, названия курсов и iCal всегда английские — их получает Tablo.
-42. **Проект переименован в infomaster (инфомастер), 22.10.2026.** В коде и конфигурации старого имени нет: пакет `uni_master/` → `infomaster/` (`python -m infomaster`), пакет в `pyproject.toml` `uni-master` → `infomaster`, сервис, образ и контейнер Compose `uni-master` → `infomaster` (сайдкар — `infomaster-tailscale`), имя узла Tailscale и адрес Funnel `https://uni-master.<tailnet>.ts.net` → `https://infomaster.<tailnet>.ts.net`, сеть Docker `uni-master` → `infomaster` (внутренний адрес для Tablo — `http://infomaster:8081`), база `data/uni-master.db` → `data/infomaster.db`, поля iCal `X-UNI-SOURCE`, `X-UNI-LINK`, `X-UNI-OPTIONAL` → `X-INFOMASTER-SOURCE`, `X-INFOMASTER-LINK`, `X-INFOMASTER-OPTIONAL`, домен UID событий `@uni-master` → `@infomaster`. Документы, кроме README, не переписывались: «uni-master» в них — это infomaster, имена из них читать по этой таблице (в том числе тег Tailscale — `tag:infomaster`, источник в Tablo — «infomaster»). В Tablo (`tablo-t75`) тоже: источник `unimaster` → `infomaster` (модуль, секция конфига, ключи в базе, имя в `tablo.refresh_data`), `TABLO_UNIMASTER_TOKEN` → `TABLO_INFOMASTER_TOKEN`; таблица — в начале его `tablo-software.md`. Сервис ещё не развёрнут, переносить данные не нужно.
-43. **Ленты для своего календаря — через Funnel, по отдельному секрету, 22.10.2026.** Меняет §8.1 [architecture.md](architecture.md), где наружу шёл только Mini App. `main.ics` и `optional.ics` отдаются и на публичном порту по `/calendar/<CALENDAR_PUBLIC_SECRET>/…`, чтобы подписаться на них в Apple «Календаре» или Google Calendar; `tablo.ics` остаётся только внутри. Секрет свой, не `CALENDAR_SECRET`: утёкшую ссылку меняют, не трогая Tablo. Только внутри Tailscale не годится: Google и подписки iCloud забирают ленту со своих серверов.
-44. **Mini App переделан, у владельца — свои события, оценки и листочки, 22.10.2026.** Меняет §8.4 [architecture.md](architecture.md). Четыре вкладки (дедлайны, расписание, учёба, настройки), списки только показывают, действия — в карточке по нажатию, переключатели — только в настройках. Расписание показывает то же, что ленты (`GET /app/api/agenda`). Что добавлено владельцу, и как оно живёт рядом с источниками:
-    - **Свои события и правки пар** — в `events` с источником `own`. Своя правка пары главнее правок чатов, пока её не отменят или РУЗ не изменит пару сам (тогда, как и правки чатов, она уходит, §6.5); правки чатов идут под ней и снова применяются после отмены. Правка события из чата скрывает его, на его место встаёт своя копия — как у дедлайнов (§5.4): следующее сообщение чата меняет только скрытое. Разбор пачек своих не видит: модель не может их перенести, сообщение чата — заменить.
-    - **Свои оценки** (`own_grades`) — добавленные руками и правки оценок из таблиц. Правка держится, пока таблица сама не поменяет эту оценку. И те, и другие уходят в `GET /api/grades` для Tablo как новые оценки, в тему «Оценки» не пишутся: их ставит сам владелец.
-    - **Таблица оценок** получает своё название (`grades_sheets[].name`, только для Mini App) и экран с разметкой: после каждого чтения в `kv` хранится вид вкладок — шапка и значение каждой колонки своей строки (чужих строк нет) и разметка. Своя разметка вкладки стоит поверх ответа Haiku, что бы ни случилось с шапкой, пока её не вернут Haiku.
-    - **Листочки:** правка предмета, номера, срока и описания правит подпись сообщения в «Листочках»; свой листочек — PDF из Mini App (до 20 МБ, «чат» −1), идёт в форум как листочек из чата, удаляется вместе с сообщением. Удалить можно только свои.
-    - **Дедлайны** в Mini App показывают, из какого чата или письма пришли, со ссылкой на сообщение.
+- **D1. The boundary with Tablo.** infomaster does all the computing (parsing, translation, merging duplicates,
+  picking what is new). Tablo receives finished data (the timetable, deadlines, grades; news, see below) and only
+  displays it.
+- **D2. The timetable is an iCal feed in English.** infomaster builds the calendar itself: classes from the
+  university portal, consultations and events from chats that one has to attend. The feed is served by a secret link
+  and plugged into Tablo as an ordinary iCal source.
+- **D3. The course dictionary lives here**, manual corrections included (`subjects` from the HA config). One
+  dictionary serves every block (§2.2 of sources-overview.md).
+- **D4. Merging duplicates happens here.** The rules of §5.5 of sources-overview.md move to infomaster as they are.
+- **D5. No "refresh now" endpoint (`POST /refresh`) in the first version.** Telegram updates arrive in real time;
+  everything else is polled on timers.
+- **D6. The `@edu.hse.ru` mailbox (IMAP) is read here.** The collection logic is §6.2 of sources-overview.md.
+- **D7. HSE App X is handled here**: the login (PKCE), storing and rotating the tokens, the login page (§5.1).
+- **D8. Own and hidden deadlines live here.** ~~The HA integration fetches to-do lists from infomaster directly~~;
+  HA no longer has to-do lists (D34).
+- **D9. News is served finished**: `full`, `short`, `importance`, `study`, `posted_at`, the source and a replacement
+  flag. The length check against the Inter 16 font is repeated here. Laying the column out (§6.6) stays in Tablo.
+- **D10. The API serves the current state, not changes**, so no cursors are needed.
+- **D11. Chats are chosen in the settings** from all chats of the account (the account is new and clean). Every chat
+  has its own settings: enabled or not, study or not, whether to read images, a message filter.
+- **D12. Haiku reads images.** A chat has a "read images" switch, plus a common daily limit on the number of images.
+- **D13. Grades are handled here.** The sheets stay in Google Drive; we read and parse them (§3).
+- **D14. Problem sheets** are PDFs with assignments from chats. They go to a separate shared forum topic, Sheets,
+  and are stored only in Telegram.
+  - **Recognition:** by the file name and the text of the first page.
+  - **Publishing:** the bot posts the file itself with a caption: course, number, due date (if any), a link to the
+    original message.
+  - **A "read the content" switch.** Off: only the text of the first page is parsed. On: the model reads the file
+    and writes a summary, within a limit (pages and tokens) so that a whole textbook is never read by accident.
+  - **A new version** replaces the file in the bot's old message, and a "sheet updated" reply follows with, if
+    reading is on, a short note of what changed (the texts are compared locally, only the difference goes to the
+    model).
+  - **What counts as a new version:** the same chat and course, plus the same sheet number or almost the same file
+    name; the old sheet is at most 30 days old. When unsure, it is published as new; the Mini App can mark it as an
+    update of an older one by hand.
+  - **The default reading limit:** 10 pages and 30k tokens per file, whichever comes first. Configurable.
+  - **Everything read from a PDF goes through the common processing**: deadlines to deadlines, study news to news,
+    events to the calendar.
+- **D15. Our own Telegram output is a forum group with topics** (grades, sheets, news, deadlines and so on) so that
+  the sections do not get in each other's way. The bot (Bot API) writes there, not the twin.
+- **D16. The only web interface is the Telegram Mini App**, with no domain of our own and no browser login. Login is
+  by `initData` signed with the bot token; only the owner's Telegram id is let in. The public HTTPS address of the
+  Mini App comes from Tailscale Funnel on a personal account (a permanent `*.ts.net` address, no domain needed; see
+  D31). The HSE App X login callback works through the same address.
+- **D17. Chat summaries**: automatically once a day and on the `/summary [chat] [period]` command (`3h`, `2d`,
+  `20.10-22.10`; without a period, since the last summary; at most 7 days). A chat has a "summary" switch. It affects
+  only the summary: what matters is extracted from all enabled chats regardless.
+- **D18. Tablo calls us directly**: both services run on the same server, so no tunnel is needed.
+- **D19. What matters is extracted in batches, not per message.** A common interval of N hours (3 by default) and an
+  individual one per chat. Runs are tied to hours of the day (say, 8, 12, 16, 20), not to the start time. A chat has
+  an "urgent" switch: a pin, a PDF or a message from people on a list starts processing of that chat at once.
+  `/summary` does not wait for a batch.
+- **D20. The daily summary is at 21:00**, configurable. The last scheduled batch runs before the summary.
+- **D21. A daily LLM cost limit in dollars** for all calls together; the image and PDF limits work inside it. What
+  happens when it is reached is in [architecture.md](architecture.md), §7.
+- **D22. A journal of every LLM call**: each call, failed ones included, with the task, chat, tokens, cost and
+  duration (like `llm_runs` in Tablo, §2.1).
+- **D23. The News topic is a pin that the bot edits.** The news is the same that goes to Tablo (one table, the same
+  rules of §6.6: live for 24 hours, without replaced items, ranked by `importance + study`), plus a link to the
+  original message. There is no space limit: all live news is shown as `full` text; what does not fit in 4096
+  characters spills into several messages. Screen limits apply only in Tablo.
+- **D24. Notifications about important news**: for every new item with `importance` 4 or 5 the bot sends a short
+  separate message and deletes it at the next rebuild of the pin.
+- **D25. The stack is Python** (details in [architecture.md](architecture.md), §3).
+- **D26. Deployment is Docker**, like Tablo, on the same server.
+- **D27. The default daily LLM limit is $0.50**, configurable.
+- **D28. Two calendars**: `main` (classes and wherever one has to be) and `optional` (where one may go). Tablo gets
+  a combined feed with optional items marked (`STATUS:TENTATIVE`, `X-INFOMASTER-OPTIONAL:TRUE`).
+- **D29. Raw messages are kept for 14 days.**
+- **D30. The queue after the limit is exhausted**: study chats first, then mail, then the rest; non-study items older
+  than 24 hours are skipped without the model; study items are never thrown away.
+- **D31. Tailscale for the Mini App runs in a separate sidecar container.** ~~The host's Tailscale is a corporate
+  VPN~~: it turned out to be the same personal tailnet (checked 22.10.2026). The sidecar stays: it joins that tailnet
+  as a separate `infomaster` node with a tag, Funnel is allowed only for that tag, and the host's Tailscale is left
+  alone. The host's internet VPN is AmneziaWG.
+- **D32. The feed for Tablo marks the source of every event** (`X-INFOMASTER-SOURCE`) and a link to the original
+  message (`X-INFOMASTER-LINK`).
+- **D33. All settings leave HA.** Everything is configured in the Mini App. ~~HA keeps only the to-do lists~~; those
+  go too (D34).
+- **D34. The HA to-do lists ("Tablo · Study", "Tablo · Personal") are removed.** Own and hidden deadlines are kept
+  only in the Mini App and with the forum buttons. HA is not connected to infomaster at all, and the internal port is
+  not published on the host.
+- **D35. Tablo moves to infomaster in one step, with a full stop**, without the two services running in parallel:
+  the project is personal and not critical. HSE App X, mail, Telegram, news parsing, grades, the dictionary, own and
+  hidden deadlines, merging and all of Haiku leave Tablo. What stays: the weather, the home block, the buttons,
+  rendering, `ical.py` (it reads our `tablo.ics`) and a new "infomaster" source (deadlines, news, grades, status over
+  the API).
+- **D36. Optional events** (`X-INFOMASTER-OPTIONAL`) are shown in the classes block with a mark. A source icon
+  (`X-INFOMASTER-SOURCE`) comes later, in an extended version of the screen.
+- **D37. Failures are shown per block**, from infomaster's `GET /api/status` (deadlines: `hseapp`, classes: `ruz`,
+  news: `batches`, grades: `grades`), with Tablo's thresholds unchanged. Tablo also gets its own "infomaster is
+  unavailable" icon; the data shown is the last saved.
+- **D38. The HSE App X login** is an HA notification, as before, but it links to the bot (`t.me/<bot>?start=hseapp`)
+  instead of Tablo's `/hseapp` page.
+- **D39. Text length after the move is checked in characters**; Tablo cuts the excess with "…". The check against
+  Tablo's font (`pixelfont.py`) moves to infomaster later, as a separate task.
+- **D40. LLM spending is viewed only in our Mini App.** The LLM sensors in HA and the LLM block on Tablo's
+  diagnostics screen are removed without a replacement. The Mini App has its own LLM spending screen (§8.4): today,
+  the week, the month, by task and by chat, the limit.
+- **D41. Languages: English by default, Russian by a switch.** Two separate switches: the language of the Mini App
+  (the interface, the errors and states from the service, the HSE App X login page) and the language of the forum
+  (everything the bot writes, plus Haiku's texts for the forum: the daily summary, the sheet summary and "what
+  changed"). `/summary` can name the language of the summary itself (`en`, `ru`). A switch applies only to what comes
+  next: sent messages are not rewritten, pins change at their next edit. News, deadline labels, course names and
+  iCal are always in English, because Tablo receives them.
+- **D42. The project was renamed to infomaster, 22.10.2026.** The old name is gone from the code and the
+  configuration: the package `uni_master/` became `infomaster/` (`python -m infomaster`), the `pyproject.toml`
+  package `uni-master` became `infomaster`, and so did the Compose service, image and container (the sidecar is
+  `infomaster-tailscale`), the Tailscale node name and the Funnel address (`https://infomaster.<tailnet>.ts.net`),
+  the Docker network (the internal address for Tablo is `http://infomaster:8081`) and the database
+  (`data/uni-master.db` became `data/infomaster.db`). The iCal fields `X-UNI-SOURCE`, `X-UNI-LINK`, `X-UNI-OPTIONAL`
+  became `X-INFOMASTER-SOURCE`, `X-INFOMASTER-LINK`, `X-INFOMASTER-OPTIONAL`, and the event UID domain `@uni-master`
+  became `@infomaster`. The Tailscale tag is `tag:infomaster`. In Tablo (`tablo-t75`) too: the source `unimaster`
+  became `infomaster` (the module, the config section, the database keys, the name in `tablo.refresh_data`), and
+  `TABLO_UNIMASTER_TOKEN` became `TABLO_INFOMASTER_TOKEN`. The service had not been deployed yet, so no data had to
+  move.
+- **D43. Feeds for one's own calendar go through Funnel, by a separate secret, 22.10.2026.** This changes §8.1 of
+  [architecture.md](architecture.md), where only the Mini App was exposed. `main.ics` and `optional.ics` are also
+  served on the public port at `/calendar/<CALENDAR_PUBLIC_SECRET>/…`, so that Apple Calendar or Google Calendar can
+  subscribe to them; `tablo.ics` stays internal. The secret is separate from `CALENDAR_SECRET`: a leaked link is
+  replaced without touching Tablo. Tailscale-only access would not do: Google and iCloud subscriptions fetch the feed
+  from their own servers.
+- **D44. The Mini App was reworked, and the owner gets their own events, grades and sheets, 22.10.2026.** This
+  changes §8.4 of [architecture.md](architecture.md). Four tabs (deadlines, timetable, study, settings); lists only
+  show, actions live in a card opened by a tap, switches live only in the settings. The timetable shows the same as
+  the feeds (`GET /app/api/agenda`). What the owner gets, and how it lives next to the sources:
+  - **Own events and class changes** are stored in `events` with the source `own`. An own change to a class wins over
+    chats' changes until it is cancelled or RUZ changes the class itself (then it goes, like chats' changes, §6.5);
+    chats' changes stay underneath and apply again after a cancellation. Editing an event from a chat hides it and
+    puts an own copy in its place, as with deadlines (§5.4): the chat's next message changes only the hidden one.
+    Batch processing does not see own items: the model cannot move them, and a chat message cannot replace them.
+  - **Own grades** (`own_grades`) are grades added by hand and corrections of grades from sheets. A correction holds
+    until the sheet itself changes that grade. Both go to Tablo through `GET /api/grades` as new grades and are not
+    posted to the Grades topic: the owner set them.
+  - **A grade sheet** gets its own name (`grades_sheets[].name`, for the Mini App only) and a screen with its layout:
+    after every read `kv` holds the view of the tabs (the header and each column's value in the owner's row; no
+    other rows) and the layout. An own tab layout overrides Haiku's answer, whatever happens to the header, until it
+    is handed back to Haiku.
+  - **Sheets:** editing the course, number, due date and description edits the message caption in Sheets; an own
+    sheet is a PDF from the Mini App (up to 20 MB, "chat" −1) that goes to the forum like a sheet from a chat and is
+    deleted together with its message. Only own sheets can be deleted.
+  - **Deadlines** in the Mini App show the chat or letter they came from, with a link to the message.
 
-## Открытые вопросы
+## Open questions
 
-Собраны в [architecture.md](architecture.md), §12.
+Collected in [architecture.md](architecture.md), §12.
 
-## Передать в Tablo
+## Handed over to Tablo
 
-Переход одним шагом (р. 35). Сначала остановить Tablo, перенести данные (`import-tablo`, [setup.md](setup.md), «Переход Tablo»), потом запустить infomaster со всеми источниками, потом — переделанный Tablo. Работа — в репозитории `tablo-t75`.
+The move happens in one step (D35). First stop Tablo and copy the data (`import-tablo`, [setup.md](setup.md),
+"Moving from Tablo"), then start infomaster with all sources, then the reworked Tablo. The work is done in the
+`tablo-t75` repository.
 
-**Сервис Tablo (`service/tablo/`):**
+**The Tablo service (`service/tablo/`):**
 
-- [ ] **Новый источник `sources/infomaster.py`.** Раз в минуту `GET /api/deadlines`, `/api/news`, `/api/grades`, `/api/status` с Bearer `API_TOKEN` infomaster по адресу `http://infomaster:8081` (Tablo входит в сеть `infomaster` как внешнюю). Последнее удачное — в `kv`, при недоступности показывается оно (§11.1).
-- [ ] **Дедлайны** — готовый список из `/api/deadlines` в порядке экрана, Tablo только берёт первые строки. Убрать `todo.py`, склейку в `builder.py` (`merge_deadlines`, `drop_done`, `drop_hidden`) и маршруты `/api/deadlines`.
-- [ ] **Новости** — из `/api/news` (`full`, `short`, `importance`, `study`, `source`), раскладка §6.6 остаётся. Убрать `news.py` (разбор Haiku) и `sources/telegram.py`.
-- [ ] **Оценки** — из `/api/grades` (`label`, `value`, `bonus`). Убрать `sources/grades.py` и разметку.
-- [ ] **HSE App X и почта** — убрать `sources/hseapp.py`, `sources/mail.py`, страницу `/hseapp`, `/api/hseapp/login`, callback; токены HSE App X из `kv` удалить.
-- [ ] **Словарь** — убрать `subjects.py` и ручные записи из конфига (они уже перенесены `import-tablo`).
-- [ ] **Haiku** — убрать `llm.py`, `/api/llm/runs`, журнал `llm_runs` и блок LLM на экране диагностики, без замены (р. 40).
-- [ ] **Пары** — `ical.url` → `http://infomaster:8081/calendar/<CALENDAR_SECRET>/tablo.ics`. В `ical.py`: название — `SUMMARY` как есть (уже английское, без словаря); `<abbr> Midterm` из ленты больше не делать (он приходит в `/api/deadlines`); `STATUS:TENTATIVE` / `X-INFOMASTER-OPTIONAL:TRUE` → пометка необязательного (`ClassItem.mark`, новое значение рядом с `moved` и `cancelled`, р. 36). **Сделать в Tablo: значок необязательного события.** Значок источника (`X-INFOMASTER-SOURCE`) — позже.
-- [ ] **Сбои по блокам** (р. 37) — из `/api/status` infomaster, пороги прежние. **Сделать в Tablo: значок «infomaster недоступен».**
-- [ ] **`GET /api/status` Tablo** — `hseapp.login_needed` берётся из статуса infomaster (для уведомления в HA).
-- [ ] **`tablo.refresh_data`** — опросить infomaster и погоду заново (у infomaster «обновить сейчас» нет, р. 5).
-- [ ] **Конфиг** — убрать секции `grades`, `hseapp`, `news`, `mail`, `subjects`; в `ical` остаётся ссылка. Добавить адрес и токен infomaster (токен — в `.env`).
-- [ ] **Секреты** — из `.env` Tablo убрать `ANTHROPIC_API_KEY`, `TABLO_MAIL_USER`/`TABLO_MAIL_PASSWORD`, `TABLO_ICAL_URL` (почта и РУЗ теперь только у нас, `MAIL_*` и `RUZ_ICAL_URL`).
-- [ ] **Тексты на экране** — пока обрезка «…» (р. 39).
+- [ ] **A new source, `sources/infomaster.py`.** Once a minute it calls `GET /api/deadlines`, `/api/news`,
+  `/api/grades`, `/api/status` with infomaster's Bearer `API_TOKEN` at `http://infomaster:8081` (Tablo joins the
+  `infomaster` network as an external one). The last successful answer is kept in `kv` and shown while infomaster
+  is unavailable (§11.1).
+- [ ] **Deadlines** come as a finished list from `/api/deadlines` in screen order; Tablo only takes the first lines.
+  Remove `todo.py`, the merge in `builder.py` (`merge_deadlines`, `drop_done`, `drop_hidden`) and the
+  `/api/deadlines` routes.
+- [ ] **News** comes from `/api/news` (`full`, `short`, `importance`, `study`, `source`); the §6.6 layout stays.
+  Remove `news.py` (Haiku parsing) and `sources/telegram.py`.
+- [ ] **Grades** come from `/api/grades` (`label`, `value`, `bonus`). Remove `sources/grades.py` and the layout
+  detection.
+- [ ] **HSE App X and mail**: remove `sources/hseapp.py`, `sources/mail.py`, the `/hseapp` page,
+  `/api/hseapp/login` and the callback; delete the HSE App X tokens from `kv`.
+- [ ] **The dictionary**: remove `subjects.py` and the manual entries from the config (`import-tablo` has already
+  copied them).
+- [ ] **Haiku**: remove `llm.py`, `/api/llm/runs`, the `llm_runs` journal and the LLM block of the diagnostics
+  screen, without a replacement (D40).
+- [ ] **Classes**: `ical.url` becomes `http://infomaster:8081/calendar/<CALENDAR_SECRET>/tablo.ics`. In `ical.py`:
+  the title is `SUMMARY` as it is (already English, no dictionary); no more `<abbr> Midterm` from the feed (it comes
+  in `/api/deadlines`); `STATUS:TENTATIVE` / `X-INFOMASTER-OPTIONAL:TRUE` becomes an optional mark (`ClassItem.mark`,
+  a new value next to `moved` and `cancelled`, D36). **To do in Tablo: an icon for optional events.** A source icon
+  (`X-INFOMASTER-SOURCE`) comes later.
+- [ ] **Failures per block** (D37) come from infomaster's `/api/status`, with the thresholds unchanged. **To do in
+  Tablo: an "infomaster is unavailable" icon.**
+- [ ] **Tablo's `GET /api/status`** takes `hseapp.login_needed` from infomaster's status (for the HA notification).
+- [ ] **`tablo.refresh_data`** polls infomaster and the weather again (infomaster has no "refresh now", D5).
+- [ ] **Config**: remove the `grades`, `hseapp`, `news`, `mail`, `subjects` sections; `ical` keeps the link. Add
+  infomaster's address and token (the token goes in `.env`).
+- [ ] **Secrets**: remove `ANTHROPIC_API_KEY`, `TABLO_MAIL_USER`/`TABLO_MAIL_PASSWORD`, `TABLO_ICAL_URL` from Tablo's
+  `.env` (mail and RUZ are now only here, as `MAIL_*` and `RUZ_ICAL_URL`).
+- [ ] **Texts on screen**: cut with "…" for now (D39).
 
-**Интеграция HA (`ha-integration/`):**
+**The HA integration (`ha-integration/`):**
 
-- [ ] Убрать платформу `todo` (р. 34) и чтение `/api/deadlines` в координаторе.
-- [ ] Форма «Источники»: остаются координаты погоды и ссылка iCal; убрать HSE App X, ФИО, таблицы, каналы, срок жизни новостей, почту, словарь (р. 33).
-- [ ] Уведомление о входе в HSE App X — ссылка на бота (р. 38).
-- [ ] Датчики LLM («LLM run: …», «LLM cost today») — убрать, без замены (р. 40).
-- [ ] Документы Tablo (`docs/software/04`, `05`, `07`) — привести к новой схеме.
+- [ ] Remove the `todo` platform (D34) and the `/api/deadlines` reads in the coordinator.
+- [ ] The Sources form keeps the weather coordinates and the iCal link; remove HSE App X, the full name, the sheets,
+  the channels, the news lifetime, mail and the dictionary (D33).
+- [ ] The HSE App X login notification links to the bot (D38).
+- [ ] Remove the LLM sensors ("LLM run: …", "LLM cost today") without a replacement (D40).
+- [ ] Bring Tablo's documents (`docs/software/04`, `05`, `07`) in line with the new scheme.

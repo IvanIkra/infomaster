@@ -74,8 +74,9 @@ A single asyncio process runs the collectors, the processing pipeline and two HT
 | public, `8080` | through Tailscale Funnel | Mini App (Telegram `initData` check, owner only), HSE App X login callback, personal iCal feeds |
 | internal, `8081` | Docker network only | `/api/deadlines`, `/api/news`, `/api/grades`, `/api/status` (Bearer token), feeds for Tablo |
 
-The full design is in [docs/architecture.md](docs/architecture.md) (in Russian); the reasoning behind each choice is in
-[docs/decisions.md](docs/decisions.md).
+The full design is in [docs/architecture.md](docs/architecture.md); the reasoning behind each choice is in
+[docs/decisions.md](docs/decisions.md) (decisions are referred to as D1, D2… in the code), and the Tablo logic it
+inherited is in [docs/sources-overview.md](docs/sources-overview.md) (referred to as §N).
 
 ## Tech stack
 
@@ -96,8 +97,7 @@ docker compose up -d --build
 ```
 
 Then send `/start` to the bot, open the Mini App and log the twin in under **Settings → Twin and chats**.
-The step-by-step guide (bot rights, Tailscale policy, every optional source) is in [docs/setup.md](docs/setup.md)
-(in Russian).
+The step-by-step guide (bot rights, Tailscale policy, every optional source) is in [docs/setup.md](docs/setup.md).
 
 ### Configuration
 

@@ -1,139 +1,176 @@
-# Архитектура infomaster
+# infomaster architecture
 
-Как устроен сервис: модули, данные, выходы, контракт с Tablo, порядок работ. Почему решено именно так — в [decisions.md](decisions.md) (ссылки вида «р. 12»). Как сейчас работает Tablo — в [sources-overview.md](sources-overview.md) (ссылки вида «§5.5»).
+How the service is built: modules, data, outputs, the contract with Tablo, the order of work. Why it was decided this
+way is in [decisions.md](decisions.md) (references like D12). How Tablo worked before infomaster is in
+[sources-overview.md](sources-overview.md) (references like §5.5 that this document does not have).
 
-Это план; что из него уже сделано — в §11 и в [README](../README.md#status).
+This started as a plan; what is already done is in §11 and in the [README](../README.md#status).
 
-## 1. Что это
+## 1. What it is
 
-infomaster работает на сервере рядом с Tablo. Он:
+infomaster runs on a server next to Tablo. It:
 
-- **читает** учебные и прочие чаты и каналы через отдельный аккаунт Telegram (твинк), а также почту `@edu.hse.ru`, HSE App X, РУЗ и таблицы оценок;
-- **считает всё сам**: разбор LLM, словарь предметов, склейку дедлайнов, новые оценки, сводки;
-- **отдаёт готовое** в три места: форум в Telegram (через бота), Mini App для настроек и API для Tablo.
+- **reads** study and other chats and channels through a separate Telegram account (the twin), plus the
+  `@edu.hse.ru` mailbox, HSE App X, RUZ and grade sheets;
+- **computes everything itself**: LLM parsing, the course dictionary, merging deadlines, new grades, summaries;
+- **serves the results** to three places: a Telegram forum (through the bot), a Mini App for the settings and an API
+  for Tablo.
 
-Tablo после перехода только показывает (р. 1).
+After the move Tablo only displays (D1).
 
-## 2. Общая схема
+## 2. Overview
 
 ```
-                 ┌──────────────── сбор ────────────────┐
-Telegram (твинк) ─► messages ──┐
-Почта IMAP ───────► messages ──┤
-                               ├─► разбор пачками (Haiku) ─┬─► news
-PDF из чатов ─────► sheets_pdf ┘   раз в N ч / «срочно»    ├─► deadlines (source=tg|mail)
-                                                           ├─► events (консультации, события)
-                                                           └─► листочки
-РУЗ iCal ─────────► classes ────────────────────────────────► events (пары)
+                 ┌────────────── collection ────────────┐
+Telegram (twin) ──► messages ──┐
+IMAP mail ────────► messages ──┤
+                               ├─► batch parsing (Haiku) ──┬─► news
+PDFs from chats ──► sheets_pdf ┘   every N h / "urgent"    ├─► deadlines (source=tg|mail)
+                                                           ├─► events (consultations, events)
+                                                           └─► problem sheets
+RUZ iCal ─────────► classes ────────────────────────────────► events (classes)
 HSE App X ────────► deadlines (source=hseapp)
 Google Sheets ────► grade_items ─► grade_events
-Mini App, кнопки ─► own_deadlines / hidden_deadlines
+Mini App, buttons ► own_deadlines / hidden_deadlines
 
-Словарь subjects — один на всё.
+One subjects dictionary for everything.
 
-                 ┌──────────────── выход ───────────────┐
-events ───────────► лента iCal (англ.) ─► Tablo, любой календарь
-deadlines ─ склейка §5.5 ─ скрытие ──► API ─► Tablo
+                 ┌──────────────── output ──────────────┐
+events ───────────► iCal feed (English) ─► Tablo, any calendar
+deadlines ─ merge §5.5 ─ hiding ─────► API ─► Tablo
 news, grade_events ─────────────────► API ─► Tablo
-всё новое ──────────────────────────► бот ─► форум (темы)
-настройки ◄─────────────────────────── Mini App
+everything new ─────────────────────► bot ─► forum (topics)
+settings ◄──────────────────────────── Mini App
 ```
 
-## 3. Стек
+## 3. Stack
 
-| Что | Чем | Почему |
+| What | With | Why |
 |---|---|---|
-| Язык | Python 3.12+, один процесс asyncio | Telethon есть только на Python; Tablo устроен так же (§1) |
-| Твинк | Telethon (MTProto, аккаунт пользователя) | единственная живая библиотека для юзербота на Python |
-| Бот | Telethon с токеном бота | одна библиотека на оба клиента; через MTProto бот загружает файлы до 2 ГБ, а не до 50 МБ |
-| HTTP | aiohttp | Mini App, API, callback HSE App X |
-| Хранилище | SQLite | как в Tablo, одного файла хватает |
-| LLM | `anthropic`, модель `claude-haiku-5-5` | как в Tablo (§2.1) |
-| PDF | pypdf (текст), рендер страницы в картинку для сканов | лицензия MIT; PyMuPDF под AGPL |
-| Таблицы | openpyxl | как в Tablo (§3.3) |
-| Календарь | icalendar | чтение РУЗ и выпуск своей ленты |
-| Ширина текста | Pillow + тот же файл Inter, что в Tablo | бюджеты строк (§2.1) |
-| Mini App | статический HTML/JS + `telegram-web-app.js`, без сборки | экранов мало |
-| Доступ снаружи | Tailscale Funnel | постоянный HTTPS-адрес без своего домена (р. 16) |
-| Развёртывание | Docker Compose на сервере Tablo | как у Tablo (р. 26) |
+| Language | Python 3.12+, one asyncio process | Telethon exists only for Python; Tablo is built the same way (§1) |
+| Twin | Telethon (MTProto, a user account) | the only maintained userbot library for Python |
+| Bot | Telethon with a bot token | one library for both clients; over MTProto the bot uploads files up to 2 GB, not 50 MB |
+| HTTP | aiohttp | Mini App, API, HSE App X callback |
+| Storage | SQLite | as in Tablo, one file is enough |
+| LLM | `anthropic`, model `claude-haiku-5-5` | as in Tablo (§2.1) |
+| PDF | pypdf (text), page rendered to an image for scans | MIT licence; PyMuPDF is AGPL |
+| Spreadsheets | openpyxl | as in Tablo (§3.3) |
+| Calendar | icalendar | reading RUZ and publishing our own feed |
+| Text width | Pillow + the same Inter file as Tablo | line budgets (§2.1) |
+| Mini App | static HTML/JS + `telegram-web-app.js`, no build | few screens |
+| External access | Tailscale Funnel | a permanent HTTPS address without a domain (D16) |
+| Deployment | Docker Compose on Tablo's server | like Tablo (D26) |
 
 **Docker:**
 
-- `data/` (SQLite, сессия твинка, токены HSE App X) — volume, в образ не попадает.
-- Tablo и infomaster в одной docker-сети: Tablo ходит на внутренний порт по имени сервиса, наружу этот порт не публикуется.
-- **Tailscale — отдельный контейнер-сайдкар** (р. 31): `tailscale/tailscale`, userspace-режим, своё состояние в volume. Он входит в личную сеть (`<tailnet>.ts.net`, та же, что у Tailscale хоста) отдельным узлом `infomaster` с тегом `tag:infomaster`; Funnel разрешён только этому тегу и проксирует только публичный порт infomaster (§8.1). Tailscale хоста не трогаем: ни маршрутов, ни DNS, ни настроек Funnel на нём. Вначале считалось, что Tailscale хоста корпоративный, — это не так.
-- Внутренний порт на хост не публикуется вообще.
-- Выход в Anthropic API и Telegram идёт через маршрутизацию хоста, то есть через VPN на AmneziaWG.
+- `data/` (SQLite, the twin's session, HSE App X tokens) is a volume and never gets into the image.
+- Tablo and infomaster share a Docker network: Tablo reaches the internal port by service name, and that port is not
+  published outside.
+- **Tailscale runs in a separate sidecar container** (D31): `tailscale/tailscale`, userspace mode, its own state in a
+  volume. It joins the personal tailnet (the same one as the host's Tailscale) as a separate node `infomaster` with
+  the tag `tag:infomaster`; Funnel is allowed only for that tag and proxies only infomaster's public port (§8.1). The
+  host's Tailscale is left alone: no routes, no DNS, no Funnel settings on it. At first the host's Tailscale was
+  believed to be corporate; it is not.
+- The internal port is not published on the host at all.
+- Traffic to the Anthropic API and Telegram goes through the host's routing, that is through the AmneziaWG VPN.
 
-## 4. Модули
+## 4. Modules
 
 ```
-collectors/   telegram, mail, hseapp, ruz, grades       — только сбор, складывают сырые данные
+collectors/   telegram, mail, hseapp, ruz, grades       — collection only, store raw data
 processing/   batches, pdf, subjects, deadlines, grades,
-              schedule, summaries                        — всё, что считает
-llm/          client, budget, journal                    — один вход в Haiku: лимит + журнал
-outputs/      forum (бот), miniapp, api, ical_feed
-settings/     хранение и проверка настроек
+              schedule, summaries                        — everything that computes
+llm/          client, budget, journal                    — the single entry to Haiku: limit + journal
+outputs/      forum (bot), miniapp, api, ical_feed
+settings/     storing and validating settings
 ```
 
-Правило: сборщики не вызывают LLM, а обработка не ходит в сеть, кроме как через `llm/`.
+The rule: collectors never call the LLM, and processing never goes to the network except through `llm/`.
 
-## 5. Сбор
+## 5. Collection
 
-### 5.1 Telegram (твинк)
+### 5.1 Telegram (the twin)
 
-- Слушает новые сообщения, правки и удаления в реальном времени. После перезапуска догоняет пропущенное по последнему id в каждом чате.
-- Любой новый чат аккаунта появляется в настройках **выключенным** (р. 11).
-- В базу попадают сообщения только из включённых чатов. Альбомы (`grouped_id`) склеиваются, у ответов и пересылок сохраняется контекст.
-- Файлы скачиваются по необходимости: PDF для листочков (§6.3), картинки, только если у чата включено «читать картинки».
-- Твинк **ничего не пишет** в чаты. Всё исходящее отправляет бот (р. 15).
+- Listens to new messages, edits and deletions in real time. After a restart it catches up from the last id in
+  every chat.
+- Every new chat of the account appears in the settings **turned off** (D11).
+- Only messages from enabled chats reach the database. Albums (`grouped_id`) are glued together; replies and forwards
+  keep their context.
+- Files are downloaded on demand: PDFs for problem sheets (§6.3), images only if the chat has "read images" on.
+- The twin **writes nothing** to chats. Everything outgoing is sent by the bot (D15).
 
-**Настройки чата:**
+**Chat settings:**
 
-| Настройка | По умолчанию | Смысл |
+| Setting | Default | Meaning |
 |---|---|---|
-| `enabled` | нет | читать ли чат |
-| `study` | нет | учебный: ранг новостей, дедлайны |
-| `filter` | `all` | `all` или `important`: только люди из списка, закрепы, файлы, сообщения с датами и ответы на них |
-| `people` | пусто | важные отправители (староста, преподаватели) |
-| `images` | нет | читать картинки (р. 12) |
-| `pdf_content` | нет | читать PDF целиком в пределах лимита (р. 14) |
-| `summary` | нет | включать в ежедневную сводку (р. 17) |
-| `urgent` | нет | закреп, PDF или сообщение от людей из списка запускают разбор сразу (р. 19) |
-| `batch_hours` | общий N | свой интервал разбора |
+| `enabled` | no | read the chat or not |
+| `study` | no | a study chat: news rank, deadlines |
+| `filter` | `all` | `all` or `important`: only people from the list, pins, files, messages with dates and replies to them |
+| `people` | empty | important senders (the class representative, teachers) |
+| `images` | no | read images (D12) |
+| `pdf_content` | no | read whole PDFs within the limit (D14) |
+| `summary` | no | include in the daily summary (D17) |
+| `urgent` | no | a pin, a PDF or a message from the people list starts processing at once (D19) |
+| `batch_hours` | the common N | an individual processing interval |
 
-**Уточнения этапа 9 (картинки, р. 12):**
+**Stage 9 details (images, D12):**
 
-- Картинка — фото или изображение, присланное файлом (JPEG, PNG, GIF, WebP; стикеры и GIF-анимации — нет). Она скачивается, как PDF, только когда до сообщения доходит разбор и только если у чата включено `images`: `data/files/<sha256>.<ext>`, строка `files` с `kind = image`. Тип проверяется по первым байтам; файлы больше 3,75 МБ (в base64 — предел API в 5 МБ) не скачиваются. Картинка и файл превью ссылки — не файлы сообщения (Telethon отдаёт их в `photo` и `document`): превью не читается, а его позднее появление правкой не ставит сообщение в очередь. У сообщений, сохранённых до этапа 9, фото записано без размера и могло быть превью; первая правка такого сообщения из-за этого не считается новой.
-- Читает картинку Haiku отдельным вызовом с задачей `image` (`processing/images.py`): `shows` — что на ней (1–2 предложения по-английски) и `text` — текст с неё как есть, до 2500 символов. Прочитанное хранится в `files.reading`; в промпт пачки оно идёт под сообщением («Image, as another model read it»). Правка сообщения картинку заново не читает, та же картинка в другом сообщении (по `sha256`, пересылка) берёт готовое прочитанное.
-- Лимиты: общая настройка `images_daily` (по умолчанию 30 в сутки по Москве, считаются вызовы `image` в журнале, неудачные тоже; правится на экране «Чаты»), а выше 80 % лимита LLM картинки не читаются (§7). Непрочитанная картинка идёт в пачку только как «photo»; сообщение, где кроме неё читать нечего, помечается разобранным без вызова. Если лимит исчерпан целиком или Haiku недоступна, разбор чата стоит, и сообщения с картинками ждут вместе с остальными. Отказ модели и ответ API 400 по картинке запоминаются: её больше не пробуют.
-- Сводки (§6.6) берут уже прочитанное разбором и картинки сами не читают.
+- An image is a photo or a picture sent as a file (JPEG, PNG, GIF, WebP; not stickers or GIF animations). Like a
+  PDF, it is downloaded only when processing reaches the message and only if the chat has `images` on:
+  `data/files/<sha256>.<ext>`, a `files` row with `kind = image`. The type is checked by the first bytes; files over
+  3.75 MB (5 MB in base64, the API limit) are not downloaded. A link preview's picture and file are not files of the
+  message (Telethon gives them in `photo` and `document`): the preview is not read, and its late arrival by an edit
+  does not queue the message. Messages saved before stage 9 have photos recorded without a size that may have been
+  previews; because of that the first edit of such a message does not count as new.
+- Haiku reads an image in a separate call with the task `image` (`processing/images.py`): `shows`, what it shows
+  (1–2 sentences in English), and `text`, the text on it as is, up to 2500 characters. The reading is stored in
+  `files.reading`; in the batch prompt it goes under the message ("Image, as another model read it"). Editing a
+  message does not read its image again, and the same image in another message (by `sha256`, a forward) takes the
+  existing reading.
+- Limits: the common setting `images_daily` (30 per Moscow day by default, counting `image` calls in the journal,
+  failed ones too; edited on the Chats screen), and above 80 % of the LLM limit images are not read (§7). An unread
+  image goes into the batch only as "photo"; a message with nothing else to read is marked processed without a call.
+  If the limit is exhausted entirely or Haiku is unavailable, processing of the chat stops, and messages with images
+  wait with the rest. A model refusal or an API 400 for an image is remembered: it is not tried again.
+- Summaries (§6.6) use what processing has already read and do not read images themselves.
 
-### 5.2 Остальные источники
+### 5.2 Other sources
 
-Логика переносится из Tablo без изменений:
+The logic moves over from Tablo unchanged:
 
-| Источник | Откуда в Tablo | Что меняется |
+| Source | Where in Tablo | What changes |
 |---|---|---|
-| Почта IMAP | §6.2 | письма идут в общую таблицу `messages` (`source=mail`) и разбираются вместе с чатами |
-| HSE App X | §5.1 | страница входа переезжает в Mini App, callback идёт через Funnel |
-| РУЗ iCal | §4.1–4.2 | данные становятся частью нашей ленты (§6.5), а не выдаются как есть |
-| Google Sheets | §3 | без изменений |
+| IMAP mail | §6.2 | letters go to the common `messages` table (`source=mail`) and are processed together with the chats |
+| HSE App X | §5.1 | the login page moves to the Mini App, the callback goes through Funnel |
+| RUZ iCal | §4.1–4.2 | the data becomes part of our feed (§6.5) instead of being served as is |
+| Google Sheets | §3 | unchanged |
 
-**Уточнения этапа 5 (HSE App X):**
+**Stage 5 details (HSE App X):**
 
-- Активные и выполненные дедлайны HSE App X — снимок источника, а не история, поэтому они, как в Tablo, лежат в `kv["hseapp.deadlines"]` (`id`, `label`, `due`, `course`, `title`), а не в таблице `deadlines`. `course` — дисциплина, как её называет HSE App X; `abbr` склейка берёт из словаря, как для `deadlines.course`.
-- Опрос включает общая настройка `hseapp_enabled` (по умолчанию да, переключатель на экране «HSE App X»). Ссылки входа (состояния PKCE, последние 5) живут в памяти: после перезапуска нужна новая.
-- Нужен вход — одно сообщение в «Систему» на смену состояния (помнится в `kv`, перезапуск его не повторяет) с кнопкой. Кнопки Web App в группах не работают, поэтому кнопка открывает чат с ботом (`/start hseapp`), а бот отвечает кнопкой Mini App на экране «HSE App X». Вход вернулся — одна строка. API недоступен 3 ч (порог Tablo, §5.1) — одна строка, и одна, когда снова доступен.
-- Метки: бюджет 15 символов, проверка по символам, как у разбора пачек. Если Haiku недоступна, метки из кэша остаются, русское название — только у дедлайнов без метки (в Tablo при сбое русскими становились все). Оборванный или отклонённый ответ делится пополам; дедлайн, на котором он ломается, остаётся с русским названием, и оно кэшируется как метка, чтобы не платить за него каждые 15 минут.
+- Active and completed HSE App X deadlines are a snapshot of the source, not a history, so, as in Tablo, they live in
+  `kv["hseapp.deadlines"]` (`id`, `label`, `due`, `course`, `title`), not in the `deadlines` table. `course` is the
+  discipline as HSE App X names it; the merge takes `abbr` from the dictionary, as for `deadlines.course`.
+- Polling is turned on by the common setting `hseapp_enabled` (yes by default, a switch on the HSE App X screen).
+  Login links (PKCE states, the last 5) live in memory: after a restart a new one is needed.
+- A needed login is one message to System per change of state (remembered in `kv`, so a restart does not repeat it)
+  with a button. Web App buttons do not work in groups, so the button opens the chat with the bot
+  (`/start hseapp`), and the bot answers with a Mini App button for the HSE App X screen. A restored login is one
+  line. The API unavailable for 3 h (Tablo's threshold, §5.1) is one line, and one more when it is back.
+- Labels: a budget of 15 characters, checked in characters, as in batch parsing. If Haiku is unavailable, cached
+  labels stay, and only deadlines without a label keep the Russian title (in Tablo a failure made them all Russian).
+  A truncated or rejected answer is split in half; the deadline it breaks on keeps its Russian title, which is cached
+  as its label so as not to pay for it every 15 minutes.
 
-## 6. Обработка
+## 6. Processing
 
-### 6.1 Разбор пачками
+### 6.1 Batch parsing
 
-- **Когда.** По расписанию в фиксированные часы суток, с шагом `batch_hours` (общий по умолчанию 3, у отдельного чата может быть свой). Плюс сразу же по триггеру «срочно». Последний плановый разбор идёт до ежедневной сводки (р. 19–20).
-- **Как.** Один вызов на чат: новые сообщения с прошлого разбора, до лимита по размеру (длинная пачка делится на несколько вызовов). В промпт также идут название чата, словарь предметов, живые новости, будущие дедлайны и события из чатов. Это нужно, чтобы модель могла указать замену и перенос, как в §6.4.
-- **Что возвращает модель** по каждому значимому сообщению (на болтовню не возвращает ничего):
+- **When.** On a schedule at fixed hours of the day, every `batch_hours` (3 by default, a chat may have its own).
+  Plus at once on the "urgent" trigger. The last scheduled run happens before the daily summary (D19–D20).
+- **How.** One call per chat: the new messages since the last run, up to a size limit (a long batch is split into
+  several calls). The prompt also carries the chat name, the course dictionary, live news, upcoming deadlines and
+  events from chats, so that the model can point out a replacement or a move, as in §6.4.
+- **What the model returns** for every meaningful message (nothing for chatter):
 
 ```json
 {"items": [{
@@ -145,260 +182,475 @@ settings/     хранение и проверка настроек
 }]}
 ```
 
-- Проверка ответа и повтор по длине — как в §6.4. Почтовые письма и посты каналов проходят тот же разбор.
-- Каждое сообщение модель видит **один раз**: после вызова ставится `parsed_at`. Если вызов упал, сообщения остаются в очереди.
+- The answer is validated and retried by length as in §6.4. Letters and channel posts go through the same parsing.
+- The model sees every message **once**: `parsed_at` is set after the call. If the call fails, the messages stay in
+  the queue.
 
-### 6.2 Словарь предметов
+### 6.2 Course dictionary
 
-Как в §2.2: один словарь, ручные записи главнее, `resolve` под замком. Ручные правки задаются в Mini App (р. 3).
+As in §2.2: one dictionary, manual entries win, `resolve` runs under a lock. Manual corrections are made in the Mini
+App (D3).
 
-Уточнения этапа 4: бюджет названия — 13 символов (столько колонка Tablo вмещает на деле: «Intro to Prog»); в Mini App можно удалить и ответ Haiku, тогда курс назовётся заново. Через словарь проходят предметы РУЗ после каждого опроса и курсы дедлайнов и событий после каждого разбора пачек. Модель разбора видит весь словарь (название → `abbr`, как в Tablo): курс, который в нём есть, она называет как в словаре и начинает метку дедлайна и название события с его `abbr`; свою аббревиатуру придумывает только для курса не из словаря. В `deadlines.course` остаётся название источника, `abbr` берётся из словаря при склейке (этап 5). Ошибка Haiku видна (`ruz.subjects_error`, Mini App), пока хоть одно из названий, на которых она случилась, ждёт перевода: ручная запись или пропажа курса из источника её снимает.
+Stage 4 details: the title budget is 13 characters (what Tablo's column really holds: "Intro to Prog"); Haiku's
+answer can also be deleted in the Mini App, and then the course is named again. RUZ courses pass through the
+dictionary after every poll, and the courses of deadlines and events after every batch run. The parsing model sees
+the whole dictionary (title → `abbr`, as in Tablo): a course that is in it is named as in the dictionary, and the
+deadline label and event title start with its `abbr`; the model invents its own abbreviation only for a course not in
+the dictionary. `deadlines.course` keeps the source's name; `abbr` comes from the dictionary at merge time (stage 5).
+A Haiku error stays visible (`ruz.subjects_error`, the Mini App) while at least one of the names it failed on waits
+for a translation; a manual entry or the course disappearing from the source clears it.
 
-### 6.3 Листочки
+### 6.3 Problem sheets
 
-1. PDF из включённого чата скачивается, из первой страницы локально извлекается текст. Если текста нет (скан), страница рендерится и уходит в модель картинкой.
-2. Листочек ли это, решается по имени файла и первой странице. Этот шаг входит в разбор пачки или идёт отдельным вызовом, если пришёл триггер «срочно».
-3. Если `pdf_content` включено, модель читает до 10 страниц и до 30 тыс. токенов (что раньше) и пишет краткое содержание.
-4. Дедлайны, новости и события из PDF идут в общие таблицы (р. 14).
-5. Бот публикует файл в теме «Листочки» с подписью: предмет, номер, срок, ссылка на исходное сообщение, хэштег предмета.
-6. **Новая версия** определяется по правилам р. 14. Бот заменяет файл в старом сообщении (`edit` медиа) и отвечает на него «листок обновлён» с кратким описанием изменений. Для этого локально берётся разница текстов, и в модель уходит только она.
+1. A PDF from an enabled chat is downloaded and the text of its first page extracted locally. If there is no text (a
+   scan), the page is rendered and goes to the model as an image.
+2. Whether it is a sheet is decided by the file name and the first page. This step is part of batch parsing, or a
+   separate call if the "urgent" trigger fired.
+3. If `pdf_content` is on, the model reads up to 10 pages and 30k tokens (whichever comes first) and writes a summary.
+4. Deadlines, news and events from the PDF go to the common tables (D14).
+5. The bot posts the file to the Sheets topic with a caption: course, number, due date, a link to the original
+   message, a course hashtag.
+6. **A new version** is detected by the rules of D14. The bot replaces the file in the old message (a media `edit`)
+   and replies to it with "sheet updated" and a short description of the changes. For that the difference of the
+   texts is computed locally, and only it goes to the model.
 
-**Уточнения этапа 6:**
+**Stage 6 details:**
 
-- PDF скачивается не при получении сообщения, а когда до него доходит разбор (`collectors/files.py`): файл ложится в `data/files/<sha256>.pdf`, строка `files` помнит и результат, и сбой самого файла (удалён, битый, не картинка), так что повторный разбор того же сообщения не качает файл заново. Сбой по дороге (твинк не подключён, сеть, FloodWait, ошибка сервера Telegram) не запоминается: сообщение остаётся в очереди до следующего разбора, остальные сообщения чата разбираются без него. Чат, закрытый для твинка, — сбой самого файла. Файлы больше 50 МБ не скачиваются. Почтовые вложения на этом этапе не читаются.
-- Рендера страниц нет (pypdf не рисует): скан (на первой странице меньше 5 слов) уходит в модель как PDF из его первых страниц, документом; модель видит страницы картинками. Резерв бюджета — 3000 токенов на страницу.
-- Схема пачки дополнена массивом `sheets` (`msg_id`, `course`, `number`, `due`) у каждого элемента — по аналогии с `deadlines` и `events`, а не одним полем `sheet`. Листок попадает в таблицу `sheets` в транзакции пачки (статус `new`), в форум — после прогона; сбой Telegram оставляет его в очереди до следующего прогона.
-- Тот же файл (по `sha256`) второй раз — не листок. Новая версия: то же сообщение с заменённым файлом, либо тот же чат и предмет (по `abbr` словаря) и тот же номер; если номера нет хотя бы у одного — почти то же имя файла (без расширения и пометок версии вроде `v2`, `final`, `(1)`, `исправленный`; числа в имени должны совпасть).
-- Полное чтение (`pdf_content`) — задача `pdf`: краткое содержание на языке форума (р. 41) в подписи и дедлайны со всех страниц. Они идут в `deadlines` с источником `tg` и `sheet_id`: правка текста сообщения их не снимает, удаление сообщения — снимает. События и новости из полного чтения не берутся: их даёт разбор пачки по сообщению и первой странице. Для новой версии в модель уходит только разница текстов, ответ — «что изменилось» в ответе на старое сообщение.
-- Лимиты чтения — общие настройки `pdf_pages` и `pdf_tokens`; правятся на экране «Листочки» (общего экрана настроек пока нет).
+- A PDF is downloaded not when the message arrives but when parsing reaches it (`collectors/files.py`): the file goes
+  to `data/files/<sha256>.pdf`, and the `files` row remembers both the result and a failure of the file itself
+  (deleted, broken, not an image), so parsing the same message again does not download the file again. A failure on
+  the way (the twin not connected, the network, FloodWait, a Telegram server error) is not remembered: the message
+  stays in the queue until the next run, and the chat's other messages are parsed without it. A chat closed to the
+  twin is a failure of the file itself. Files over 50 MB are not downloaded. Mail attachments are not read at this
+  stage.
+- There is no page rendering (pypdf does not draw): a scan (fewer than 5 words on the first page) goes to the model
+  as a PDF of its first pages, as a document; the model sees the pages as images. The budget reserve is 3000 tokens
+  per page.
+- The batch schema got a `sheets` array (`msg_id`, `course`, `number`, `due`) in every item, by analogy with
+  `deadlines` and `events`, instead of a single `sheet` field. A sheet enters the `sheets` table in the batch's
+  transaction (status `new`) and the forum after the run; a Telegram failure leaves it queued until the next run.
+- The same file (by `sha256`) a second time is not a sheet. A new version is the same message with the file replaced,
+  or the same chat and course (by the dictionary's `abbr`) and the same number; if at least one has no number,
+  almost the same file name (without the extension and version marks like `v2`, `final`, `(1)`, `исправленный`;
+  the numbers in the name must match).
+- Full reading (`pdf_content`) is the task `pdf`: a summary in the forum's language (D41) in the caption and
+  deadlines from all pages. They go to `deadlines` with the source `tg` and a `sheet_id`: editing the message text
+  does not withdraw them, deleting the message does. Events and news are not taken from the full reading: batch
+  parsing provides them from the message and the first page. For a new version only the difference of the texts goes
+  to the model, and the answer is "what changed" in a reply to the old message.
+- The reading limits are the common settings `pdf_pages` and `pdf_tokens`, edited on the Sheets screen (there was no
+  common settings screen yet).
 
-### 6.4 Дедлайны
+### 6.4 Deadlines
 
-- **Источники и порядок надёжности:** `hseapp` → `ical` (рубежный контроль) → `mail` → `tg` (чаты, каналы, PDF) → `ha` (свои).
-- **Склейка, выкидывание выполненных и скрытых** — алгоритм §5.5 без изменений. **Отбор для экрана** — §5.6.
-- **Свои и скрытые** (`own_deadlines`, `hidden_deadlines`) живут у нас и ведутся в Mini App и кнопками форума; списков дел в HA больше нет (р. 34).
-- **Тема «Дедлайны».** Закреплённое сообщение со списком будущих дедлайнов бот редактирует на месте. Каждый новый или перенесённый дедлайн приходит отдельным сообщением.
+- **Sources in order of reliability:** `hseapp` → `ical` (midterms) → `mail` → `tg` (chats, channels, PDFs) →
+  `ha` (own).
+- **Merging and dropping completed and hidden ones** follows the algorithm of §5.5 unchanged. **Picking for the
+  screen** follows §5.6.
+- **Own and hidden** (`own_deadlines`, `hidden_deadlines`) live here and are managed in the Mini App and with the
+  forum buttons; HA has no to-do lists any more (D34).
+- **The Deadlines topic.** The bot edits the pinned message with the list of upcoming deadlines in place. Every new
+  or moved deadline arrives as its own message.
 
-**Уточнения этапа 5 (склейка и тема «Дедлайны»):**
+**Stage 5 details (the merge and the Deadlines topic):**
 
-- Склейка — одна на всех (`processing/merge.py`): `GET /api/deadlines`, закреп «Дедлайнов» и Mini App берут один список в одном порядке. Строки `deadlines` (РУЗ, почта, чаты) берутся в силе и не старше 3 дней, как `news_deadlines` в Tablo; `course` строки — название источника, `abbr` для сравнения берётся из словаря, а без записи — первое слово метки, как у Tablo.
-- Скрытый дедлайн помнит строку, из которой пришёл (`hidden_deadlines.ref`: `dl:<id>`, `hseapp:<id>`), и остаётся скрытым после её переименования (английская метка HSE App X после ответа Haiku, `<abbr> Midterm` после словаря). В Tablo скрытие сравнивало только название и дату, и переименованный дедлайн возвращался.
-- Сообщения темы — по разнице списков: новый список сравнивается с прошлым показанным (`kv["deadlines.shown"]`) по строке источника. Новый или перенесённый — сообщение; снятый источником (сообщение удалено или исправлено, пары больше нет, пропал из HSE App X) — «снят»; ушедший иначе (скрыт, выполнен в HSE App X, давно прошёл) — молча; копия той же работы на ту же дату из другого источника — не новость; переименование только правит закреп.
-- Молча, только в закреп, приходят: всё при первом показе списка, при первом опросе HSE App X и при первом опросе РУЗ (на этапе 4 Midterm первого опроса приходили сообщениями), а также изменения самого владельца (HA, Mini App, кнопки).
-- Под сообщением о дедлайне — «Скрыть» (у своего «Удалить»: свой удаляется, как в HA), у скрытого — «Вернуть». Под уведомлением о новости — «Скрыть»: новость уходит из закрепа насовсем (и из `/api/news`); новость, заменившая скрытую (правка того же сообщения), тоже скрыта.
-- Смена `RUZ_ICAL_URL` (хэш ссылки не совпал с сохранённым) делает следующий опрос с парами первым: в «Систему» — «Ссылка РУЗ сменилась…», в «Расписание» — ничего, Midterm старых пар снимаются молча.
-- Ручная правка словаря в Mini App сразу переименовывает `<abbr> Midterm`, не дожидаясь опроса РУЗ.
-- Закреп пересобирается после каждого разбора пачек, опроса РУЗ и HSE App X, действия владельца и в полночь (сдвигаются «сегодня» и «завтра»).
+- There is one merge for everyone (`processing/merge.py`): `GET /api/deadlines`, the Deadlines pin and the Mini App
+  take one list in one order. `deadlines` rows (RUZ, mail, chats) are taken while in force and at most 3 days old,
+  like `news_deadlines` in Tablo; a row's `course` is the source's name, and the `abbr` for comparison comes from the
+  dictionary or, without an entry, from the first word of the label, as in Tablo.
+- A hidden deadline remembers the row it came from (`hidden_deadlines.ref`: `dl:<id>`, `hseapp:<id>`) and stays
+  hidden after that row is renamed (the English HSE App X label after Haiku answers, `<abbr> Midterm` after the
+  dictionary). In Tablo hiding compared only the title and date, and a renamed deadline came back.
+- Topic messages come from the difference of lists: the new list is compared with the last one shown
+  (`kv["deadlines.shown"]`) by source row. New or moved means a message; withdrawn by the source (message deleted or
+  edited, the class is gone, gone from HSE App X) means "withdrawn"; gone otherwise (hidden, completed in HSE App X,
+  long past) means silence; a copy of the same task on the same date from another source is not news; a rename only
+  edits the pin.
+- Silently, into the pin only, come: everything on the first showing of the list, on the first HSE App X poll and on
+  the first RUZ poll (in stage 4 midterms of the first poll arrived as messages), and changes made by the owner (HA,
+  the Mini App, buttons).
+- Under a deadline message is **Hide** (**Delete** for an own one: it is deleted, as in HA), and under a hidden one
+  **Restore**. Under a news notification is **Hide**: the item leaves the pin for good (and `/api/news`); an item
+  that replaced a hidden one (an edit of the same message) is hidden too.
+- A change of `RUZ_ICAL_URL` (the link's hash differs from the stored one) makes the next poll with classes the first
+  one: System reports the changed link, Timetable gets nothing, and the old classes' midterms are withdrawn silently.
+- A manual dictionary correction in the Mini App renames `<abbr> Midterm` at once, without waiting for a RUZ poll.
+- The pin is rebuilt after every batch run, RUZ and HSE App X poll, owner action, and at midnight ("today" and
+  "tomorrow" shift).
 
-### 6.5 Расписание и лента iCal
+### 6.5 Timetable and the iCal feed
 
-- В ленту попадают пары из РУЗ, плюс консультации и события из чатов (р. 2).
-- Названия — английские, из словаря (`title`). Первая строка `DESCRIPTION` — тип: *Lecture*, *Seminar*, *Consultation*, *Event*, *Interim assessment*. `LOCATION` — аудитория или ссылка. Так текущий `ical.py` в Tablo читает ленту без доработок (§4.2, §4.4).
-- `UID` стабильный: у пар берётся из РУЗ, у событий из чатов это хэш от чата и id первого сообщения. Перенос события меняет время, а `UID` остаётся тем же.
-- Отмену или перенос пары из чата **применяем** к паре из РУЗ: в Tablo этого не было (§4.5). Отмена превращается в `STATUS:CANCELLED`, перенос — в новое время с пометкой в `DESCRIPTION`. Если РУЗ позже изменит пару сам, побеждает РУЗ.
-- **Два календаря** (р. 28):
-  - `main` — пары и всё, где нужно быть обязательно (консультация перед экзаменом, контрольная, сдача);
-  - `optional` — можно прийти: необязательные консультации, мероприятия, встречи.
+- The feed holds classes from RUZ plus consultations and events from chats (D2).
+- Titles are English, from the dictionary (`title`). The first line of `DESCRIPTION` is the type: *Lecture*,
+  *Seminar*, *Consultation*, *Event*, *Interim assessment*. `LOCATION` is the room or a link. This way Tablo's
+  current `ical.py` reads the feed unchanged (§4.2, §4.4).
+- The `UID` is stable: classes take it from RUZ; events from chats use a hash of the chat and the id of the first
+  message. Moving an event changes the time and keeps the `UID`.
+- A cancellation or move of a class announced in a chat **is applied** to the RUZ class; Tablo did not do this
+  (§4.5). A cancellation becomes `STATUS:CANCELLED`, a move a new time with a note in `DESCRIPTION`. If RUZ later
+  changes the class itself, RUZ wins.
+- **Two calendars** (D28):
+  - `main`: classes and everything one has to attend (a consultation before an exam, a test, a submission);
+  - `optional`: where one may go: optional consultations, events, meetings.
 
-  Куда положить событие, решает модель при разборе пачки (поле `required` в `events`). Ошибку можно поправить кнопкой под сообщением в теме «Расписание» или в Mini App.
-- **Лента для Tablo** — третья, `tablo`: оба календаря вместе, с пометками в каждом событии:
-  - необязательные — `STATUS:TENTATIVE` и `X-INFOMASTER-OPTIONAL:TRUE`;
-  - источник — `X-INFOMASTER-SOURCE`: `ruz`, `tg`, `mail`, `pdf` (для значка, как у дедлайнов, §5.6);
-  - ссылка на исходное сообщение — `X-INFOMASTER-LINK`. Не `URL`: нынешний `ical.py` считает событие с `URL` онлайн-парой (§4.2).
+  The model decides where an event goes during batch parsing (the `required` field in `events`). A mistake can be
+  fixed with a button under the message in the Timetable topic or in the Mini App.
+- **The feed for Tablo** is a third one, `tablo`: both calendars together, with marks on every event:
+  - optional ones: `STATUS:TENTATIVE` and `X-INFOMASTER-OPTIONAL:TRUE`;
+  - the source: `X-INFOMASTER-SOURCE`: `ruz`, `tg`, `mail`, `pdf` (for an icon, as with deadlines, §5.6);
+  - a link to the original message: `X-INFOMASTER-LINK`. Not `URL`: the current `ical.py` treats an event with a
+    `URL` as an online class (§4.2).
 
-  Нынешний `ical.py` пропускает только `CANCELLED`, поэтому `TENTATIVE` прочитает как обычную пару, а `X-` поля проигнорирует: лента работает в Tablo и без доработок. Чтобы показать пометки, нужна небольшая доработка (чек-лист в [decisions.md](decisions.md)).
-- Ленты отдаются по секретной ссылке только во внутренней сети (§8). Изменения расписания приходят в тему «Расписание».
+  The current `ical.py` skips only `CANCELLED`, so it reads `TENTATIVE` as an ordinary class and ignores the `X-`
+  fields: the feed works in Tablo without changes. Showing the marks needs a small change (the checklist in
+  [decisions.md](decisions.md)).
+- The feeds are served by a secret link inside the internal network only (§8). Timetable changes go to the Timetable
+  topic.
 
-**Уточнения этапа 4:**
+**Stage 4 details:**
 
-- Пары с `STATUS:CANCELLED` в самом РУЗ не пропускаются, как в Tablo, а хранятся с пометкой: в ленте они `CANCELLED` (Tablo их по-прежнему пропускает), в «Расписание» приходит отмена.
-- Пара пропала из РУЗ до начала — РУЗ её убрал: из лент уходит, в «Расписание» приходит «убрана». Пропала после начала — ушла за пределы пяти недель и хранится как была. Новые пары за прежним концом ленты — просто сдвиг окна, о них не пишем. Пустая лента при будущих парах считается сбоем РУЗ. Пустая лента, пока пар ещё нет (между семестрами), — не «первый опрос»: «РУЗ подключён» приходит один раз, с первой лентой, в которой есть пары. В статусе (`ruz.classes`) — число пар последней полученной ленты, без хранимых прошедших.
-- Ссылка РУЗ — секрет: в статус, лог и «Систему» ошибка опроса попадает без неё (HTTP-ошибка — кодом и текстом статуса, прочие — с вырезанной ссылкой).
-- Время в лентах — в UTC: его читают все календари, а Москва живёт без перехода на летнее время. Событие без конца длится 80 минут (одна пара).
-- Модель видит пары на 21 день вперёд и только в учебных чатах. Пара считается по более позднему из времени в РУЗ и времени правки: перенесённая на потом остаётся в списке, пока перенос впереди, — так правку сообщения можно повторить, а пару перенести или отменить ещё раз. Правка пары, которую модели не показали (чат перестал быть учебным), при правке сообщения не снимается. Ошибочную правку пары исправляет кнопка «Не применять» (скрытая правка не действует); выбора основной/необязательный у пары нет.
-- Дедлайн рубежного контроля (`<abbr> Midterm`, источник `ical`) идёт за парой так, как её показывает лента: перенос из чата переносит его, отмена из чата снимает, «Не применять» возвращает дату РУЗ. Сверка — после каждого опроса РУЗ, каждого разбора пачек и каждого переключения правки владельцем.
-- Версии события: если удалено сообщение версии, которую уже заменила более новая, снимается и она; удаление сообщения действующей версии возвращает ближайшую предыдущую не снятую, и в «Расписание» приходит одно сообщение.
-- У пары с правкой из чата `X-INFOMASTER-SOURCE` — источник правки (`tg`), а `X-INFOMASTER-LINK` — ссылка на сообщение.
+- Classes with `STATUS:CANCELLED` in RUZ itself are not skipped, as in Tablo, but stored with a mark: in the feed
+  they are `CANCELLED` (Tablo still skips them), and Timetable gets a cancellation.
+- A class gone from RUZ before it starts was removed by RUZ: it leaves the feeds, and Timetable gets "removed". Gone
+  after it started means it left the five-week window, and it is kept as it was. New classes beyond the old end of
+  the feed are just the window moving and are not reported. An empty feed while future classes exist counts as a RUZ
+  failure. An empty feed while there are no classes yet (between terms) is not a "first poll": "RUZ connected" comes
+  once, with the first feed that has classes. The status (`ruz.classes`) holds the number of classes of the last feed
+  received, without stored past ones.
+- The RUZ link is a secret: a poll error reaches the status, the log and System without it (an HTTP error as the code
+  and status text, others with the link cut out).
+- Times in the feeds are in UTC: every calendar reads it, and Moscow has no daylight saving time. An event without an
+  end lasts 80 minutes (one class).
+- The model sees classes 21 days ahead and only in study chats. A class counts by the later of its RUZ time and its
+  changed time: one moved later stays in the list while the move is ahead, so the message edit can be repeated and
+  the class moved or cancelled again. A change of a class not shown to the model (the chat stopped being a study
+  one) is not withdrawn when the message is edited. A wrong change of a class is fixed with **Don't apply** (a hidden
+  change does not apply); a class has no main/optional choice.
+- The midterm deadline (`<abbr> Midterm`, source `ical`) follows its class as the feed shows it: a move from a chat
+  moves it, a cancellation from a chat withdraws it, **Don't apply** brings back the RUZ date. They are reconciled
+  after every RUZ poll, every batch run and every toggle of a change by the owner.
+- Event versions: if the message of a version already replaced by a newer one is deleted, it is withdrawn too;
+  deleting the message of the current version brings back the nearest earlier version that was not withdrawn, and
+  Timetable gets one message.
+- A class changed from a chat has the change's source (`tg`) in `X-INFOMASTER-SOURCE` and a link to the message in
+  `X-INFOMASTER-LINK`.
 
-### 6.6 Сводки
+### 6.6 Summaries
 
-- **Ежедневная:** в 21:00 (время настраивается) по чатам со `summary`, в тему «Сводки» (р. 20).
-- **По команде:** `/summary [чат] [промежуток]` (р. 17). Без чата бот показывает кнопки со списком чатов. Можно ответить командой на сообщение, пересланное из чата.
-- Строятся по сырым сообщениям из `messages`, пачку не ждут. Длинный промежуток сначала сжимается по дням, потом из дневных выжимок собирается итог.
+- **Daily:** at 21:00 (configurable) for chats with `summary`, to the Summaries topic (D20).
+- **On demand:** `/summary [chat] [period]` (D17). Without a chat the bot shows buttons with the list of chats. The
+  command can also be a reply to a message forwarded from a chat.
+- They are built from the raw messages in `messages` and do not wait for a batch. A long period is first compressed
+  day by day, and the result is assembled from the daily digests.
 
-**Уточнения этапа 7:**
+**Stage 7 details:**
 
-- Код: `processing/summaries.py` (какие сообщения, промежуток, вызовы Haiku) и `outputs/summaries.py` (тема «Сводки», ежедневный запуск, `/summary`).
-- «С прошлой сводки» — сообщения, которые ещё не попали ни в одну сводку (`messages.summarized_at`), за последние 7 дней. Отметку ставит только сводка без промежутка — ежедневная или `/summary` без промежутка, — и только после публикации. Сводка за промежуток (`3h`, `2d`, `20.10`, `20.10-22.10`, допустимо и `3ч`, `2д`) ничего не отмечает: это взгляд назад. Дата позже сегодняшней — прошлого года.
-- В модель идёт то же, что идёт в разбор пачек (§10): только читаемые сообщения, а у чата с фильтром `important` — только важные и ответы на них. Сводка — пункты на языке форума или на названном в `/summary` (р. 41), у каждого `msg_id` сообщения, на которое ведёт ссылка «→» (в личных чатах и обычных группах ссылок нет). До 12 пунктов. Промежуток больше 30 тыс. символов делится по дням (день, который сам не влез, — на несколько вызовов, до 15 пунктов каждый), итог собирается из дневных выжимок.
-- Ежедневная: по включённым чатам с `summary`, учебные первыми, каждый чат — своё сообщение (длинное — несколько подряд); чаты без важного — одной строкой «Ничего важного». Пропущенное время сводки (сервис лежал) наверстывается при запуске, первый запуск только запоминает день. Время меняется на экране «Сводки» в Mini App (`summary_time`), общего экрана настроек пока нет.
-- Лимит: ежедневная сводка — необязательная задача (выше 80 % не собирается, в «Сводки» приходит строка, сообщения ждут следующей). `/summary` работает и выше 80 %, но сводка, которая не влезает в остаток, отклоняется одна и не останавливает остальные вызовы до полуночи, как обязательная задача (`asked` у вызова LLM, `DoesNotFit`); в журнале обе — `summary`. Сбой сети оставляет сообщения на следующую сводку; ответ, который модель дать не может (отказ, обрыв), их пропускает: тот же ввод упал бы снова.
-- `/summary` — только от владельца, в личке с ботом или в форуме; `/summary@другой_бот` не трогается. Ответы бота — HTML (по умолчанию у Telethon Markdown, и название чата портило бы разметку). Сбой отправки в тему говорится в ответе на команду; в ежедневной сводке он не мешает остальным чатам, а сообщения чата ждут следующей. Пункт длиннее 500 символов обрезается, чтобы строка всегда влезала в сообщение. Чат ищется по части названия среди включённых (точное совпадение главнее); несколько — кнопки, ни одного или без чата — кнопки всех включённых (с ежедневной сводкой и учебные первыми, до 30). Ответ на пересланное сообщение: канал (и анонимный админ группы) виден в самой пересылке, сообщение человека ищется по времени отправки и тексту среди хранимых — значит, только из включённых чатов и не старше 14 дней. Сводка идёт в тему «Сводки», бот отвечает ссылкой на неё; если важного нет — отвечает только строкой.
-- «Последний плановый разбор до сводки» (р. 20) отдельно не привязан: сводка не зависит от пачек.
+- Code: `processing/summaries.py` (which messages, the period, Haiku calls) and `outputs/summaries.py` (the Summaries
+  topic, the daily run, `/summary`).
+- "Since the last summary" means messages that have not yet been in any summary (`messages.summarized_at`) within the
+  last 7 days. Only a summary without a period sets the mark (the daily one or `/summary` without a period), and only
+  after publishing. A summary for a period (`3h`, `2d`, `20.10`, `20.10-22.10`; `3ч` and `2д` also work) marks
+  nothing: it is a look back. A date later than today means last year.
+- The model gets what batch parsing gets (§10): only readable messages, and for a chat with the `important` filter
+  only important ones and replies to them. A summary is a list of points in the forum's language or the one named in
+  `/summary` (D41), each with the `msg_id` of the message its "→" link leads to (private chats and basic groups have
+  no links). Up to 12 points. A period over 30k characters is split by day (a day that does not fit on its own goes
+  into several calls of up to 15 points each), and the result is assembled from the daily digests.
+- Daily: over enabled chats with `summary`, study chats first, one message per chat (a long one as several in a row);
+  chats with nothing important share one "Nothing important" line. A summary time missed while the service was down
+  is caught up at start; the very first start only remembers the day. The time is changed on the Summaries screen of
+  the Mini App (`summary_time`); there was no common settings screen yet.
+- Limit: the daily summary is an optional task (above 80 % it is skipped, Summaries gets a line, and the messages
+  wait for the next one). `/summary` works above 80 % too, but a summary that does not fit in what is left is refused
+  alone and does not stop other calls until midnight the way a mandatory task would (`asked` on the LLM call,
+  `DoesNotFit`); both are `summary` in the journal. A network failure keeps the messages for the next summary; an
+  answer the model cannot give (a refusal, a cut-off) skips them: the same input would fail again.
+- `/summary` is accepted only from the owner, in a private chat with the bot or in the forum; `/summary@other_bot`
+  is left alone. The bot answers in HTML (Telethon defaults to Markdown, and a chat name would break the markup). A
+  failure to post to the topic is reported in the reply to the command; in the daily summary it does not hold up the
+  other chats, and the chat's messages wait for the next one. A point longer than 500 characters is cut so that a
+  line always fits in a message. The chat is found by part of its name among the enabled ones (an exact match wins);
+  several matches give buttons, and none or no chat give buttons for all enabled chats (daily-summary and study ones
+  first, up to 30). A reply to a forwarded message: a channel (and an anonymous group admin) is visible in the
+  forward itself, while a person's message is looked up by its send time and text among the stored ones, so only
+  from enabled chats and at most 14 days old. The summary goes to the Summaries topic and the bot answers with a link
+  to it; if nothing is important, it answers with just a line.
+- "The last scheduled run before the summary" (D20) is not tied separately: summaries do not depend on batches.
 
-### 6.7 Оценки
+### 6.7 Grades
 
-Без изменений относительно §3: разметка вкладок через Haiku с кэшем, шкала 0–10, снимок при первом опросе, нули-заглушки, журнал новых оценок. Новая оценка приходит в тему «Оценки» и в API.
+Unchanged from §3: tab layout by Haiku with a cache, a 0–10 scale, a snapshot on the first poll, placeholder zeros,
+a journal of new grades. A new grade goes to the Grades topic and the API.
 
-**Уточнения этапа 8:**
+**Stage 8 details:**
 
-- Код: `collectors/grades.py` (скачивание xlsx, название таблицы, верх вкладки и своя строка — `TabView`), `processing/grades.py` (разметка Haiku с кэшем, шкала, новые оценки, настройки), `outputs/grades.py` (тема «Оценки»). Бюджет метки (23 символа на «курс работа») и правила разметки — как в Tablo.
-- **Шапку выбирает Haiku.** Tablo угадывал конец шапки сам (до 6 строк над первой строкой, похожей на ФИО с заглавных), и таблица со студентами со строчной буквы или со строкой «среднего» над ними ломала догадку. Теперь модель видит верх вкладки — до 15 строк над своей, с чужими строками, — свою строку без своего ФИО и называет номера строк шапки (`header_rows`) в том же вызове разметки (`LAYOUT_VERSION = 3`). Кэш — по таблице, вкладке и бюджету вместе с текстом названных строк шапки: пока он тот же, разметка стоит, что бы ни менялось в остальных строках (чужие оценки, новый студент, среднее). Шапка не названа или ответа нет — кэш держится, пока не изменится весь верх вкладки.
-- Настройки — общие: `grades_student` (ФИО), `grades_sheets` (`[{url, label}]`, `label` — курс перед меткой, до 10 символов; пусто — первые 8 символов названия таблицы), `grades_window_days` (7). Правятся на экране «Оценки» в Mini App; таблицы читаются сразу после правки, дальше раз в 30 минут. `include_baseline` не перенесён: экран «Оценки» показывает все текущие оценки с пометкой новых.
-- Отличия от Tablo. Ни на одной вкладке нет своей строки — это ошибка таблицы, а не пустой список: оценки не стираются. Оценка, которой больше нет в таблице (вкладку скрыли, строка пропала с одной вкладки, ячейку очистили), помнится как ушедшая (`grade_items.gone`): вернулась с той же оценкой — не новость, с другой — новость с прежней оценкой. Столбец, сдвинутый вставкой перед ним, — та же работа (совпали вкладка, шапка и оценка среди ушедших в том же чтении), а не новая оценка. Работа, которую модель назвала дважды, считается один раз. Ответу разметки отводится не меньше 60 токенов на столбец (вкладка из дат не обрывается). Ответ, который модель дать не может (отказ, обрыв), кэшируется как пропущенная вкладка, чтобы не платить за него каждые 30 минут, и виден в статусе (`unread`) и в Mini App; сбой сети или лимит — ошибка таблицы, оценки остаются, вкладка размечается при следующем опросе. Убранная таблица и смена ФИО стирают оценки: следующее чтение — снова снимок. Закрытая таблица (вместо xlsx страница входа) — ошибка «not a workbook».
-- Тема «Оценки»: после опроса — по сообщению на таблицу (заголовок — название таблицы со ссылкой на неё и хэштег курса), строка на работу: метка, оценка 0–10 (как на экране Tablo), бонус, в скобках баллы таблицы, если шкала не 0–10, и прежняя оценка у изменённой. Неотправленные (сбой Telegram) ждут следующего опроса, пока в окне `grades_window_days`; длинное сообщение делится на несколько, и каждое помечает свои оценки отправленными, так что сбой посередине ничего не повторяет. Первое чтение таблицы — строка в «Систему» («подключена: вкладок…, оценок…»); таблица, которая не читается 12 ч, — одна строка в «Систему» и одна, когда снова читается.
-- `GET /api/grades` (внутренний порт, Bearer) — уровень В из §11.5: `{"items": [{key, label, value, bonus, seen_at}], "window_days"}`, у каждой работы последнее событие окна, новые сверху. В `GET /api/status` → `grades`: `configured`, `sheets` по id таблицы (`title`, `ok_at`, `error`, `tabs`, `items`, `unread`; ни ссылок, ни ФИО), `llm`, `new`.
+- Code: `collectors/grades.py` (downloading the xlsx, the sheet title, the top of the tab and the own row,
+  `TabView`), `processing/grades.py` (the Haiku layout with a cache, the scale, new grades, settings),
+  `outputs/grades.py` (the Grades topic). The label budget (23 characters for "course task") and the layout rules are
+  as in Tablo.
+- **Haiku picks the header.** Tablo guessed where the header ends itself (up to 6 rows above the first row that looks
+  like a capitalised full name), and a sheet with students written in lower case or with an "average" row above them
+  broke the guess. Now the model sees the top of the tab (up to 15 rows above the own row, other students' rows
+  included) and the own row without the owner's name, and names the header row numbers (`header_rows`) in the same
+  layout call (`LAYOUT_VERSION = 3`). The cache is keyed by sheet, tab and budget together with the text of the named
+  header rows: while that stays the same, the layout holds whatever changes in other rows (other students' grades, a
+  new student, the average). If no header was named or there was no answer, the cache holds until the whole top of
+  the tab changes.
+- The settings are common: `grades_student` (the full name), `grades_sheets` (`[{url, label}]`, where `label` is the
+  course before the task label, up to 10 characters; empty means the first 8 characters of the sheet title),
+  `grades_window_days` (7). They are edited on the Grades screen of the Mini App; sheets are read right after an
+  edit and every 30 minutes after that. `include_baseline` was not carried over: the Grades screen shows all current
+  grades with the new ones marked.
+- Differences from Tablo. No own row in any tab is an error of the sheet, not an empty list: grades are not erased.
+  A grade no longer in the sheet (the tab hidden, the row gone from one tab, the cell cleared) is remembered as gone
+  (`grade_items.gone`): coming back with the same grade is not news, with a different one it is news with the
+  previous grade. A column shifted by an insertion before it is the same task (the tab, header and grade match one of
+  those gone in the same read), not a new grade. A task the model named twice counts once. The layout answer gets at
+  least 60 tokens per column (a tab of dates is not cut off). An answer the model cannot give (a refusal, a cut-off)
+  is cached as a skipped tab so as not to pay for it every 30 minutes, and is visible in the status (`unread`) and
+  the Mini App; a network failure or the limit is a sheet error, the grades stay, and the tab is laid out on the next
+  poll. Removing a sheet or changing the name erases its grades: the next read is a snapshot again. A closed sheet (a
+  login page instead of an xlsx) is a "not a workbook" error.
+- The Grades topic: after a poll, one message per sheet (the heading is the sheet title linking to it and a course
+  hashtag), a line per task: the label, the grade 0–10 (as on Tablo's screen), the bonus, the sheet's points in
+  brackets if its scale is not 0–10, and the previous grade for a changed one. Unsent ones (a Telegram failure) wait
+  for the next poll while within `grades_window_days`; a long message is split into several, and each marks its own
+  grades as sent, so a failure in the middle repeats nothing. The first read of a sheet is a line in System
+  ("connected: tabs…, grades…"); a sheet that cannot be read for 12 h is one line in System, and one more when it is
+  read again.
+- `GET /api/grades` (internal port, Bearer) is level C of §11.5: `{"items": [{key, label, value, bonus, seen_at}],
+  "window_days"}`, the last event within the window for every task, newest first. In `GET /api/status` → `grades`:
+  `configured`, `sheets` by sheet id (`title`, `ok_at`, `error`, `tabs`, `items`, `unread`; neither links nor names),
+  `llm`, `new`.
 
-## 7. LLM: журнал и дневной лимит
+## 7. LLM: the journal and the daily limit
 
-**Журнал (р. 22).** Каждый вызов, включая неудачные, пишется в `llm_runs`: время (UTC), задача (`batch`, `pdf`, `image`, `summary`, `subjects`, `grades`, `hseapp_labels`), чат, модель, токены (вход, выход, кэш), стоимость, длительность, ошибка. Mini App показывает расход за сегодня, неделю и месяц с разбивкой по задачам и чатам.
+**The journal (D22).** Every call, failed ones included, is written to `llm_runs`: the time (UTC), the task (`batch`,
+`pdf`, `image`, `summary`, `subjects`, `grades`, `hseapp_labels`), the chat, the model, tokens (input, output,
+cache), the cost, the duration, the error. The Mini App shows spending for today, the week and the month, broken down
+by task and chat.
 
-**Лимит (р. 21).** Дневной лимит в долларах на все вызовы вместе. Сутки считаются по Москве, цены задаются в настройках.
+**The limit (D21).** A daily dollar limit for all calls together. Days are counted in Moscow time; prices are set in
+the settings.
 
-- **Перед вызовом** бюджет резервирует худший случай: оценку входа по длине текста плюс `max_tokens` на выход. Если резерв не помещается в остаток, вызов не делается. После ответа резерв заменяется настоящей стоимостью.
-- **80 % лимита.** Отключаются необязательные задачи: картинки, чтение PDF целиком, ежедневная сводка. В тему «Система» приходит предупреждение.
-- **100 %.** Все вызовы стоят до полуночи. Сообщения копятся в очереди и разбираются на следующий день. Бот сообщает об этом в «Систему». Кнопкой можно поднять лимит на сегодня.
-- **Разбор очереди после паузы** (р. 30):
-  1. Порядок: учебные чаты → почта → неучебные чаты и каналы.
-  2. Неучебные сообщения старше `ttl_hours` (24 ч) помечаются разобранными без вызова модели: новость из них всё равно уже не живая (как в Tablo, §6.3).
-  3. Учебные сообщения не выбрасываются никогда: в них дедлайны и события.
-  4. Если лимит упирается в потолок три дня подряд, бот в «Системе» предлагает поднять лимит и показывает, какие чаты съедают больше всего.
-- Лимиты на число картинок и на страницы и токены PDF работают внутри общего лимита.
+- **Before a call** the budget reserves the worst case: an input estimate from the text length plus `max_tokens` for
+  the output. If the reserve does not fit in what is left, the call is not made. After the answer the reserve is
+  replaced by the real cost.
+- **80 % of the limit.** Optional tasks are switched off: images, whole-PDF reading, the daily summary. A warning
+  goes to the System topic.
+- **100 %.** All calls stop until midnight. Messages pile up in the queue and are processed the next day. The bot
+  reports this in System. A button raises the limit for today.
+- **Working through the queue after a pause** (D30):
+  1. Order: study chats → mail → non-study chats and channels.
+  2. Non-study messages older than `ttl_hours` (24 h) are marked processed without calling the model: their news
+     would not be live anyway (as in Tablo, §6.3).
+  3. Study messages are never thrown away: they hold deadlines and events.
+  4. If the limit hits the ceiling three days in a row, the bot suggests raising it in System and shows which chats
+     eat the most.
+- The limits on the number of images and on PDF pages and tokens work inside the common limit.
 
-## 8. Выходы
+## 8. Outputs
 
-### 8.1 Два HTTP-порта
+### 8.1 Two HTTP ports
 
-Через Funnel наружу открыт **только публичный порт**. API для Tablo и HA висит на отдельном порту, который доступен лишь в локальной сети. Так API и лента Tablo не торчат в интернет. Ленты `main` и `optional` для своего календаря (Apple, Google) открыты и через Funnel, но по другому секрету (р. 43): Google и подписки iCloud забирают ленту со своих серверов, до внутреннего порта и до tailnet им не дотянуться.
+Only the **public port** is exposed through Funnel. The API for Tablo and HA sits on a separate port reachable only
+on the local network, so neither the API nor Tablo's feed faces the internet. The `main` and `optional` feeds for
+one's own calendar (Apple, Google) are open through Funnel as well, but under a different secret (D43): Google and
+iCloud subscriptions fetch the feed from their own servers and cannot reach the internal port or the tailnet.
 
-| Порт | Пути | Защита |
+| Port | Paths | Protection |
 |---|---|---|
-| публичный (Funnel) | `/app/*` — Mini App, `/hseapp/callback`, `/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics` и `optional.ics` | Mini App: проверка `initData`, пускаем только свой Telegram id. Callback: `state` из PKCE. Ленты: секрет в пути; `tablo.ics` здесь нет |
-| внутренний | `/api/*`, `/calendar/<CALENDAR_SECRET>/main.ics`, `optional.ics`, `tablo.ics` | Bearer-токен; у ленты — секрет в пути, потому что календари не умеют заголовки |
+| public (Funnel) | `/app/*` (the Mini App), `/hseapp/callback`, `/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics` and `optional.ics` | Mini App: an `initData` check, only the owner's Telegram id is let in. Callback: the PKCE `state`. Feeds: the secret in the path; no `tablo.ics` here |
+| internal | `/api/*`, `/calendar/<CALENDAR_SECRET>/main.ics`, `optional.ics`, `tablo.ics` | a Bearer token; the feeds use a secret in the path because calendars cannot send headers |
 
-Секреты разные: утёкшую ссылку своего календаря меняют, не трогая Tablo. Без `CALENDAR_PUBLIC_SECRET` лент на публичном порту нет, совпадать с `CALENDAR_SECRET` он не может.
+The secrets differ: a leaked link of one's own calendar is replaced without touching Tablo. Without
+`CALENDAR_PUBLIC_SECRET` the public port has no feeds, and it may not equal `CALENDAR_SECRET`.
 
-### 8.2 API для Tablo и HA (внутренний)
+### 8.2 API for Tablo and HA (internal)
 
-Формат ответов там, где это возможно, повторяет текущий API Tablo (§8). Тогда переделок на стороне Tablo и HA меньше.
+Where possible the answers repeat the format of Tablo's current API (§8), so that Tablo and HA need fewer changes.
 
-| Метод и путь | Что отдаёт |
+| Method and path | What it serves |
 |---|---|
-| `GET /calendar/<секрет>/main.ics`, `optional.ics`, `tablo.ics` | ленты (§6.5) |
-| `GET /api/deadlines` | итоговый список после склейки и скрытия, в порядке экрана (§5.6), формат как сейчас в Tablo |
-| `GET /api/news` | живые новости: `id`, `source`, `study`, `posted_at`, `full`, `short`, `importance` (заменённые не отдаются) |
-| `GET /api/grades` | новые оценки за окно: `key`, `label`, `value`, `bonus`, `seen_at`, новые сверху |
-| `GET /api/status` | по каждому источнику: `ok_at`, `error`, плюс `hseapp.login_needed`, расход LLM за сегодня и лимит |
+| `GET /calendar/<secret>/main.ics`, `optional.ics`, `tablo.ics` | the feeds (§6.5) |
+| `GET /api/deadlines` | the final list after merging and hiding, in screen order (§5.6), in Tablo's current format |
+| `GET /api/news` | live news: `id`, `source`, `study`, `posted_at`, `full`, `short`, `importance` (replaced items are not served) |
+| `GET /api/grades` | new grades within the window: `key`, `label`, `value`, `bonus`, `seen_at`, newest first |
+| `GET /api/status` | per source: `ok_at`, `error`, plus `hseapp.login_needed`, today's LLM spending and the limit |
 
-API отдаёт полное текущее состояние, курсоров нет (р. 10). Эндпоинта «обновить сейчас» нет (р. 5).
+The API serves the full current state, with no cursors (D10). There is no "refresh now" endpoint (D5).
 
-**Уточнения этапа 10:**
+**Stage 10 details:**
 
-- `GET /api/news` — `{"items": [{id, source, study, posted_at, full, short, importance}], "ttl_hours"}`: живые новости в порядке ранга, ровно те, что в закрепе «Новостей» (`News.live`), без заменённых, снятых источником и скрытых кнопкой. `id` — число, стабильное; `source` — `tg` или `mail`; `posted_at` — местное время без зоны (§9). Это уровень Б §11.4 без `deadlines[]` и `replaced`: дедлайны из новостей приходят уже склеенными в `/api/deadlines`, а заменённые не отдаются. Длины `full` и `short` пока проверены по символам, не по шрифту (§2.1).
-- `GET /api/status` требует Bearer, как весь `/api/*` (в Tablo статус был открыт). Ключи — по источникам: `telegram`, `batches` (разбор пачек: свежесть новостей), `ruz`, `hseapp` (с `login_needed`), `mail`, `sheets`, `summaries`, `grades`, `images`, плюс `llm` (`spent_usd`, `limit_usd`, `raised_usd`, `level`). Отдельного ключа `news`, как в Tablo, нет: его роль у `batches`.
-- Маршрутов записи (`POST/PATCH/DELETE /api/deadlines`, как в Tablo) нет: свои и скрытые ведутся в Mini App и кнопками форума. С HA infomaster не связан (р. 34): списков дел нет, событий `tablo_changed` нет, внутренний порт на хост не публикуется. Его читает только Tablo по имени сервиса в сети `infomaster`.
-- **Перенос из Tablo** — команда `python -m infomaster import-tablo --tablo-db <tablo.db>` (`infomaster/tablo.py`), один раз при переключении: из копии базы Tablo (только чтение) свои дедлайны (кроме уже имеющихся с тем же названием, датой и списком), скрытые (по `uid`: он считается так же; `ref` у них нет, поэтому скрытие — по названию и дате, как в Tablo) и ручные записи словаря (ручная запись Mini App главнее; ответ Haiku уступает). Строки старше 30 дней от срока пропускаются. Если закреп «Дедлайнов» уже что-то показывал, скопированные свои добавляются в `kv["deadlines.shown"]`, чтобы не прийти сообщениями.
+- `GET /api/news` returns `{"items": [{id, source, study, posted_at, full, short, importance}], "ttl_hours"}`: live
+  news in rank order, exactly what the News pin shows (`News.live`), without items replaced, withdrawn by the source
+  or hidden with the button. `id` is a stable number; `source` is `tg` or `mail`; `posted_at` is local time without a
+  zone (§9). This is level B of §11.4 without `deadlines[]` and `replaced`: deadlines from news come already merged in
+  `/api/deadlines`, and replaced items are not served. The lengths of `full` and `short` are checked in characters
+  for now, not by the font (§2.1).
+- `GET /api/status` needs Bearer, like all of `/api/*` (in Tablo the status was open). Keys are per source:
+  `telegram`, `batches` (batch parsing: freshness of the news), `ruz`, `hseapp` (with `login_needed`), `mail`,
+  `sheets`, `summaries`, `grades`, `images`, plus `llm` (`spent_usd`, `limit_usd`, `raised_usd`, `level`). There is
+  no separate `news` key as in Tablo: `batches` plays its role.
+- There are no write routes (`POST/PATCH/DELETE /api/deadlines` as in Tablo): own and hidden deadlines are managed in
+  the Mini App and with the forum buttons. infomaster is not connected to HA (D34): no to-do lists, no
+  `tablo_changed` events, and the internal port is not published on the host. Only Tablo reads it, by service name
+  on the `infomaster` network.
+- **The move from Tablo** is the command `python -m infomaster import-tablo --tablo-db <tablo.db>`
+  (`infomaster/tablo.py`), run once at the switch. From a read-only copy of Tablo's database it takes own deadlines
+  (except those already present with the same title, date and list), hidden ones (by `uid`, which is computed the same
+  way; they have no `ref`, so hiding is by title and date, as in Tablo) and the manual dictionary entries (a manual
+  entry from the Mini App wins; a Haiku answer gives way). Rows more than 30 days past their due date are skipped. If
+  the Deadlines pin has already shown something, the copied own deadlines are added to `kv["deadlines.shown"]` so
+  that they do not arrive as messages.
 
-### 8.3 Форум (бот)
+### 8.3 Forum (the bot)
 
-Темы группы-форума:
+Topics of the forum group:
 
-| Тема | Что приходит |
+| Topic | What arrives |
 |---|---|
-| Расписание | новые события, переносы и отмены |
-| Дедлайны | закреп со списком (редактируется) + новые и перенесённые |
-| Новости | одно сообщение, бот его редактирует (см. ниже) |
-| Листочки | PDF с подписью, обновления ответом на старое сообщение |
-| Оценки | новые оценки |
-| Сводки | ежедневные и по команде |
-| Система | ошибки источников, «нужен вход в HSE App X», бюджет LLM |
+| Timetable | new events, moves and cancellations |
+| Deadlines | a pin with the list (edited) + new and moved deadlines |
+| News | one message that the bot edits (see below) |
+| Sheets | PDFs with a caption, updates as replies to the old message |
+| Grades | new grades |
+| Summaries | daily and on demand |
+| System | source errors, "HSE App X login needed", the LLM budget |
 
-**Сообщение «Новости»** (р. 23). Закреплённое сообщение, которое бот пересобирает после каждого разбора. Данные те же, что отдаёт `GET /api/news` для Tablo, — одна таблица `news` и одни правила (§6.6):
+**The News message** (D23). A pinned message that the bot rebuilds after every run. The data is the same that
+`GET /api/news` serves Tablo: one `news` table and the same rules (§6.6):
 
-- живые новости: не заменённые и не старше `ttl_hours` (24 ч);
-- ранг `importance + study`, при равенстве выше более новая;
-- **ограничения по месту нет**: показываются все живые новости, включая `importance = 1`, всегда текстом `full`. Экранные ограничения (высота колонки, `short`) остаются только в Tablo;
-- если текст не влезает в одно сообщение Telegram (4096 символов), бот держит несколько сообщений подряд и правит их все;
-- у каждой новости значок источника и ссылка на исходное сообщение: `t.me/<канал>/<id>` или `t.me/c/<id>/<msg>`. У писем ссылки нет, вместо неё тема письма.
+- live news: not replaced and not older than `ttl_hours` (24 h);
+- ranked by `importance + study`, the newer one higher on a tie;
+- **no space limit**: all live news is shown, `importance = 1` included, always as `full` text. Screen limits
+  (column height, `short`) stay only in Tablo;
+- if the text does not fit in one Telegram message (4096 characters), the bot keeps several messages in a row and
+  edits them all;
+- every item has a source icon and a link to the original message: `t.me/<channel>/<id>` or `t.me/c/<id>/<msg>`.
+  Letters have no link; the subject stands in its place.
 
-**Уведомления о важном.** Правка сообщения уведомления не даёт, поэтому на каждую новую новость с `importance` 4 или 5 бот присылает в тему короткое отдельное сообщение. При следующей пересборке он его удаляет: новость к этому времени уже есть в общем списке.
+**Notifications about what matters.** Editing a message does not notify, so for every new item with `importance` 4 or
+5 the bot sends a short separate message to the topic. At the next rebuild it deletes it: by then the item is in the
+common list.
 
-Каждое сообщение бота хранит ссылку на исходное. У новостей, дедлайнов и событий есть кнопка «скрыть», а скрытие работает так же, как скрытие из HA.
+Every bot message keeps a link to its original. News, deadlines and events have a hide button, and hiding works the
+same way as hiding from HA did.
 
 ### 8.4 Mini App
 
-Открывается кнопкой в боте. Переделан 22.10.2026 (р. 44): четыре вкладки внизу, у каждой одна задача, каждая вещь живёт в одном месте. Списки только показывают; изменить что-то — нажать на строку: снизу открывается карточка (что это, когда, откуда, со ссылкой на сообщение) с действиями. Переключатели — только в настройках. «+» в шапке вкладок «Дедлайны», «Расписание» и «Учёба» добавляет дедлайн, событие, оценку или листочек. Ссылки из форума (`?screen=…`, `start_param`) открывают нужную вкладку или экран.
+Opened with a button in the bot. Reworked on 22.10.2026 (D44): four tabs at the bottom, each with one job, and every
+thing lives in one place. Lists only show; to change something, tap a row: a card slides up from the bottom (what
+it is, when, where from, with a link to the message) with the actions. Switches live only in the settings. **+** in
+the header of the Deadlines, Timetable and Study tabs adds a deadline, an event, a grade or a sheet. Links from the
+forum (`?screen=…`, `start_param`) open the right tab or screen.
 
-- **Дедлайны:** общий список после склейки по группам (просрочены, сегодня, завтра, на неделе, позже), откуда каждый (чат или письмо со ссылкой на сообщение, HSE App X, РУЗ, свой). Свой — изменить, удалить; чужой — изменить (станет своим, чужой скроется) или скрыть. Скрытые — отдельным экраном с «вернуть».
-- **Расписание:** то, что видят ленты (`Schedule.agenda`), на четыре недели вперёд по дням: пары РУЗ с правками, события из чатов и почты, свои. Карточка пары: перенести или отменить (своя правка), «правка неверна — как в РУЗ» для правки чата, «применить правку» для отключённой. Карточка события: изменить, обязательное или по желанию, убрать (своё — удалить). Убранные события — отдельным экраном.
-- **Учёба:** «Оценки» — по таблицам и свои по предметам, нажатие на оценку — изменить (правка из таблицы держится, пока таблица сама не поменяет оценку) или удалить свою; «Листочки» — карточка с кратким содержанием, правка предмета, номера, срока и описания (подпись сообщения в теме «Листочки» правится), «это новая версия другого» (р. 14), свой листочек — загрузить PDF и удалить.
-- **Настройки:** наверху «Требует внимания» — всё, что сломалось (твинк, почта, РУЗ, HSE App X, таблицы оценок, картинки, лимит LLM, ленты iCal), число горит на значке вкладки. Источники: твинк и чаты (вход и выход твинка, список чатов, настройки чата и важные люди), почта, РУЗ, HSE App X (вход), таблицы оценок. Таблица оценок — свой экран: название, курс перед оценками, проверка (когда прочитана, по какому ФИО, сколько оценок, «прочитать сейчас»), вкладки с разметкой: какая колонка какая работа, что в шапке, число в своей строке и оценка 0–10, все колонки своей строки; разметку вкладки можно поправить (своя стоит поверх ответа Haiku) и вернуть Haiku. Обработка: пачки и новости, ежедневная сводка (время, чаты), PDF целиком, картинки в день, словарь предметов. **Расход LLM** (§7, р. 40) — единственное место, где виден расход: три карточки периодов, график за 30 дней с линией лимита, задачи и чаты периода, лимит и «поднять на сегодня», цены моделей. Язык Mini App и форума. В `.env` только секреты.
+- **Deadlines:** the common list after the merge, in groups (overdue, today, tomorrow, this week, later), each with
+  its origin (a chat or a letter with a link to the message, HSE App X, RUZ, own). An own one can be edited or
+  deleted; someone else's can be edited (it becomes own, the original is hidden) or hidden. Hidden ones are on a
+  separate screen with **Restore**.
+- **Timetable:** what the feeds show (`Schedule.agenda`), four weeks ahead by day: RUZ classes with changes, events
+  from chats and mail, own ones. A class card: move or cancel (an own change), "the change is wrong, as in RUZ" for
+  a chat's change, "apply the change" for a disabled one. An event card: edit, required or optional, remove (delete
+  for an own one). Removed events are on a separate screen.
+- **Study:** "Grades", by sheet and own ones by course; tapping a grade edits it (a correction of a sheet's grade
+  holds until the sheet itself changes the grade) or deletes an own one. "Sheets": a card with the summary, editing
+  the course, number, due date and description (the message caption in the Sheets topic is edited), "this is a new
+  version of another one" (D14), and an own sheet can be uploaded as a PDF and deleted.
+- **Settings:** at the top, **Needs attention** lists everything broken (the twin, mail, RUZ, HSE App X, grade
+  sheets, images, the LLM limit, the iCal feeds), and the count shows on the tab's badge. Sources: the twin and chats
+  (the twin's login and logout, the chat list, chat settings and important people), mail, RUZ, HSE App X (login),
+  grade sheets. A grade sheet has its own screen: the name, the course before the grades, a check (when it was read,
+  by which name, how many grades, "read now"), and the tabs with their layout: which column is which task, what the
+  header says, the number in the own row and the 0–10 grade, all columns of the own row; a tab's layout can be
+  corrected (the own one overrides Haiku's answer) and handed back to Haiku. Processing: batches and news, the daily
+  summary (time, chats), whole PDFs, images per day, the course dictionary. **LLM spending** (§7, D40) is the only
+  place spending is visible: three period cards, a 30-day chart with the limit line, the period's tasks and chats,
+  the limit and a raise for today, model prices. The languages of the Mini App and the forum. `.env` holds only
+  secrets.
 
-## 9. Хранилище (SQLite)
+## 9. Storage (SQLite)
 
-Время — локальное по Москве без зоны, кроме `llm_runs.at` (UTC), как в Tablo (§9).
+Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Tablo (§9).
 
-| Таблица | Назначение |
+| Table | Purpose |
 |---|---|
-| `kv` | состояние сборщиков, токены HSE App X, кэши разметки и меток |
-| `settings`, `chat_settings` | общие настройки и настройки чатов |
-| `chats` | все чаты аккаунта: id, название, тип, последний прочитанный id |
-| `messages` | сырые сообщения и письма: источник, чат, автор, время, текст, файлы, `parsed_at`, `summarized_at` |
-| `files` | скачанные PDF и картинки: сообщение, вид, хэш, путь, число страниц и текст первой страницы PDF, прочитанное на картинке, ошибка |
-| `subjects` | словарь (§2.2) |
-| `news` | разобранные новости, `replaced_by` |
-| `deadlines` | дедлайны из внешних источников, `moved_by` |
-| `own_deadlines`, `hidden_deadlines` | свои и скрытые (§5.4) |
-| `events` | события из чатов (консультации, мероприятия) и правки пар из РУЗ; свои события и правки — источник `own` (р. 44) |
-| `classes` | пары из РУЗ |
-| `sheets` | листочки: сообщение, хэш файла, предмет, номер, срок, текст, краткое содержание, предыдущая версия, id сообщения бота |
-| `grade_sheets`, `grade_items`, `grade_events` | оценки (§3.6); в `kv` — вид каждой вкладки после чтения и своя разметка вкладок (р. 44) |
-| `own_grades` | свои оценки и правки оценок из таблиц (р. 44) |
-| `bot_posts` | что бот опубликовал: тема, id сообщения, к чему относится (для правок и «скрыть») |
-| `llm_runs` | журнал LLM |
+| `kv` | collector state, HSE App X tokens, layout and label caches |
+| `settings`, `chat_settings` | common and per-chat settings |
+| `chats` | all chats of the account: id, title, type, last read id |
+| `messages` | raw messages and letters: source, chat, author, time, text, files, `parsed_at`, `summarized_at` |
+| `files` | downloaded PDFs and images: message, kind, hash, path, the page count and first-page text of a PDF, the reading of an image, the error |
+| `subjects` | the dictionary (§2.2) |
+| `news` | parsed news, `replaced_by` |
+| `deadlines` | deadlines from external sources, `moved_by` |
+| `own_deadlines`, `hidden_deadlines` | own and hidden ones (§5.4) |
+| `events` | events from chats (consultations, events) and changes to RUZ classes; own events and changes have the source `own` (D44) |
+| `classes` | classes from RUZ |
+| `sheets` | problem sheets: message, file hash, course, number, due date, text, summary, previous version, the bot's message id |
+| `grade_sheets`, `grade_items`, `grade_events` | grades (§3.6); `kv` holds the view of every tab after a read and the own tab layouts (D44) |
+| `own_grades` | own grades and corrections of sheet grades (D44) |
+| `bot_posts` | what the bot published: topic, message id, what it refers to (for edits and hiding) |
+| `llm_runs` | the LLM journal |
 
-## 10. Настройки и секреты
+## 10. Settings and secrets
 
-- **Настройки** хранятся в базе и редактируются в Mini App. Конфиг-файла для пользователя нет.
-- **Секреты** лежат в `.env` (в `.gitignore`), кроме тех, что появляются в процессе работы: токены HSE App X и сессия твинка хранятся в `data/`, который не коммитится.
+- **Settings** are stored in the database and edited in the Mini App. There is no config file for the user.
+- **Secrets** live in `.env` (listed in `.gitignore`), except those that appear at run time: the HSE App X tokens and
+  the twin's session are kept in `data/`, which is never committed.
 
-| Переменная | Для чего |
+| Variable | Purpose |
 |---|---|
-| `TG_API_ID`, `TG_API_HASH` | приложение Telegram для твинка (my.telegram.org) |
-| `TG_BOT_TOKEN` | бот |
-| `TG_OWNER_ID` | твой Telegram id, единственный, кого пускают Mini App и бот |
-| `TG_FORUM_ID` | группа-форум |
+| `TG_API_ID`, `TG_API_HASH` | the Telegram application for the twin (my.telegram.org) |
+| `TG_BOT_TOKEN` | the bot |
+| `TG_OWNER_ID` | the owner's Telegram id, the only one the Mini App and the bot let in |
+| `TG_FORUM_ID` | the forum group |
 | `ANTHROPIC_API_KEY` | Haiku |
 | `MAIL_USER`, `MAIL_PASSWORD` | IMAP |
-| `RUZ_ICAL_URL` | лента РУЗ |
-| `API_TOKEN` | Bearer для внутреннего API |
-| `CALENDAR_SECRET` | секрет в пути лент на внутреннем порту |
-| `CALENDAR_PUBLIC_SECRET` | другой секрет: ленты `main` и `optional` для своего календаря через Funnel (р. 43) |
-| `PUBLIC_URL` | адрес Funnel публичного порта (`https://infomaster.<tailnet>.ts.net`): кнопка Mini App, callback HSE App X |
-| `TS_AUTHKEY` | ключ личной сети Tailscale для сайдкара, нужен только при первом запуске |
-| `HTTP_PUBLIC_PORT`, `HTTP_INTERNAL_PORT` | порты внутри контейнера, по умолчанию 8080 и 8081 |
+| `RUZ_ICAL_URL` | the RUZ feed |
+| `API_TOKEN` | Bearer for the internal API |
+| `CALENDAR_SECRET` | the path secret of the feeds on the internal port |
+| `CALENDAR_PUBLIC_SECRET` | another secret: the `main` and `optional` feeds for one's own calendar through Funnel (D43) |
+| `PUBLIC_URL` | the Funnel address of the public port (`https://infomaster.<tailnet>.ts.net`): the Mini App button, the HSE App X callback |
+| `TS_AUTHKEY` | the personal tailnet's key for the sidecar, needed only on the first start |
+| `CONTAINER_DNS_1`, `CONTAINER_DNS_2` | DNS servers of the containers (`compose.yaml`) |
+| `HTTP_PUBLIC_PORT`, `HTTP_INTERNAL_PORT` | ports inside the container, 8080 and 8081 by default |
 
-**Сессия твинка** (`*.session`) даёт полный доступ к аккаунту. Она лежит только на сервере, а права на файл — только у владельца.
+**The twin's session** (`*.session`) gives full access to the account. It lives only on the server, and only the
+owner can read the file.
 
-**Чужие данные.** В модель уходят сообщения только из включённых чатов, а у чатов с фильтром `important` — только отобранные. Из таблиц оценок уходят верх вкладки (до 15 строк над своей строкой, с чужими строками: так модель сама находит шапку, §6.7) и своя строка без своего ФИО. В Tablo уходили только шапка и своя строка (§1); решили, что чужие оценки однокурсников, увиденные моделью, вреда не несут. Сырые сообщения и скачанные файлы удаляются через 14 дней (р. 29); разобранные новости, дедлайны, события и листочки остаются.
+**Other people's data.** The model gets messages only from enabled chats, and for chats with the `important` filter
+only the selected ones. From grade sheets it gets the top of the tab (up to 15 rows above the own row, other
+students' rows included, so that the model finds the header itself, §6.7) and the own row without the owner's name.
+Tablo sent only the header and the own row (§1); it was decided that classmates' grades seen by the model do no
+harm. Raw messages and downloaded files are deleted after 14 days (D29); parsed news, deadlines, events and sheets
+stay.
 
-## 11. Порядок работ
+## 11. Order of work
 
-Каждый этап даёт что-то рабочее.
+Every stage delivers something that works.
 
-1. **Скелет.** Структура проекта, настройки в SQLite, `llm/` с журналом и лимитом, бот с форумом и темой «Система», Mini App-заглушка через Funnel с проверкой `initData`.
-2. **Твинк и настройки чатов.** Вход Telethon, список чатов в Mini App, сбор сообщений из включённых чатов, правки и удаления.
-3. **Разбор пачек.** Расписание разборов, триггер «срочно», промпт и схема, новости и дедлайны из чатов в базе и в форуме.
-4. **Словарь и расписание.** Словарь с ручными правками, сбор РУЗ, события из чатов, своя лента iCal, тема «Расписание».
-5. **Дедлайны целиком.** HSE App X (вход через Mini App), почта, склейка §5.5, свои и скрытые, закреп в теме «Дедлайны».
-6. **Листочки.** PDF, первая страница, чтение в пределах лимита, версии.
-7. **Сводки.** Ежедневная и `/summary`, экран «Сводки» в Mini App.
-8. **Оценки.** Перенос §3.
-9. **Картинки.** Чтение картинок с лимитами.
-10. **API для Tablo** и переключение Tablo одним шагом (р. 35) по списку «Передать в Tablo» в [decisions.md](decisions.md).
+1. **Skeleton.** Project structure, settings in SQLite, `llm/` with the journal and the limit, the bot with the forum
+   and the System topic, a Mini App stub behind Funnel with the `initData` check.
+2. **Twin and chat settings.** The Telethon login, the chat list in the Mini App, collecting messages from enabled
+   chats, edits and deletions.
+3. **Batch parsing.** The schedule of runs, the "urgent" trigger, the prompt and the schema, news and deadlines from
+   chats in the database and in the forum.
+4. **Dictionary and timetable.** The dictionary with manual corrections, RUZ collection, events from chats, our own
+   iCal feed, the Timetable topic.
+5. **Deadlines in full.** HSE App X (login through the Mini App), mail, the §5.5 merge, own and hidden ones, the pin
+   in the Deadlines topic.
+6. **Problem sheets.** PDFs, the first page, reading within the limit, versions.
+7. **Summaries.** Daily and `/summary`, the Summaries screen in the Mini App.
+8. **Grades.** The port of §3.
+9. **Images.** Reading images with limits.
+10. **API for Tablo** and the one-step switch of Tablo (D35) following "Handed over to Tablo" in
+    [decisions.md](decisions.md).
 
-Этап 10 можно сдвинуть раньше по частям. Например, ленту iCal можно подключить к Tablo сразу после этапа 4.
+Stage 10 could be moved earlier piece by piece. For example, the iCal feed could be plugged into Tablo right after
+stage 4.
 
-## 12. Открытые вопросы
+## 12. Open questions
 
-1. **Сайдкар Tailscale рядом с Tailscale хоста.** Сеть у них одна (личная, р. 31), а сайдкар в userspace-режиме не меняет ни маршрутов, ни DNS — конфликта не ждём. Проверить при развёртывании: сайдкар вошёл, Funnel отвечает, у хоста и AmneziaWG ничего не поменялось.
+1. **The Tailscale sidecar next to the host's Tailscale.** They share one tailnet (a personal one, D31), and the
+   sidecar in userspace mode changes neither routes nor DNS, so no conflict is expected. To check at deployment: the
+   sidecar has joined, Funnel answers, and nothing changed for the host and AmneziaWG.
