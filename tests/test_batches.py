@@ -514,12 +514,14 @@ async def test_course_dictionary_in_the_prompt(batches):
     add(batches, 1, "ДЗ 5 по матану до четверга")
     batches.llm.answers = [{"items": []}, {"items": []}]
     await parse_chat(batches)
-    assert "Course dictionary:\n(empty)\n" in batches.llm.prompts[0]
+    header = 'Course dictionary (abbreviation "title": the names it goes by):\n'
+    assert header + "(empty)\n" in batches.llm.prompts[0]
 
     batches.subjects.set_manual("Алгебра", "Algebra", "Alg")
+    batches.subjects.set_manual("Линал", "Algebra", "Alg")
     add(batches, 2, "КР по алгебре 7.11")
     await parse_chat(batches)
-    assert 'Course dictionary:\n- "Алгебра" → Alg\n' in batches.llm.prompts[1]
+    assert header + '- Alg "Algebra": "Алгебра", "Линал"\n' in batches.llm.prompts[1]
 
 
 async def test_a_chat_moves_and_cancels_a_midterm(timetable, now):

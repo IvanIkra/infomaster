@@ -10,7 +10,8 @@ What goes to the model is what the batches would give it (§10): readable messag
 filter only the important ones and the replies to them. An image the batches have read (processing/images.py) comes
 with what was read on it; a summary never reads an image itself. A period that fits one call is summarized at once; a
 longer one is first put into a digest per day (a day too long for one call takes several), and the summary is made
-from the digests. Each point links to the message that shows it best.
+from the digests. Each point links to the message that shows it best. The model sees the whole course dictionary
+(processing/subjects.py), so a course is named by its dictionary title whatever the chat calls it («ВвП», «матан»).
 """
 
 import datetime as dt
@@ -25,6 +26,7 @@ from ..i18n import Phrase
 from ..llm.client import Haiku
 from ..settings import ChatSettings
 from .batches import IMAGE_LIMIT, KINDS, image_size, important, readable, replies_to_important
+from .subjects import Subjects, dictionary_lines
 
 MAX_DAYS = 7              # D17
 MAX_TOKENS = 4_000
@@ -120,7 +122,8 @@ SYSTEM = f"""\
 You summarize a Telegram chat or channel for a university student (HSE University, Moscow, first year, Software \
 Engineering) who has not read it. The summary is read in Telegram on a phone.
 
-Input: the chat's name, whether it is a study chat, the period and its messages, mostly in Russian. Each message has \
+Input: the chat's name, whether it is a study chat, the course dictionary (each course with its abbreviation, its \
+English title and the names it goes by), the period and its messages, mostly in Russian. Each message has \
 its id, the sender, the time and its context: a reply, a forward, files, a pin. "listed person" marks a sender the \
 student follows (the group head, a teacher): such messages are usually official. An image comes as another model \
 read it: what it shows and the text on it.
@@ -131,8 +134,9 @@ make one point. Small talk, jokes, stickers, thanks and greetings get no point; 
 happened gets no points at all.
 
 Every point:
-- text: 1-2 sentences in {{language}}, plain and specific: dates, times, rooms, courses and tasks as the messages \
-give them; who said it when it matters (a teacher, the group head). Relative dates ("завтра", "в пятницу") become \
+- text: 1-2 sentences in {{language}}, plain and specific: dates, times, rooms and tasks as the messages give them; \
+a course by its dictionary title whatever name the messages use (a short form, an abbreviation, a nickname); who said \
+it when it matters (a teacher, the group head). Relative dates ("завтра", "в пятницу") become \
 dates counted from the message time: "{{dates}}". No emoji, no links, no hashtags, no Markdown.
 - msg_id: the message that shows the point best; the point links to it.
 
@@ -225,8 +229,9 @@ def check(answer: dict, msg_ids: set[int], limit: int) -> list[dict]:
 
 class Summaries:
     def __init__(self, chat_settings: ChatSettings, inbox: Inbox, llm: Haiku,
-                 now: Callable[[], dt.datetime] = clock.now_utc):
+                 now: Callable[[], dt.datetime] = clock.now_utc, subjects: Subjects | None = None):
         self.chat_settings, self.inbox, self.llm, self.now = chat_settings, inbox, llm, now
+        self.subjects = subjects  # the course dictionary for the prompt; without it, courses as the chat names them
         self.files: Files | None = None  # the readings of images; without it images are files by name
 
     def daily_chats(self) -> list[int]:
@@ -314,9 +319,12 @@ class Summaries:
 
     def _header(self, collected: Collected, task: str) -> list[str]:
         chat = collected.chat
+        courses = dictionary_lines(self.subjects.all()) if self.subjects is not None else []
         return [f"Today: {self.now().astimezone(clock.TZ):%a %Y-%m-%d %H:%M}",
                 f"Chat: \"{chat['title']}\" ({KINDS.get(chat['kind'], chat['kind'])}, "
                 f"{'study' if chat['study'] else 'not a study chat'})",
+                "Course dictionary (abbreviation \"title\": the names it goes by):",
+                *(courses or ["(empty)"]),
                 f"Period: {collected.start:%a %Y-%m-%d %H:%M} — {collected.end:%a %Y-%m-%d %H:%M}",
                 task]
 

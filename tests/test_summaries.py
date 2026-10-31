@@ -13,6 +13,7 @@ from infomaster.llm.client import BadAnswer, LLMError
 from infomaster.outputs import summaries as topic_module
 from infomaster.outputs.summaries import BUTTON, COMMAND, DONE, LIMIT_SPENT, SummaryTopic, forwarded_chat, split_args
 from infomaster.processing import summaries as summaries_module
+from infomaster.processing.subjects import Subjects
 from infomaster.processing.summaries import PeriodError, Summaries, parse_period, span
 from infomaster.settings import ChatSettings, Settings, SettingsError
 
@@ -175,6 +176,19 @@ async def test_summary_in_one_call(summaries, inbox, now):
     assert 'Chat: "Матан 2026" (group, study)' in prompt and "Task: the summary of the period." in prompt
     assert "- 1 · Староста · listed person · Tue 2026-10-20 11:00 · pinned\n  Завтрашний семинар" in prompt
     assert "- 2 · Староста · Tue 2026-10-20 11:30 · reply to 1\n  а во сколько?" in prompt
+    assert 'Course dictionary (abbreviation "title": the names it goes by):\n(empty)\n' in prompt
+
+
+async def test_the_dictionary_in_the_prompt(store, chat_settings, inbox, now, namer):
+    subjects = Subjects(store, namer)
+    subjects.set_manual("Математический анализ", "Calculus", "Calc")
+    subjects.set_manual("Матан", "Calculus", "Calc")
+    summaries = Summaries(chat_settings, inbox, FakeLLM(), now=now, subjects=subjects)
+    add(inbox, now, 1, "Семинар по матану переносится на четверг")
+    await summaries.summarize(summaries.collect(CHAT, None), asked=False, lang="en")
+    [call] = summaries.llm.calls
+    assert '- Calc "Calculus": "Матан", "Математический анализ"\n' in call["prompt"]
+    assert "a course by its dictionary title" in call["system"]
 
 
 async def test_a_long_period_goes_by_days(summaries, inbox, now, monkeypatch):

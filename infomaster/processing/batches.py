@@ -28,8 +28,9 @@ Events (§6.5) are consultations, talks, meetings: things to attend that are not
 upcoming chat events (e...) and, in a study chat, the RUZ classes of the next weeks (c...), so it can point a move or
 a cancellation at one of them: a chat event gets a new version with the same UID, a class gets a correction (§6.5,
 D28). A class counts by the later of its RUZ time and its correction's, so a moved class stays listed until the
-move is past. The model also sees the course dictionary (§6.1, §6.2), so it gives the courses as the dictionary names
-them and the dictionary's abbreviations in labels and titles. Course names of the saved deadlines and events go to
+move is past. The model also sees the whole course dictionary (§6.1, §6.2): each course with its title, its abbreviation
+and every name it goes by, so it knows a course under any name («ВвП», «матан»), gives it as the dictionary names it
+and uses the dictionary's abbreviations in labels, titles and news. Course names of the saved deadlines and events go to
 the dictionary; only names it does not know yet cost a call. After every run the Midterms follow the corrections of
 their classes (§4.4).
 
@@ -66,7 +67,7 @@ from .images import Images
 from .news import News
 from .schedule import Schedule, local, moved_back
 from .sheets import Sheets
-from .subjects import TITLE_CHARS
+from .subjects import TITLE_CHARS, Subject, dictionary_lines
 
 log = logging.getLogger(__name__)
 
@@ -139,7 +140,7 @@ class Context:
     deadlines: list[dict]
     events: list[dict] = field(default_factory=list)
     classes: list[dict] = field(default_factory=list)  # a study chat only: others do not move classes
-    courses: dict[str, str] = field(default_factory=dict)  # the dictionary: course name -> abbr
+    courses: dict[str, Subject] = field(default_factory=dict)  # the dictionary: course name -> entry
 
 
 # --- the prompt ---------------------------------------------------------------------
@@ -152,7 +153,8 @@ and to a news list in Telegram; both are read in passing.
 Input: new messages of one chat, mostly in Russian, with the chat's name and whether it is a study chat. Each message \
 has its id, the sender, the time and its context: a reply, a forward, an album, files, a pin. "listed person" marks \
 a sender the student follows (the group head, a teacher): such messages and pinned ones are usually official.
-Also given: the course dictionary (course names and their abbreviations), the current news items (ids n...), the \
+Also given: the course dictionary (each course with its abbreviation, its English title and the names it goes \
+by), the current news items (ids n...), the \
 upcoming deadlines (ids d...) and events (ids e...) already known from all chats, and for a study chat the classes of \
 the timetable in the next weeks (ids c...).
 
@@ -172,6 +174,7 @@ Every item:
 
 Style of full and short:
 - Telegraphic English, no articles, digits instead of words, the essential fact first.
+- A course by its dictionary abbreviation, whatever name the message uses.
 - Abbreviations: HW, DM, Calc, Alg, Prog, SE, Eng, Hist, KR (контрольная), NIS (научно-исследовательский семинар), \
 Course survey (СОП), Mon...Sun, Oct 21, 18:10. Symbols: → · &.
 - Never name the chat or the sender: the source is shown separately. No emoji, no links, no hashtags.
@@ -197,9 +200,10 @@ replaces its earlier news itself.
 
 Deadlines:
 - Only work with a date: homework, tests (KR), projects, sign-ups, choices, forms. Not lectures, not announcements.
-- course: the course name exactly as in the course dictionary when the course is there; otherwise its name in Russian \
-as the chat or the message gives it, in full if you know it (матан → Математический анализ); "" if the task belongs \
-to no course.
+- course: when the course is in the dictionary, one of its names exactly as listed, the first one when unsure. Know \
+a course under any name: a short form or an abbreviation (ВвП, матан, линал), a translation, its English title or \
+abbreviation. Otherwise its name in Russian as the chat or the message gives it, in full if you know it (матан → \
+Математический анализ); "" if the task belongs to no course.
 - label: "<abbr> <work>" with the dictionary abbreviation ("Calc KR-1", "DM HW 3"); only for a course that is not in \
 the dictionary a short English abbreviation of up to 6 letters; without a course just the work ("NIS choice", \
 "Course survey"). Within the label budget.
@@ -740,7 +744,7 @@ class Batches:
         context = Context(self.news.live(started, self.settings.get("news_ttl_hours")), self.deadlines.upcoming(today),
                           self.events.upcoming(today),
                           self.schedule.upcoming_classes(today) if settings["study"] else [],
-                          {name: subject.abbr for name, subject in self.subjects.all().items()})
+                          self.subjects.all())
         documents = self._scans(chunk)  # before the prompt: a scan that cannot be attached is not referred to
         try:
             answer = await self.llm.json("batch", SYSTEM, self._prompt(chat, settings, chunk, context), SCHEMA,
@@ -817,8 +821,8 @@ class Batches:
                  "",
                  header,
                  "",
-                 "Course dictionary:"]
-        lines += [f'- "{name}" → {abbr}' for name, abbr in context.courses.items()] or ["(empty)"]
+                 "Course dictionary (abbreviation \"title\": the names it goes by):"]
+        lines += dictionary_lines(context.courses) or ["(empty)"]
         lines += ["", "Current news:"]
         lines += [f"- n{n['id']}: \"{n['full']}\"" for n in context.news] or ["(none)"]
         lines += ["", "Upcoming deadlines:"]

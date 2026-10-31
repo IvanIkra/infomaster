@@ -101,7 +101,7 @@ class Service:
         self.merged = DeadlineList(self.store, self.deadlines, self.hseapp_deadlines, self.subjects)
         self.deadline_topic = DeadlineTopic(self.forum, self.store, self.inbox, self.merged, env.owner_id)
         # Summaries are made from the raw messages, the daily one and /summary (§6.6).
-        summaries = Summaries(self.chat_settings, self.inbox, self.llm)
+        summaries = Summaries(self.chat_settings, self.inbox, self.llm, subjects=self.subjects)
         summaries.files = self.files  # what the batches read on images
         self.summary_topic = SummaryTopic(self.forum, self.store, self.inbox, self.chat_settings, summaries,
                                           self.settings, env.owner_id, env.forum_id)

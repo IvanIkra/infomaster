@@ -4,7 +4,7 @@ import pytest
 
 from infomaster.llm.budget import BudgetExceeded
 from infomaster.llm.client import LLMError
-from infomaster.processing.subjects import Subject, SubjectError, Subjects, clean
+from infomaster.processing.subjects import Subject, SubjectError, Subjects, clean, dictionary_lines
 
 
 @pytest.fixture
@@ -22,13 +22,22 @@ async def test_one_call_with_the_dictionary(subjects, namer):
     assert got == {"Algebra": subjects.get("Algebra")} and got["Algebra"].abbr == "Alg"
     await subjects.resolve(["Algebra", "Алгебра (рус)", "Введение в программирование"])
     assert len(namer.prompts) == 2
-    assert '- "Algebra": title "Algebra", abbr "Alg"' in namer.prompts[1]  # known names keep languages consistent
+    assert '- Alg "Algebra": "Algebra"' in namer.prompts[1]  # known names keep languages consistent
     assert '- id 0: "Алгебра"\n- id 1: "Введение в программирование"' in namer.prompts[1]
     assert namer.prompts[1].startswith("Title budget: at most 13 characters.")
     await subjects.resolve(["Алгебра", "Algebra"])
     assert len(namer.prompts) == 2  # all known: no call
     assert (subjects.title("Алгебра (рус)"), subjects.abbr("Введение в программирование")) == ("Algebra", "Prog")
     assert (subjects.title("Матан"), subjects.abbr("Матан")) == ("Матан", None)  # not named yet: as the source
+
+
+def test_dictionary_lines():
+    known = {"Введение в программирование": Subject("Intro to Prog", "Prog"), "Algebra": Subject("Algebra", "Alg"),
+             "ВвП": Subject("Intro to Prog", "Prog", manual=True), "Алгебра": Subject("Algebra", "Alg")}
+    # one line per course with every name it goes by, so a short form is seen as the same course
+    assert dictionary_lines(known) == ['- Alg "Algebra": "Algebra", "Алгебра"',
+                                       '- Prog "Intro to Prog": "Введение в программирование", "ВвП"']
+    assert dictionary_lines({}) == []
 
 
 async def test_wide_title_gets_one_retry(subjects, namer):

@@ -193,10 +193,13 @@ App (D3).
 
 Stage 4 details: the title budget is 13 characters (what Tablo's column really holds: "Intro to Prog"); Haiku's
 answer can also be deleted in the Mini App, and then the course is named again. RUZ courses pass through the
-dictionary after every poll, and the courses of deadlines and events after every batch run. The parsing model sees
-the whole dictionary (title → `abbr`, as in Tablo): a course that is in it is named as in the dictionary, and the
-deadline label and event title start with its `abbr`; the model invents its own abbreviation only for a course not in
-the dictionary. `deadlines.course` keeps the source's name; `abbr` comes from the dictionary at merge time (stage 5).
+dictionary after every poll, and the courses of deadlines and events after every batch run. The parsing model and
+the summaries see the whole dictionary, one line per course: `abbr`, `title` and every name it goes by. So a course is
+known under any name (a short form like «ВвП», a nickname, a translation): the parsing model names it as in the
+dictionary, and the deadline label and event title start with its `abbr`; it invents its own abbreviation only for a
+course not in the dictionary; a summary names a course by its `title`. Naming a new name, Haiku also sees the whole
+dictionary and gives a short form of a known course that course's `title` and `abbr`. A short form Haiku misses can
+be added in the Mini App as a manual entry with the course's `title` and `abbr`. `deadlines.course` keeps the source's name; `abbr` comes from the dictionary at merge time (stage 5).
 A Haiku error stays visible (`ruz.subjects_error`, the Mini App) while at least one of the names it failed on waits
 for a translation; a manual entry or the course disappearing from the source clears it.
 

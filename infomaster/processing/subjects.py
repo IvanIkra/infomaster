@@ -3,7 +3,9 @@
 A source names a course its own way: «Математический анализ» in HSE App X, *Calculus* in RUZ, «матан» in a chat.
 Each cleaned name gets a short English `title` (the timetable, Tablo's Classes column) and an `abbr` of up to six
 characters (the prefix of deadline labels, the key of the merge, processing/merge.py). Haiku names new courses in one
-call that also shows the whole dictionary, so the same course in Russian and in English gets the same answer (§10.1).
+call that also shows the whole dictionary, so the same course in Russian and in English, or under a short form like
+«ВвП», gets the same answer (§10.1). Every prompt that names courses (the batches, the summaries) gets the whole
+dictionary as `dictionary_lines()` gives it: one line per course with all the names it goes by.
 
 Entries set by hand in the Mini App are `manual`: Haiku never overwrites them, and deleting one lets Haiku name the
 course again. A change by hand tells `on_manual`, so the Midterm labels follow it at once, not at the next RUZ poll
@@ -67,7 +69,10 @@ Style:
 (программирование), SE (программная инженерия), Eng (английский), Hist (история), Safety (БЖД), PE (физкультура). \
 Other courses: a clear short abbreviation.
 - The same course in Russian and in English gets the same title and abbr. Courses already in the dictionary are \
-listed: reuse their title and abbr for the same course.
+listed with all their names: reuse their title and abbr for the same course.
+- A new name is often another name of a listed course: a short form or an abbreviation ("ВвП", "матан", "линал"), a \
+translation, a part or a variant of it ("Введение в программирование (практика)"). Then give exactly the title and \
+abbr of that course. A new title only for a course that is really new.
 
 Examples:
 - "Математический анализ" -> title "Calculus", abbr "Calc"
@@ -90,11 +95,20 @@ SCHEMA = {
 }
 
 
+def dictionary_lines(known: dict[str, Subject]) -> list[str]:
+    """The dictionary for a prompt: one line per course, its title and abbr, then every name it goes by."""
+    courses: dict[tuple[str, str], list[str]] = {}
+    for name, subject in known.items():
+        courses.setdefault((subject.abbr, subject.title), []).append(name)
+    return [f'- {abbr} "{title}": ' + ", ".join(f'"{name}"' for name in names)
+            for (abbr, title), names in sorted(courses.items(), key=lambda course: course[0][0].casefold())]
+
+
 def prompt(names: list[str], known: dict[str, Subject], too_long: dict[str, str] | None = None) -> str:
     lines = [f"Title budget: at most {TITLE_CHARS} characters.", ""]
     if known:
-        lines.append("Already in the dictionary:")
-        lines += [f'- "{name}": title "{s.title}", abbr "{s.abbr}"' for name, s in known.items()]
+        lines.append("Already in the dictionary (abbr \"title\": the names it goes by):")
+        lines += dictionary_lines(known)
         lines.append("")
     lines.append("New courses:")
     for i, name in enumerate(names):
