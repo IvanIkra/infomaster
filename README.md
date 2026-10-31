@@ -40,31 +40,18 @@ flowchart LR
         TG[Telegram chats<br/>via the twin]
         MAIL[University mail<br/>IMAP]
         RUZ[RUZ timetable<br/>iCal]
-        HSE[HSE App X]
+        HSE[HSE App X<br/>deadlines]
         GS[Google Sheets<br/>grades]
     end
-    subgraph infomaster
-        DB[(SQLite)]
-        LLM[Batch processing<br/>Claude Haiku]
-        MERGE[Course dictionary,<br/>deadline merge]
-    end
+    CORE[<b>infomaster</b><br/>collectors → SQLite<br/>→ Claude Haiku parsing<br/>→ dictionary and merge]
     subgraph Outputs
         FORUM[Telegram forum<br/>topics and pins]
-        APP[Mini App]
+        APP[Telegram Mini App]
         ICS[iCal feeds]
         API[Read-only API]
     end
-    TG --> DB
-    MAIL --> DB
-    DB --> LLM --> DB
-    RUZ --> MERGE
-    HSE --> MERGE
-    GS --> LLM
-    DB --> MERGE
-    MERGE --> FORUM
-    MERGE --> APP
-    MERGE --> ICS
-    MERGE --> API
+    TG & MAIL & RUZ & HSE & GS --> CORE
+    CORE --> FORUM & APP & ICS & API
 ```
 
 A single asyncio process runs the collectors, the processing pipeline and two HTTP servers:
