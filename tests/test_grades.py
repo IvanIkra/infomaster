@@ -217,6 +217,16 @@ def test_the_newest_event_of_a_work_is_given(grades, now):
     assert [(x["label"], x["value"]) for x in grades.new()] == [("DM HW 1", 7)]
 
 
+def test_a_work_that_leaves_its_sheet_leaves_the_new_grades(grades, now):
+    """A layout that took a test's sum for a work, then dropped it: the sum stood next to the grade."""
+    grades.record("abc123", None, [])
+    now.moment += dt.timedelta(hours=1)
+    grades.record("abc123", None, [item("sum", "Calc Test 1", 1.65), item("grade", "Calc Test 1", 6.8, position=1)])
+    now.moment += dt.timedelta(hours=1)
+    grades.record("abc123", None, [item("grade", "Calc Test 1", 6.8)])
+    assert [(x["key"], x["value"]) for x in grades.new()] == [("grade", 6.8)]
+
+
 async def test_a_moved_column_is_no_new_grade(grades, now):
     """A column inserted before the quizzes shifts their letters: Tablo would post them again."""
     await grades.apply(sheet())
@@ -225,6 +235,9 @@ async def test_a_moved_column_is_no_new_grade(grades, now):
     assert grades.new() == []
     assert [i["label"] for i in grades.items("abc123")] == ["DM HW 1A", "DM Quiz 1"]
     await grades.apply(sheet(inserted=True, quiz=9))
+    assert [(x["label"], x["value"]) for x in grades.new()] == [("DM Quiz 1", 9)]
+    now.moment += dt.timedelta(hours=1)
+    await grades.apply(sheet(inserted=False, quiz=9))  # moved back: the new grade goes along, not off the list
     assert [(x["label"], x["value"]) for x in grades.new()] == [("DM Quiz 1", 9)]
 
 

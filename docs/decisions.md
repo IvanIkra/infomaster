@@ -148,6 +148,11 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
     sheet is a PDF from the Mini App (up to 20 MB, "chat" −1) that goes to the forum like a sheet from a chat and is
     deleted together with its message. Only own sheets can be deleted.
   - **Deadlines** in the Mini App show the chat or letter they came from, with a link to the message.
+- **D45. A letter or a chat moves HSE App X's date, 31.10.2026.** This changes §5.5, where the same work on different
+  dates stayed twice. A deadline of HSE App X leaves the list when mail or a chat has the same work (§5.5's rule) on
+  another date at most 14 days away: the letter's date stands. It is the reason the 14-day window of completed work
+  exists: extensions are announced in letters and chats, while HSE App X keeps the first date. RUZ and own deadlines
+  do not move it.
 
 ## Open questions
 

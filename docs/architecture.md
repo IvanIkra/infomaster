@@ -248,7 +248,8 @@ for a translation; a manual entry or the course disappearing from the source cle
 
 - **Sources in order of reliability:** `hseapp` → `ical` (midterms) → `mail` → `tg` (chats, channels, PDFs) →
   `ha` (own).
-- **Merging and dropping completed and hidden ones** follows the algorithm of §5.5 unchanged. **Picking for the
+- **Merging and dropping completed and hidden ones** follows the algorithm of §5.5, plus D45: a letter or a chat
+  moves HSE App X's date. **Picking for the
   screen** follows §5.6.
 - **Own and hidden** (`own_deadlines`, `hidden_deadlines`) live here and are managed in the Mini App and with the
   forum buttons; HA has no to-do lists any more (D34).

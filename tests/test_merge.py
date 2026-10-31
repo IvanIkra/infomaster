@@ -6,7 +6,7 @@ import hashlib
 import pytest
 
 from infomaster.processing import merge
-from infomaster.processing.merge import drop_done, drop_hidden, merge_deadlines, visible
+from infomaster.processing.merge import drop_done, drop_hidden, drop_moved, merge_deadlines, visible
 from infomaster.processing.todo import Deadline, uid
 
 D = dt.date
@@ -40,6 +40,19 @@ def test_completed_never_hides_hseapp_or_own_items():
     item = dl("DM HW 3", D(2026, 10, 15), "hseapp", course="DM")
     own = Deadline("DM HW 3", D(2026, 10, 15), "study", "ha", key="ha-1")
     assert drop_done((item, own), (item,)) == (item, own)
+
+
+def test_a_letter_or_a_chat_moves_the_date_of_hseapp():
+    app = dl("Safety HW 3", D(2026, 11, 16), "hseapp")  # the app keeps the first date
+    mail = dl("Safety HW 3", D(2026, 11, 20), "mail", course="Safety")  # the letter carries the new one
+    tg = dl("DM HW 3 late", D(2026, 10, 18), "tg", course="DM")
+    kept = (dl("Calc HW 3", D(2026, 11, 16), "hseapp", course="Calc"),  # another course
+            dl("DM HW 3", D(2026, 11, 2), "hseapp", course="DM"),  # more than 14 days apart
+            dl("Safety HW 3", D(2026, 11, 20), "ical"))  # RUZ does not move it
+    assert drop_moved((app, mail, *kept)) == (mail, *kept)
+    assert drop_moved((dl("DM HW 3", D(2026, 10, 15), "hseapp", course="DM"), tg)) == (tg,)
+    own = Deadline("Safety HW 3", D(2026, 11, 20), "study", "ha", key="ha-1")
+    assert drop_moved((app, own)) == (app, own)  # the owner's own is no letter
 
 
 def test_merge_still_needs_the_same_date():
@@ -149,6 +162,12 @@ def test_sources_in_their_order(named):
                                  "source": "ha", "overdue": False}
     assert merged.items()[1]["uid"] == uid(final[0]) and merged.find(uid(final[0])) == final[0]
     assert merged.find("tg-0000000000") is None
+
+
+def test_the_letters_date_stands_for_hseapps(named):
+    hseapp(named, items=[("h3", "Safety HW 3", "2026-11-16", None)])
+    letter = add(named, "Safety HW 3", "2026-11-20", "mail", course="Безопасность жизнедеятельности")
+    assert [(d.source, d.due.isoformat(), d.ref) for d in named.all()] == [("mail", "2026-11-20", f"dl:{letter}")]
 
 
 def test_course_without_the_dictionary_is_the_first_word(merged):

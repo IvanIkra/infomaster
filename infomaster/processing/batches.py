@@ -164,7 +164,8 @@ and the text on it; treat that text as part of the message.
 
 Output: items. One item is one piece of news: one message, or several that belong together (an album, a question \
 and the answer that settles it, an announcement and its correction). Small talk, thanks, jokes, stickers, open \
-questions and anything with no fact of its own get no item at all: most messages of a group chat get none.
+questions and anything with no fact of its own get no item at all: most messages of a group chat get none. A message \
+that lists several things may give an item for each, but never two items about the same thing.
 Every item:
 - msg_ids: ids of its messages, the one that tells the news first;
 - news: full (at most 2 lines of the column), short (1 line), importance 1-5, replaces;
@@ -766,9 +767,13 @@ class Batches:
 
     async def _retry(self, chat: dict, settings: dict, chunk: list[dict], context: Context,
                      items: list[dict]) -> list[dict]:
-        """One more call for the items that do not fit, with the reasons (§6.4); on failure the first answer stays."""
+        """One more call for the messages of the items that do not fit, with the reasons (§6.4); on failure the first
+        answer stays. The new answer stands for every item of those messages: a message may give several items, and
+        the new ones need not come in the old order or number, so an old item kept beside them would be told twice."""
         notes = {item["msg_ids"][0]: "; ".join(reasons) for item in items if (reasons := too_long(item))}
         again_ids = {i for item in items if too_long(item) for i in item["msg_ids"]}
+        while grown := {i for item in items if again_ids & set(item["msg_ids"]) for i in item["msg_ids"]} - again_ids:
+            again_ids |= grown  # an item that shares a message with them is answered anew too
         again = [m for m in chunk if m["msg_id"] in again_ids]
         documents = self._scans(again)
         try:
@@ -778,14 +783,15 @@ class Batches:
             log.info("the retry for length failed, the first answer stays: %s", e)
             return items
         retried = check(answer, again_ids, _pdfs(again))
+        if not retried:
+            return items
         result = []
         for item in items:
-            if too_long(item):
-                twin = next((r for r in retried if set(r["msg_ids"]) & set(item["msg_ids"])), None)
-                if twin is not None:
-                    retried.remove(twin)
-                    item = twin
-            result.append(item)
+            if again_ids & set(item["msg_ids"]):
+                result += retried  # in place of the first of them
+                retried = []
+            else:
+                result.append(item)
         return result
 
     def _skip(self, chat: dict, message: dict, error: str) -> None:

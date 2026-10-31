@@ -152,6 +152,24 @@ async def test_retry_for_length(batches):
     assert batches.news.live(batches.now(), 24)[0]["full"] == "Calc HW 5 due Thu Oct 22"
 
 
+async def test_retry_answers_a_message_anew(batches):
+    """A digest message gives several items; the retry may give them in another order: none is told twice."""
+    add(batches, 1, "Дедлайны: матан, история, экзамен по ИИ")
+    add(batches, 2, "Встреча в 18:30")
+    digest = "Deadlines: Calc add-list Nov 28, SE HW Nov 23, Safety HW 3 Nov 20, Hist tests Nov 4"
+    batches.llm.answers = [
+        {"items": [item([1], full=digest), item([1], full="Hist tests topics 1&2 due Nov 4"),
+                   item([1], full="AI-literacy exam, details in post"), item([2], full="Meeting 18:30")]},
+        {"items": [item([1], full="Hist tests topics 1/2 in LMS Nov 4"), item([1], full="Calc add-list due Nov 28"),
+                   item([1], full="AI-literacy exam, details in post")]},
+    ]
+    await parse_chat(batches)
+    assert "- 2 ·" not in batches.llm.prompts[1]  # only the message that did not fit is asked again
+    assert sorted(n["full"] for n in batches.news.live(batches.now(), 24)) == [
+        "AI-literacy exam, details in post", "Calc add-list due Nov 28", "Hist tests topics 1/2 in LMS Nov 4",
+        "Meeting 18:30"]
+
+
 async def test_retry_failure_keeps_answer(batches):
     add(batches, 1, "ДЗ 5 до 22.10")
     batches.llm.answers = [{"items": [item([1], full="x" * 70, short="Calc HW 5 → Oct 22")]}, LLMError("down")]

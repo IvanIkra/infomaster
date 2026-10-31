@@ -19,8 +19,8 @@ in the same read); a work listed twice by the model counts once; a tab with many
 (TOKENS_PER_WORK), and a tab the model could not answer for is told in the status rather than skipped silently; a
 sheet removed in the settings, or a new name, drops its grades, so the next read is a baseline again.
 
-The «Оценки» topic posts the events (outputs/grades.py); the API gives the newest event of each work within
-grades_window_days, newest first (Tablo's §3.7).
+The «Оценки» topic posts the events (outputs/grades.py); the API gives the newest event of each work still on
+its sheet within grades_window_days, newest first (Tablo's §3.7).
 
 The owner's hand (D44). Every read keeps a view of each tab for the Mini App: the own row's cells under their headers
 and the works laid out in them, never another student's row. The owner may lay out a tab themselves: that layout stands
@@ -289,6 +289,8 @@ class Grades:
                 if old is None and (same := shifted.get((item.tab, item.header, item.value, item.bonus))):
                     old = same.pop()
                     moved.add(old["key"])
+                    for table in ("grade_events", "own_grades"):  # its history and the owner's change go along
+                        db.execute(f"update {table} set key = ? where key = ?", (item.key, old["key"]))
                 # A zero before any real grade is a placeholder for "not graded yet" (Tablo's §3.6).
                 if item.value == 0 and not item.bonus and (old is None or old["value"] == 0):
                     continue
@@ -338,12 +340,13 @@ class Grades:
 
     def new(self) -> list[dict]:
         """The newest event of each work within the window, newest first (Tablo's §3.7); the owner's grades of the
-        window among them, a changed one in place of the sheet's."""
+        window among them, a changed one in place of the sheet's. A work no longer on its sheet is left out: a
+        column a new layout dropped (a sum next to the grade of the same test) would stand as a second grade."""
         ids = {sheet_id(s["url"]) for s in self.settings.get("grades_sheets")}
         since = self._since()
         rows = self.db.execute(
             "select * from grade_events where id in (select max(id) from grade_events where seen_at >= ? group by key) "
-            "order by seen_at desc, id desc", (since,))
+            "and key in (select key from grade_items where not gone) order by seen_at desc, id desc", (since,))
         listed = [{"key": row["key"], "label": row["label"], "value": row["value"], "bonus": row["bonus"],
                    "seen_at": row["seen_at"]} for row in rows if row["sheet_id"] in ids]
         own = [row for row in self.db.execute("select * from own_grades where created_at >= ?", (since,))

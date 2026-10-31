@@ -13,6 +13,8 @@ Tablo's rules, unchanged:
 - merge: a deadline joins unless it is the same as one kept already; one group's items are not compared together;
 - done: a deadline from RUZ, mail or the chats leaves when HSE App X has the same work completed within 14 days
   (an extension moves the date in a letter while the app keeps the old one);
+- moved (ours): for the same reason, a deadline of HSE App X leaves when mail or the chats have the same work on
+  another date within 14 days: the letter's date stands;
 - hidden: everything but the own ones leaves when it is the same as a hidden one (ours also when it comes from the
   same row as a hidden one: a rename does not bring it back);
 - shown: upcoming by date, then the overdue ones newest first for 3 days (1 for mail and the chats: they cannot tell
@@ -86,6 +88,14 @@ def drop_done(deadlines: Iterable[Deadline], done: Iterable[Deadline]) -> tuple[
         abs((d.due - x.due).days) <= DONE_WINDOW_DAYS and same_work(d, x) for x in done))
 
 
+def drop_moved(deadlines: Iterable[Deadline]) -> tuple[Deadline, ...]:
+    """Hide HSE App X's date of work that a letter or a chat gives another date: up to 14 days apart."""
+    deadlines = tuple(deadlines)
+    told = tuple(d for d in deadlines if d.source in NEWS_ORDER)
+    return tuple(d for d in deadlines if d.source != "hseapp" or not any(
+        x.due != d.due and abs((d.due - x.due).days) <= DONE_WINDOW_DAYS and same_work(d, x) for x in told))
+
+
 def hides(h: Deadline, d: Deadline) -> bool:
     """Tablo's rule, the same deadline; and ours, the same row, so a renamed one stays hidden."""
     return same(d, h) or bool(h.ref) and h.ref == d.ref
@@ -151,12 +161,13 @@ class DeadlineList:
     # --- the list ---------------------------------------------------------------------------
 
     def unhidden(self) -> tuple[Deadline, ...]:
-        """Merged and without the work done in HSE App X, the hidden ones still in."""
+        """Merged, without the work done in HSE App X and its dates moved by a letter or a chat, the hidden ones
+        still in."""
         groups, done = self.sources()
-        return drop_done(merge_deadlines(*groups), done)
+        return drop_moved(drop_done(merge_deadlines(*groups), done))
 
     def all(self) -> tuple[Deadline, ...]:
-        """The final list (Tablo's hub.deadlines()): merged, without what is done in HSE App X or hidden."""
+        """The final list (Tablo's hub.deadlines()): merged, without what is done in HSE App X, moved or hidden."""
         return drop_hidden(self.unhidden(), self.todo.hidden())
 
     def visible(self) -> list[Deadline]:
