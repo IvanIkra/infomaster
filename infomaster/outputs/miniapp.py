@@ -398,7 +398,7 @@ def _own_fields(request: web.Request, values: dict, some: bool) -> dict:
         except ValueError:
             raise bad_request(request, "the due date is a date like 2026-10-22",
                               "срок — дата вида 2026-10-22") from None
-    if not some:
+    if not some or "category" in values:
         if values.get("category") not in CATEGORIES:
             raise bad_request(request, "the list: study or personal", "список: учёба (study) или личное (personal)")
         fields["category"] = values["category"]
@@ -427,11 +427,11 @@ async def add_deadline(request: web.Request) -> web.Response:
 
 
 async def edit_deadline(request: web.Request) -> web.Response:
-    """{title?, due?}: an own one changes; one from a source is hidden and an own copy takes its place (as in HA)."""
+    """{title?, due?, category?}: an own one changes; one from a source is hidden and an own copy takes its place."""
     fields = _own_fields(request, await _json(request), some=True)
     if not fields:
-        raise web.HTTPBadRequest(text="expected {title?, due?}")
-    request.app[DEADLINES_KEY].edit(_listed(request), fields.get("title"), fields.get("due"))
+        raise web.HTTPBadRequest(text="expected {title?, due?, category?}")
+    request.app[DEADLINES_KEY].edit(_listed(request), fields.get("title"), fields.get("due"), fields.get("category"))
     return respond(request, _deadlines_state(request))
 
 

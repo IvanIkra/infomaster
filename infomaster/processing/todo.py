@@ -6,7 +6,8 @@ App and the forum buttons act the same way:
 - ticking off or deleting an own one deletes it; one from a source is hidden for good (`hidden_deadlines`), even when
   the source sends it again: that is how Haiku's mistakes go away. The row it came from is kept too, so a rename of
   that row (a Midterm named by the dictionary, an HSE App X label once Haiku answers) does not bring it back;
-- editing one from a source hides it and keeps an own copy with the new title or date; editing an own one changes it.
+- editing one from a source hides it and keeps an own copy with the new title, date or list; editing an own one
+  changes it.
 Rows 30 days past their date are removed at every change of the lists.
 
 Writing methods do not commit: call them inside `with store.db` (processing/merge.py does).
@@ -92,14 +93,15 @@ class Todo:
                 "insert or ignore into hidden_deadlines(uid, source, course, title, due, ref) values(?, ?, ?, ?, ?, ?)",
                 (uid(d), d.source, d.course, d.title, d.due.isoformat(), d.ref or None))
 
-    def edit(self, d: Deadline, title: str | None, due: dt.date | None) -> Deadline:
-        title = check(d.title if title is None else title, due or d.due, d.category)
-        due = due or d.due
+    def edit(self, d: Deadline, title: str | None, due: dt.date | None, category: str | None = None) -> Deadline:
+        due, category = due or d.due, category or d.category
+        title = check(d.title if title is None else title, due, category)
         if d.source != "ha":
             self.remove(d)
-            return self.add(title, due, d.category)
-        self.db.execute("update own_deadlines set title = ?, due = ? where id = ?", (title, due.isoformat(), own_id(d)))
-        return Deadline(title, due, d.category, "ha", key=d.key, ref=d.key)
+            return self.add(title, due, category)
+        self.db.execute("update own_deadlines set title = ?, due = ?, category = ? where id = ?",
+                        (title, due.isoformat(), category, own_id(d)))
+        return Deadline(title, due, category, "ha", key=d.key, ref=d.key)
 
     def unhide(self, hidden_uid: str) -> bool:
         """«Вернуть» in the Mini App: the source's deadline is back unless another hidden row matches it."""

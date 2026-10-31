@@ -978,15 +978,14 @@
       let category = d.category;
       return [el("h1", {className: "title"}, fresh ? L("New deadline", "Новый дедлайн") : L("Edit deadline", "Изменить дедлайн")),
         section(null, [field(L("What", "Что"), title), field(L("Due", "Срок"), due),
-          field(L("List", "Список"), fresh ? selectOf(Object.entries(CATEGORIES()), category, (value) => { category = value; })
-            : el("span", {className: "grow"}, CATEGORIES()[d.category]))],
+          field(L("List", "Список"), selectOf(Object.entries(CATEGORIES()), category, (value) => { category = value; }))],
           copy ? L("The source's deadline is hidden, your own with these values takes its place.",
             "Дедлайн источника скроется, его место займёт свой с этими данными.")
             : L("Shown in Tablo and in the «Deadlines» topic. Deleted by itself 30 days after it is due.",
               "Виден в Tablo и в теме «Дедлайны». Через 30 дней после срока удаляется сам.")),
         primary(L("Save", "Сохранить"), () => fresh
           ? submit("api/deadlines", "POST", {title: title.value, due: due.value, category})
-          : submit("api/deadlines/" + encodeURIComponent(d.uid), "PATCH", {title: title.value, due: due.value}))];
+          : submit("api/deadlines/" + encodeURIComponent(d.uid), "PATCH", {title: title.value, due: due.value, category}))];
     }
 
     // --- Timetable ------------------------------------------------------------------------------------

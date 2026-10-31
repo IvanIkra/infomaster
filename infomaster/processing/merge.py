@@ -201,9 +201,9 @@ class DeadlineList:
         """Done or deleted: an own one is deleted, one from a source is hidden for good."""
         self._change(lambda: self.todo.remove(d))
 
-    def edit(self, d: Deadline, title: str | None, due: dt.date | None) -> Deadline:
-        """A new title or date; one from a source becomes an own copy. ValueError for an empty title."""
-        return self._change(lambda: self.todo.edit(d, title, due))
+    def edit(self, d: Deadline, title: str | None, due: dt.date | None, category: str | None = None) -> Deadline:
+        """A new title, date or list; one from a source becomes an own copy. ValueError for an empty title."""
+        return self._change(lambda: self.todo.edit(d, title, due, category))
 
     def unhide(self, hidden_uid: str) -> bool:
         """«Вернуть» of the Mini App: one hidden row less."""

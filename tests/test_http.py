@@ -422,6 +422,11 @@ async def test_miniapp_deadlines(aiohttp_client, budget, journal, store, schedul
 
     body = await (await client.patch("/app/api/deadlines/ha-1", json={"due": "2026-10-26"}, headers=owner())).json()
     assert body["own"][0]["due"] == "2026-10-26"
+    body = await (await client.patch("/app/api/deadlines/ha-1", json={"category": "study"}, headers=owner())).json()
+    assert body["own"][0]["category"] == "study"
+    body = await (await client.patch("/app/api/deadlines/ha-1", json={"category": "personal"}, headers=owner())).json()
+    assert body["own"][0]["category"] == "personal"
+    assert (await client.patch("/app/api/deadlines/ha-1", json={"category": "sport"}, headers=owner())).status == 400
     assert (await client.patch("/app/api/deadlines/ha-1", json={}, headers=owner())).status == 400
     assert (await client.patch("/app/api/deadlines/ha-9", json={"title": "x"}, headers=owner())).status == 404
 

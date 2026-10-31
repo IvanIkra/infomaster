@@ -195,6 +195,9 @@ def test_own_and_hidden(merged):
     assert (copy.source, copy.key, copy.title) == ("ha", "ha-2", "Prog HW 1") and merged.changes[-1] == {"ha-2"}
     edited = merged.edit(own, "Dentist 10:00", None)
     assert edited.key == own.key and edited.due == own.due and merged.changes[-1] == set()  # a rename only
+    assert merged.edit(edited, None, None, "study").category == "study"
+    edited = merged.edit(edited, None, None, "personal")
+    assert edited.category == "personal" and merged.todo.own()[0].category == "personal"
     assert [(d.title, d.source, d.due.isoformat()) for d in merged.all()] == [
         ("Dentist 10:00", "ha", "2026-10-25"), ("Prog HW 1", "ha", "2026-10-29")]
 
