@@ -108,12 +108,15 @@ Secrets live in `.env`; everything else is set in the Mini App.
 ## Development
 
 ```bash
-python3.12 -m venv .venv && .venv/bin/pip install -e '.[dev]'
-.venv/bin/pytest -q
-.venv/bin/ruff check .
+uv sync               # .venv on Python 3.12 from .python-version, exact versions from uv.lock
+uv run pytest -q
+uv run ruff check .
 ```
 
-Run locally with `.venv/bin/python -m infomaster --data data`. Other commands: `login` logs the twin in from a
+Dependencies are managed with [uv](https://docs.astral.sh/uv/): `uv add <package>` updates `pyproject.toml` and
+`uv.lock` together, and the Docker image installs the same locked versions.
+
+Run locally with `uv run python -m infomaster --data data`. Other commands: `login` logs the twin in from a
 terminal, `import-tablo --tablo-db <tablo.db>` moves own and hidden deadlines from Tablo once.
 
 ```

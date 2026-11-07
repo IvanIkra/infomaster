@@ -1,5 +1,7 @@
 *
 !pyproject.toml
+!uv.lock
+!.python-version
 !infomaster
 **/__pycache__
 .DS_Store
