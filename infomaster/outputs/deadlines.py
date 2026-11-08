@@ -132,7 +132,7 @@ class DeadlineTopic:
         today, lang = clock.local_day(self.now()), self.forum.lang
         lines = []
         for d in shown:
-            mark, where = self._where(d)
+            mark, where = self.where(d)
             line = f"{mark} <b>{html.escape(d.title)}</b> — {due_mark(d.due, today, lang)}"
             if d.name:
                 line += f" · {html.escape(d.name)}"
@@ -140,7 +140,7 @@ class DeadlineTopic:
         return split(tr(lang, "<b>Deadlines</b>\n", "<b>Дедлайны</b>\n"),
                      lines or [tr(lang, "No deadlines.", "Дедлайнов нет.")], MESSAGE_LIMIT)
 
-    def _where(self, d: Deadline) -> tuple[str, str]:
+    def where(self, d: Deadline) -> tuple[str, str]:
         """The icon and the source of a line, as the news list shows them: a chat's kind and its name with a link to
         the message, a letter's subject; RUZ, HSE App X or "own" for the others."""
         lang = self.forum.lang

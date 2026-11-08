@@ -53,6 +53,7 @@ from ..processing.todo import CATEGORIES, uid
 from ..settings import BATCH_HOURS, SHEET_LABEL_CHARS, SPECS, ChatSettings, Settings, SettingsError
 from . import ical_feed
 from .api import SOURCES_KEY, Sources
+from .reminders import DeadlineReminders
 from .sheets import SheetTopic
 from .summaries import SummaryTopic
 
@@ -71,6 +72,7 @@ DEADLINES_KEY = web.AppKey("deadlines", DeadlineList)
 SETTINGS_KEY = web.AppKey("settings", Settings)
 SHEETS_KEY = web.AppKey("sheets", SheetTopic)
 SUMMARIES_KEY = web.AppKey("summaries", SummaryTopic)
+REMINDERS_KEY = web.AppKey("reminders", DeadlineReminders)
 GRADES_KEY = web.AppKey("grades", Grades)
 TWIN_KEY = web.AppKey("twin", Twin)
 GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "forum_language", "miniapp_language")  # of no other screen
@@ -667,6 +669,39 @@ async def update_summaries(request: web.Request) -> web.Response:
     return respond(request, _summaries_state(request))
 
 
+# --- deadline reminders ------------------------------------------------------------------------
+
+REMINDER_FIELDS = {"enabled": "deadline_reminders", "eve": "reminder_eve", "day": "reminder_day"}
+
+
+def _reminders_state(request: web.Request) -> dict:
+    settings = request.app[SETTINGS_KEY]
+    return {key: settings.get(name) for key, name in REMINDER_FIELDS.items()}
+
+
+async def reminders(request: web.Request) -> web.Response:
+    """The reminders' screen (D47): on or off, the eve's time and the morning's."""
+    return respond(request, _reminders_state(request))
+
+
+async def update_reminders(request: web.Request) -> web.Response:
+    """Some of {enabled, eve: "HH:MM", day: "HH:MM"}; the loop waits for the new times at once."""
+    values = await _json(request)
+    if not values or not set(values) <= set(REMINDER_FIELDS):
+        raise web.HTTPBadRequest(text="expected some of enabled, eve, day")
+    settings = request.app[SETTINGS_KEY]
+    try:
+        for key in REMINDER_FIELDS:  # all checked before any is kept
+            if key in values:
+                SPECS[REMINDER_FIELDS[key]][1](values[key])
+        for key, value in values.items():
+            settings.set(REMINDER_FIELDS[key], value)
+    except SettingsError as e:
+        raise web.HTTPBadRequest(text=str(e)) from None
+    request.app[REMINDERS_KEY].reschedule()
+    return respond(request, _reminders_state(request))
+
+
 # --- the twin's account ------------------------------------------------------------------------
 
 async def twin_login(request: web.Request) -> web.Response:
@@ -951,7 +986,8 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
                merged: DeadlineList, settings: Settings | None = None,
                sheet_topic: SheetTopic | None = None, summary_topic: SummaryTopic | None = None,
                grade_list: Grades | None = None, twin: Twin | None = None,
-               calendar_feed: ical_feed.CalendarFeed | None = None) -> web.Application:
+               calendar_feed: ical_feed.CalendarFeed | None = None,
+               deadline_reminders: DeadlineReminders | None = None) -> web.Application:
     """The Mini App's port; without the settings and the sheets' topic the Листочки screen has no API, without the
     settings and the summaries' topic the Сводки screen has none, without the grades the Оценки screen has none,
     without the calendar feed there are no public feeds."""
@@ -998,6 +1034,10 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
         app.router.add_patch("/app/api/sheets/{sheet_id}", edit_sheet)
         app.router.add_delete("/app/api/sheets/{sheet_id}", delete_sheet)
         app.router.add_post("/app/api/sheets/{sheet_id}/join", join_sheet)
+    if settings is not None and deadline_reminders is not None:
+        app[REMINDERS_KEY] = deadline_reminders
+        app.router.add_get("/app/api/reminders", reminders)
+        app.router.add_patch("/app/api/reminders", update_reminders)
     if settings is not None and summary_topic is not None:
         app.router.add_get("/app/api/summaries", summaries)
         app.router.add_patch("/app/api/summaries", update_summaries)

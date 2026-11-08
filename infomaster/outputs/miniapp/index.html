@@ -1558,9 +1558,9 @@
     }
 
     async function settingsPage() {
-      const [list, general, hse, llm, summaries, grades, agenda, found] = await Promise.all([get("api/chats"),
+      const [list, general, hse, llm, summaries, grades, agenda, found, reminders] = await Promise.all([get("api/chats"),
         maybe("api/general"), maybe("api/hseapp"), maybe("api/llm"), maybe("api/summaries"), maybe("api/grades"),
-        maybe("api/agenda"), problems()]);
+        maybe("api/agenda"), problems(), maybe("api/reminders")]);
       const on = list.chats.filter((chat) => chat.settings.enabled).length;
       const bad = (text) => el("span", {className: "late"}, text);
       const mail = list.mail || {};
@@ -1589,6 +1589,9 @@
           value: L(`every ${general.batch_hours} h`, `раз в ${general.batch_hours} ч`), go: () => push(generalPage)}) : null,
         summaries ? row({title: L("Daily summary", "Ежедневная сводка"), lead: tile("summary", "#e0605a"),
           value: summaries.time, go: () => push(summariesPage)}) : null,
+        reminders ? row({title: L("Deadline reminders", "Напоминания о дедлайнах"), lead: tile("deadlines", "#3e88f7"),
+          value: reminders.enabled ? `${reminders.eve} · ${reminders.day}` : L("off", "выкл."),
+          go: () => push(remindersPage)}) : null,
         row({title: L("Whole PDFs", "PDF целиком"), lead: tile("sheet", "#8e8e93"), go: () => push(sheetsSettingsPage)}),
         list.images && list.images.daily !== undefined ? row({title: L("Images", "Картинки"), lead: tile("image", "#2fb5a0"),
           value: L(`${list.images.daily} a day`, `${list.images.daily} в день`), go: () => push(imagesPage)}) : null,
@@ -2020,6 +2023,26 @@
           "Чат попадает в сводку, если в его настройках включена «Сводка»."))];
     }
 
+    async function remindersPage() {
+      const data = await get("api/reminders");
+      const time = (name) => {
+        const input = el("input", {type: "time", value: data[name], step: 60});
+        input.onchange = () => act("api/reminders", "PATCH", {[name]: input.value});
+        return input;
+      };
+      return [el("h1", {className: "title"}, L("Deadline reminders", "Напоминания о дедлайнах")),
+        section(null, [row({title: L("Reminders", "Напоминания"),
+          control: toggle(data.enabled, (on) => act("api/reminders", "PATCH", {enabled: on}))})]),
+        section(null, [
+          row({title: L("The eve, at", "Накануне, в"), sub: L("what is due tomorrow", "что сдавать завтра"),
+            control: time("eve")}),
+          row({title: L("The day itself, at", "В сам день, в"), sub: L("what is due today", "что сдавать сегодня"),
+            control: time("day")})],
+          L("Moscow time. One message in the Deadlines topic for the day's deadlines, a button to hide each; nothing "
+            + "due, no message.", "По Москве. Одно сообщение в теме «Дедлайны» на все сроки дня, у каждого кнопка "
+            + "«Скрыть»; если сдавать нечего, сообщения нет."))];
+    }
+
     async function sheetsSettingsPage() {
       const data = await get("api/sheets");
       const change = (name) => (value) => act("api/sheets", "PATCH", {[name]: value});
@@ -2241,6 +2264,7 @@
     // The screens a link may ask for (a button under a post in the forum): the tab, then what to open in it.
     const SCREENS = {chats: ["settings", chatsPage], schedule: ["schedule"], deadlines: ["deadlines"],
                      sheets: ["study", "sheets"], grades: ["study", "grades"], summaries: ["settings", summariesPage],
+                     reminders: ["settings", remindersPage],
                      subjects: ["settings", subjectsPage], hseapp: ["settings", hsePage], llm: ["settings", llmPage],
                      general: ["settings", generalPage], settings: ["settings"]};
     const startScreen = new URLSearchParams(location.search).get("screen") || tg.initDataUnsafe.start_param;

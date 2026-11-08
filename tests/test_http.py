@@ -470,3 +470,25 @@ async def test_miniapp_summaries(aiohttp_client, budget, journal, store, schedul
     response = await client.patch("/app/api/summaries", json={"time": "21:00", "x": 1}, headers=owner())
     assert response.status == 400
     assert (await client.get("/app/api/summaries")).status == 401
+
+
+async def test_miniapp_reminders(aiohttp_client, budget, journal, store, schedule, merged, forum, now):
+    from infomaster.outputs.deadlines import DeadlineTopic
+    from infomaster.outputs.reminders import DeadlineReminders
+
+    settings = Settings(store)
+    topic = DeadlineTopic(forum, store, schedule.inbox, merged, OWNER, now=now)
+    reminders = DeadlineReminders(forum, store, topic, settings, OWNER, now=now)
+    hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
+    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store),
+                                                     TWIN, schedule.subjects, schedule, hse, merged, settings,
+                                                     deadline_reminders=reminders))
+    response = await client.get("/app/api/reminders", headers=owner())
+    assert await response.json() == {"enabled": True, "eve": "20:00", "day": "09:00"}
+    response = await client.patch("/app/api/reminders", json={"eve": "21:30", "enabled": False}, headers=owner())
+    assert await response.json() == {"enabled": False, "eve": "21:30", "day": "09:00"}
+    assert reminders._woken.is_set()  # the loop counts its sleep anew
+    response = await client.patch("/app/api/reminders", json={"day": "8:00", "eve": "25:00"}, headers=owner())
+    assert response.status == 400 and settings.get("reminder_day") == "09:00"  # nothing kept from a bad request
+    assert (await client.patch("/app/api/reminders", json={"x": 1}, headers=owner())).status == 400
+    assert (await client.get("/app/api/reminders")).status == 401

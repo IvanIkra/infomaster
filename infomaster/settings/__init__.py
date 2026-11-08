@@ -144,6 +144,10 @@ SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     # Images read a Moscow day in chats with «Картинки» (D12); inside the LLM limit, off above its 80 % (§7).
     "images_daily": (30, _whole(0, 500, "a number of images")),
     "summary_time": ("21:00", _clock_time),   # the daily summary, Moscow time (D20)
+    # Deadline reminders in «Дедлайны» (D47): on the eve, what is due tomorrow; in the morning, what is due today.
+    "deadline_reminders": (True, _flag),
+    "reminder_eve": ("20:00", _clock_time),
+    "reminder_day": ("09:00", _clock_time),
     # Grades from teachers' Google Sheets (§6.7, Tablo's §3.2): the own row is found by the name.
     "grades_student": ("", _student),
     "grades_sheets": ([], _grade_sheets),

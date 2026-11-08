@@ -29,6 +29,8 @@ from .outputs.feed import Feed
 from .outputs.forum import Forum
 from .outputs.grades import GradeTopic
 from .outputs.ical_feed import CalendarFeed
+from .outputs.reminders import BUTTON as REMINDER_BUTTON
+from .outputs.reminders import DeadlineReminders
 from .outputs.sheets import SheetTopic
 from .outputs.summaries import BUTTON as SUMMARY_BUTTON
 from .outputs.summaries import COMMAND as SUMMARY_COMMAND
@@ -100,6 +102,7 @@ class Service:
         # The one list of deadlines (§5.5): the API for Tablo and HA, the «Дедлайны» topic and the Mini App read it.
         self.merged = DeadlineList(self.store, self.deadlines, self.hseapp_deadlines, self.subjects)
         self.deadline_topic = DeadlineTopic(self.forum, self.store, self.inbox, self.merged, env.owner_id)
+        self.reminders = DeadlineReminders(self.forum, self.store, self.deadline_topic, self.settings, env.owner_id)
         # Summaries are made from the raw messages, the daily one and /summary (§6.6).
         summaries = Summaries(self.chat_settings, self.inbox, self.llm, subjects=self.subjects)
         summaries.files = self.files  # what the batches read on images
@@ -134,6 +137,7 @@ class Service:
         self.subjects.on_manual = self._dictionary_changed
         self.forum.on_button(BUTTON, self.timetable.on_button)
         self.forum.on_button(DEADLINE_BUTTON, self.deadline_topic.on_button)
+        self.forum.on_button(REMINDER_BUTTON, self.reminders.on_button)
         self.forum.on_button(NEWS_BUTTON, self.feed.on_button)
         self.forum.on_button(SUMMARY_BUTTON, self.summary_topic.on_button)
         self.forum.on_command(SUMMARY_COMMAND, self.summary_topic.on_command)
@@ -214,7 +218,8 @@ class Service:
             for app, port in ((miniapp.create_app(self.env, self.budget, self.journal, self.inbox, self.chat_settings,
                                                   self.sources, self.subjects, self.schedule, self.hseapp,
                                                   self.merged, self.settings, self.sheet_topic,
-                                                  self.summary_topic, self.grades, self.twin, self.calendar),
+                                                  self.summary_topic, self.grades, self.twin, self.calendar,
+                                                  self.reminders),
                                self.env.public_port),
                               (api.create_app(self.env, self.budget, self.sources, self.calendar, self.merged,
                                               self.grades, self.news, self.settings),
@@ -237,6 +242,7 @@ class Service:
             tasks.append(asyncio.create_task(self.hseapp.run()))
             tasks.append(asyncio.create_task(self.mail.run()))
             tasks.append(asyncio.create_task(self.deadline_topic.run()))
+            tasks.append(asyncio.create_task(self.reminders.run()))
             tasks.append(asyncio.create_task(self.summary_topic.run()))
             tasks.append(asyncio.create_task(self.grade_sheets.run()))
 

@@ -166,6 +166,14 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   time (an own event is left as it is). In `main.ics` and `optional.ics` a class's SUMMARY ends with its
   type ("Calculus · Seminar", "Midterm" for an interim assessment), since a calendar app shows the title alone;
   `tablo.ics` keeps the bare title, which Tablo takes for the course name.
+- **D47. Deadline reminders, 09.11.2026.** The «Дедлайны» topic gets a reminder twice a day, Moscow time: on the eve
+  (`reminder_eve`, 20:00) the deadlines due tomorrow, in the morning (`reminder_day`, 09:00) those due today. One
+  message per slot holds the day's deadlines as the merged list shows them (hidden and done ones are not there), each
+  line with its source, and a button per deadline: «Hide» («Delete» for an own one) and «Restore». Nothing due, no
+  message. Each slot is sent once (kv `deadlines.reminded`); the first start takes the slots that have come as sent,
+  and a slot missed while the service was down is sent when it starts again the same day. On, off and the times are
+  in the Mini App, «Settings → Deadline reminders». The pinned list shows each deadline's source too, as the news
+  list does: the chat with a link to the message, the letter's subject, RUZ, HSE App X or "own".
 
 ## Open questions
 
