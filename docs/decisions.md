@@ -181,6 +181,16 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   start parameter does not allow); the Mini App opens the Timetable tab and the card of the entry with that key. With
   a main Mini App set in @BotFather the link is `?startapp=` and opens it at once; without one it is `?start=` and the
   bot answers with the Mini App's button. `tablo.ics` has neither: Tablo takes an event with URL for an online class.
+- **D49. One card and one form for every timetable entry, 09.11.2026.** This changes D44. A RUZ class, an event from a
+  chat or a letter and an own event have the same card in the Mini App (when, where, what, calendar, from, and "was"
+  when it is changed) and the same three actions: **Edit**, **As it was** (when the owner or a chat changed it) and
+  **Remove**. The one form has title, type, date, all day, from, to, where, required and cancelled for all of them.
+  Behind it: a class gets an own correction, which now also renames it (its title is kept only when it differs from
+  the class's, "" otherwise, so the dictionary goes on naming it), gives it another type (else the class's own kind)
+  or puts it in the optional calendar; it applies while it changes anything, and RUZ changing the class still ends
+  it. A chat's event gets an own copy as before, which now remembers the event it stands in for (`events.copy_of`):
+  **As it was** withdraws the copy and shows the chat's event again; the hidden list leaves out an event with a copy.
+  **Remove** cancels a class (it stays struck out), hides a chat's event or an own copy, and deletes an own event.
 
 ## Open questions
 

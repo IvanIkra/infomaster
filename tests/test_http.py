@@ -492,3 +492,55 @@ async def test_miniapp_reminders(aiohttp_client, budget, journal, store, schedul
     assert response.status == 400 and settings.get("reminder_day") == "09:00"  # nothing kept from a bad request
     assert (await client.patch("/app/api/reminders", json={"x": 1}, headers=owner())).status == 400
     assert (await client.get("/app/api/reminders")).status == 401
+
+
+async def test_miniapp_one_form_for_every_entry(aiohttp_client, budget, journal, store, schedule, now, merged):
+    """A class, a chat's event and an own one are changed by the same fields (D49), and «As it was» undoes it."""
+    schedule.ruz._sync(parse(FEED))
+    client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
+    with store.db:
+        told = schedule.events.add({"uid": "tg-1@infomaster", "source": "tg", "chat_id": None, "msg_ids": [5],
+                                    "course": "Алгебра", "title": "Alg consult", "kind": "consultation",
+                                    "start": "2026-10-23T18:10:00", "end": None, "room": "R205", "required": True},
+                                   now())
+
+    def item(body, uid):
+        return next(i for i in body["items"] if i["uid"] == uid)
+
+    # A class renamed, made a lab and optional, its time and room kept: it stays where RUZ has it, changed.
+    fix = {"class_uid": "2000005@ruz.hse.ru", "title": "SE lab", "kind": "Lab", "start": "2026-10-23T09:30",
+           "end": "2026-10-23T10:50", "room": "109", "required": False, "cancelled": False}
+    body = await (await client.post("/app/api/corrections", json=fix, headers=owner())).json()
+    changed = item(body, "2000005@ruz.hse.ru")
+    assert (changed["title"], changed["type"], changed["required"], changed["start"], changed["room"]) == (
+        "SE lab", "Lab", False, "2026-10-23T09:30:00", "109")
+    assert changed["notes"] == ["Changed by hand"] and changed["event"]["own"]
+    # The same title and type as the class: the dictionary and RUZ go on naming it.
+    title = schedule.class_title(schedule.ruz.by_uid("2000005@ruz.hse.ru"))
+    body = await (await client.post("/app/api/corrections", json={**fix, "title": title, "kind": "Seminar",
+                                                                    "required": True, "room": "R301"},
+                                    headers=owner())).json()
+    changed = item(body, "2000005@ruz.hse.ru")
+    assert schedule.events.own_correction("2000005@ruz.hse.ru")["title"] == ""
+    assert (changed["title"], changed["type"], changed["location"], changed["notes"]) == (
+        title, "Seminar", "R301", ["Room changed by hand"])
+    body = await (await client.delete(f"/app/api/events/{changed['event']['id']}", headers=owner())).json()
+    assert item(body, "2000005@ruz.hse.ru")["event"] is None  # as it was: as in RUZ
+
+    # A chat's event changed: an own copy stands in for it, all day and cancelled; «As it was» brings the chat's back.
+    body = await (await client.patch(f"/app/api/events/{told}", json={"start": "2026-10-24", "end": None,
+                                                                       "cancelled": True}, headers=owner())).json()
+    [copy] = [i for i in body["items"] if i["source"] == "own"]
+    assert (copy["start"], copy["end"], copy["cancelled"], copy["event"]["copy"]) == ("2026-10-24", None, True, True)
+    assert copy["event"]["original"]["start"] == "2026-10-23T18:10:00" and body["hidden"] == []
+    assert "tg-1@infomaster" not in {i["uid"] for i in body["items"]}
+    body = await (await client.delete(f"/app/api/events/{copy['event']['id']}", headers=owner())).json()
+    assert all(i["source"] != "own" for i in body["items"]) and not item(body, "tg-1@infomaster")["event"]["hidden"]
+
+    # A new own event all day.
+    new = {"title": "Open day", "kind": "Event", "start": "2026-10-25", "end": None, "room": "", "required": False}
+    body = await (await client.post("/app/api/events", json=new, headers=owner())).json()
+    [own] = [i for i in body["items"] if i["title"] == "Open day"]
+    assert (own["start"], own["end"], own["required"]) == ("2026-10-25", None, False)
+    for bad in ({**new, "start": "2026-13-01"}, {**new, "start": "2026-10-25", "end": "2026-10-25T10:00"}):
+        assert (await client.post("/app/api/events", json=bad, headers=owner())).status == 400

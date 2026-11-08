@@ -8,7 +8,11 @@ One list of entries serves the iCal feeds, the batch prompt and the Mini App:
 
 The owner adds events of their own and corrects classes in the Mini App (D44): an own correction wins over the chats'
 ones until it is undone or RUZ changes the class; a change of an event from a chat hides it and puts an own copy in its
-place, so the chat's next message changes only the hidden one (as a changed deadline does, §5.4).
+place, so the chat's next message changes only the hidden one (as a changed deadline does, §5.4). Every entry is
+changed the same way (D49): title, type, day or whole day, time, place, calendar, cancelled. An own correction of a
+class keeps a title only when the owner renamed the class ("" follows the dictionary) and the class's own kind unless
+the owner chose another type. An own copy remembers the chat's event it stands in for (`copy_of`): undoing it brings
+that one back.
 
 Titles are English: a class takes its subject's title from the dictionary (the feed's name until there is one), an
 event has the model's own short title. Types are the words Tablo reads from the first line of DESCRIPTION (§4.2):
@@ -42,7 +46,7 @@ from ..collectors.ruz import Diff, Ruz
 from ..i18n import Phrase
 from ..store import Store
 from .deadlines import Deadlines, same_label
-from .events import OWN, Events, own_uid
+from .events import IN_FORCE, OWN, Events, own_uid
 from .subjects import Subjects
 
 log = logging.getLogger(__name__)
@@ -138,11 +142,17 @@ def moved_back(item: dict, correction: dict) -> bool:
         (correction["start"], correction["end"], correction["room"]) == (item["start"], item["end"], item["room"])
 
 
+def overrides(item: dict, correction: dict) -> bool:
+    """An own correction renames the class, changes its type or puts it in the optional calendar."""
+    return correction["source"] == OWN and (bool(correction["title"]) or not correction["required"] or
+                                            type_of(correction["kind"], True) != type_of(item["kind"], True))
+
+
 def applies(item: dict, correction: dict | None) -> bool:
     """The correction changes the class in the feeds: not hidden by the owner, the class not cancelled by RUZ
-    itself, and not a move back to where RUZ has it."""
+    itself, and not a move back to where RUZ has it (unless the owner changed something else)."""
     return correction is not None and not correction["hidden"] and not item["cancelled"] and \
-        not moved_back(item, correction)
+        (not moved_back(item, correction) or overrides(item, correction))
 
 
 def location(room: str, link: str | None) -> str:
@@ -204,14 +214,24 @@ class Schedule:
             return entry
         entry.source, entry.link, entry.origin = correction["source"], self.link(correction), self.origin(correction)
         by = "by hand" if correction["source"] == OWN else "in a chat"
+        if correction["source"] == OWN:
+            entry.title = correction["title"] or entry.title
+            entry.type, entry.required = type_of(correction["kind"], of_class=True), correction["required"]
         if correction["cancelled"]:
             entry.cancelled = True
             entry.notes.append(f"Cancelled {by}")
-        else:
+            return entry
+        if (correction["start"], correction["end"]) != (item["start"], item["end"]):
             entry.notes.append(f"Moved from {when(entry.start)} {by}")
-            entry.start, entry.end = local(correction["start"]), local(correction["end"])
-            if correction["room"] != item["room"]:
-                entry.location = correction["room"]
+            entry.start, entry.all_day = local(correction["start"]), all_day(correction["start"])
+            entry.end = entry.start + dt.timedelta(days=1) if entry.all_day else \
+                local(correction["end"]) if correction["end"] else entry.start + DEFAULT_LENGTH
+        if correction["room"] != item["room"]:
+            entry.location = correction["room"]
+            if (correction["start"], correction["end"]) == (item["start"], item["end"]):
+                entry.notes.append(f"Room changed {by}")
+        elif (correction["start"], correction["end"]) == (item["start"], item["end"]):
+            entry.notes.append(f"Changed {by}")
         return entry
 
     def event_entry(self, event: dict) -> Entry:
@@ -272,10 +292,12 @@ class Schedule:
         since, until = today.isoformat(), (today + dt.timedelta(days=days)).isoformat()
         corrections = self.events.corrections()
         events, hidden = {}, []
-        for event in self.events.in_force_all():
+        in_force = self.events.in_force_all()
+        copied = {event["copy_of"]: event for event in in_force if event["copy_of"]}
+        for event in in_force:
             if event["class_uid"] is None:
                 events[event["uid"]] = event
-                if event["hidden"] and event["start"] >= since:
+                if event["hidden"] and event["start"] >= since and event["uid"] not in copied:
                     hidden.append({"id": event["id"], "title": event["title"], "start": event["start"],
                                    "end": self._end(event), "type": type_of(event["kind"], of_class=False),
                                    "chat": self.told_by(event)})
@@ -286,13 +308,15 @@ class Schedule:
                 continue
             item = classes.get(entry.uid)
             event = corrections.get(entry.uid) if item is not None else events.get(entry.uid)
+            # The room as the form edits it: LOCATION may be an online class's link instead.
+            room = item["room"] if item is not None and not applies(item, event) else event["room"]
             items.append({"uid": entry.uid, "key": event_key(entry.uid), "title": entry.title,
                           "start": entry.start.date().isoformat() if entry.all_day else entry.start.isoformat(),
                           "end": None if entry.all_day else entry.end.isoformat(), "type": entry.type,
-                          "location": entry.location,
+                          "location": entry.location, "room": room,
                           "required": entry.required, "cancelled": entry.cancelled, "source": entry.source,
                           "link": entry.link, "notes": entry.notes,
-                          "event": self._behind(event, item) if event is not None else None})
+                          "event": self._behind(event, item, events) if event is not None else None})
         return {"items": items, "hidden": hidden}
 
     def _end(self, event: dict) -> str | None:
@@ -300,12 +324,19 @@ class Schedule:
             return None
         return event["end"] or (local(event["start"]) + DEFAULT_LENGTH).isoformat()
 
-    def _behind(self, event: dict, item: dict | None) -> dict:
-        """The event or correction behind an entry, as the Mini App acts on it; `class` is RUZ's own time."""
+    def _behind(self, event: dict, item: dict | None, events: dict[str, dict]) -> dict:
+        """The event or correction behind an entry, as the Mini App acts on it: `class` is RUZ's own time, `original`
+        the chat's event an own copy stands in for (what «As it was» brings back)."""
+        original = events.get(event["copy_of"]) if event["copy_of"] else None
         return {"id": event["id"], "correction": item is not None, "own": event["source"] == OWN,
-                "hidden": event["hidden"], "cancelled": event["cancelled"], "start": event["start"],
-                "end": self._end(event), "room": event["room"], "chat": self.told_by(event), "link": self.link(event),
-                "class": {"start": item["start"], "end": item["end"], "room": item["room"]} if item else None}
+                "copy": original is not None, "hidden": event["hidden"], "cancelled": event["cancelled"],
+                "start": event["start"], "end": self._end(event), "room": event["room"], "chat": self.told_by(event),
+                "link": self.link(event),
+                "class": {"title": self.class_title(item), "start": item["start"], "end": item["end"],
+                          "room": item["room"]} if item else None,
+                "original": {"title": original["title"], "start": original["start"], "end": self._end(original),
+                             "room": original["room"], "chat": self.told_by(original), "link": self.link(original)}
+                if original is not None else None}
 
     # --- the owner's choices ------------------------------------------------------------
 
@@ -333,49 +364,58 @@ class Schedule:
                                     "course": None, "chosen": True}, self.now())
 
     def edit_event(self, event_id: int, fields: dict) -> int | None:
-        """The owner's change of an event (some of title, kind, start, end, room, required): an own event gets a new
-        version; one from a chat or a letter is hidden and an own copy with the change takes its place. The id of the
-        new version; None for no such event."""
+        """The owner's change of an event (some of title, kind, start, end, room, required, cancelled): an own event
+        gets a new version; one from a chat or a letter is hidden and an own copy with the change takes its place,
+        remembering it (`copy_of`). The id of the new version; None for no such event."""
         event = self.events.current(event_id)
         if event is None or event["gone_at"] is not None or event["class_uid"] is not None:
             return None
-        new = {**{key: event[key] for key in ("title", "kind", "start", "end", "room", "required", "course")},
-               **fields, "source": OWN, "chat_id": None, "msg_ids": [], "chosen": True}
+        keep = ("title", "kind", "start", "end", "room", "required", "cancelled", "course", "copy_of")
+        new = {**{key: event[key] for key in keep}, **fields, "source": OWN, "chat_id": None, "msg_ids": [],
+               "chosen": True}
         with self.db:
             if event["source"] == OWN:
                 new_id = self.events.add({**new, "uid": event["uid"]}, self.now())
                 self.events.supersede(event["id"], new_id)
             else:
-                new_id = self.events.add({**new, "uid": own_uid()}, self.now())
+                new_id = self.events.add({**new, "uid": own_uid(), "copy_of": event["uid"]}, self.now())
                 self.db.execute("update events set hidden = 1 where id = ?", (event["id"],))
         return new_id
 
-    async def correct_class(self, class_uid: str, start: str, end: str, room: str, cancelled: bool) -> int | None:
-        """The owner moves or cancels a RUZ class: a new version of their own correction, or the first one. None for
-        no such class."""
+    async def correct_class(self, class_uid: str, start: str, end: str | None, room: str, cancelled: bool, *,
+                            title: str | None = None, kind: str | None = None, required: bool = True) -> int | None:
+        """The owner changes a RUZ class: a new version of their own correction, or the first one. A title the same
+        as the class's is kept as "" (the dictionary names it), a kind of the class's type as the class's own. None
+        for no such class."""
         item = self.ruz.by_uid(class_uid)
         if item is None or item["gone_at"] is not None:
             return None
+        if title is None or same_label(title, self.class_title(item)):
+            title = ""
+        if kind is None or type_of(kind, of_class=True) == type_of(item["kind"], of_class=True):
+            kind = item["kind"]
         earlier = self.events.own_correction(class_uid)
         with self.db:
             new_id = self.events.add({"uid": earlier["uid"] if earlier else own_uid(), "source": OWN, "chat_id": None,
                                       "msg_ids": [], "class_uid": class_uid, "course": item["subject"],
-                                      "title": self.class_title(item), "kind": item["kind"], "start": start,
-                                      "end": end, "room": room, "required": True, "cancelled": cancelled},
-                                     self.now())
+                                      "title": title, "kind": kind, "start": start, "end": end, "room": room,
+                                      "required": required, "chosen": True, "cancelled": cancelled}, self.now())
             if earlier is not None:
                 self.events.supersede(earlier["id"], new_id)
         await self._follow_midterms()
         return new_id
 
     async def remove_own(self, event_id: int) -> dict | None:
-        """An own event is deleted, an own correction undone (the chats' one applies again, if there is one); the
-        event, or None when it is not an own one in force."""
+        """An own event is deleted, an own correction undone (the chats' one applies again, if there is one), an own
+        copy undone (the chat's event it stood in for is back); the event, or None when it is not an own one in
+        force."""
         event = self.events.current(event_id)
         if event is None or event["gone_at"] is not None or event["source"] != OWN:
             return None
         with self.db:
             self.events.withdraw(event["uid"], self.now())
+            if event["copy_of"]:  # the chat's event it stood in for is back
+                self.db.execute(f"update events set hidden = 0 where uid = ? and {IN_FORCE}", (event["copy_of"],))
         if event["class_uid"] is not None:
             await self._follow_midterms()
         return event

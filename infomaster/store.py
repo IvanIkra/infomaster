@@ -161,6 +161,7 @@ create table if not exists events (     -- events from chats and chat correction
     chosen integer not null default 0,  -- `required` set by the owner: moves and edits keep it
     hidden integer not null default 0,  -- out of the feeds; a hidden correction is not applied
     cancelled integer not null default 0,
+    copy_of text,               -- an own copy of a chat's event: the uid of the hidden one it stands in for (D49)
     replaced_by integer,        -- a newer version: moved, cancelled or edited; the newest one is in force
     gone_at text,               -- its messages were deleted or edited into something else, or RUZ overruled it
     created_at text not null
@@ -260,6 +261,7 @@ UPGRADES = (
     ("messages", "subject", "text"),
     ("deadlines", "sheet_id", "integer"),
     ("files", "kind", "text not null default 'pdf'"),
+    ("events", "copy_of", "text"),  # an own copy of a chat's event: the uid of the one it stands in for (D49)
     ("files", "reading", "text"),
 )
 

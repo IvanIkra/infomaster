@@ -999,7 +999,7 @@
     let agendaDays = 7;
     const TYPES = () => L({Lecture: "lecture", Seminar: "seminar", Consultation: "consultation", Event: "event",
                            "Interim assessment": "interim assessment", Exam: "exam", Lab: "lab", Class: "class"}, TYPES_RU);
-    const EVENT_TYPES = ["Event", "Consultation", "Lecture", "Seminar", "Exam"];
+    const EVENT_TYPES = ["Event", "Consultation", "Lecture", "Seminar", "Lab", "Exam"];
 
     function addDays(iso, n) {
       const date = new Date(iso + "T12:00:00");
@@ -1023,6 +1023,9 @@
 
     // A correction is in force on this class: moved or cancelled where RUZ has it otherwise.
     const corrected = (item) => item.event && item.event.correction && !item.event.hidden;
+    // Changed in time, not only in name, place or calendar: what RUZ or the chat said is elsewhere.
+    const moved = (item) => { const was = item.event && (item.event.class || item.event.original); return Boolean(was)
+      && was.start.slice(0, 16) !== item.start.slice(0, 16); };
 
     // Where an entry comes from: RUZ, the chat or the letter that told it or corrected it, or you.
     function itemFrom(item) {
@@ -1067,7 +1070,8 @@
       const sub = [place(item.location), TYPES()[item.type] || item.type.toLowerCase(), itemFrom(item)].filter(Boolean);
       const tags = [];
       if (item.cancelled) tags.push(el("span", {className: "tag off"}, L("cancelled", "отменена")));
-      else if (corrected(item)) tags.push(el("span", {className: "tag moved"}, L("moved", "перенос")));
+      else if (corrected(item) || (item.event && item.event.copy)) tags.push(el("span", {className: "tag moved"},
+        moved(item) ? L("moved", "перенос") : L("changed", "изменено")));
       if (!item.required && !item.cancelled) tags.push(el("span", {className: "tag"}, L("optional", "по желанию")));
       return row({lead: time, className: "timed" + (item.cancelled ? " gone" : ""),
         title: el("span", {className: item.cancelled ? "struck" : ""}, item.title),
@@ -1075,56 +1079,84 @@
         go: () => agendaCard(item, data)});
     }
 
+    // One card for every entry (D49): a RUZ class, a chat's or a letter's event, your own. The same facts, the same
+    // three actions: Edit (one form), As it was (when you or a chat changed it), Remove.
     function agendaCard(item, data) {
       const ev = item.event;
+      const isClass = item.source === "ruz" || Boolean(ev && ev.correction);
       const hide = (hidden) => change("api/events/" + ev.id, "PATCH", {hidden}, "api/agenda");
       const remove = () => change("api/events/" + ev.id, "DELETE", undefined, "api/agenda");
+      const linkTo = (text, url) => url ? el("a", {href: url, onclick: (e) => { e.preventDefault(); openLink(url); }},
+        text) : text;
       const fromText = itemFrom(item);
       const link = ev && ev.link && (!ev.correction || !ev.hidden) ? ev.link : null;
+      // What it was before the change in force: RUZ's own class, or the chat's event your copy stands in for.
+      const was = isClass && ev && !ev.hidden ? ev.class : ev && ev.original;
       const facts = [
         fact(L("When", "Когда"), `${dayLabel(item.start.slice(0, 10))}, ${hours(item.start, item.end)}`),
-        fact(L("Where", "Где"), isLink(item.location) ? el("a", {href: item.location,
-          onclick: (e) => { e.preventDefault(); openLink(item.location); }}, L("the link", "по ссылке")) : place(item.location)),
+        fact(L("Where", "Где"), isLink(item.location) ? linkTo(L("the link", "по ссылке"), item.location)
+          : place(item.location)),
         fact(L("What", "Что"), TYPES()[item.type] || item.type),
-        fact(L("From", "Откуда"), link ? el("a", {href: link, onclick: (e) => { e.preventDefault(); openLink(link); }},
-          fromText) : fromText)];
-      const isClass = item.source === "ruz" || (ev && ev.correction);
-      let actions = [], foot = null;
-      if (isClass) {
-        actions.push(cardButton(L("Move or cancel", "Перенести или отменить"), () => push(() => eventPage(item))));
-        if (ev && !ev.hidden) {
-          facts.push(fact(L("In RUZ", "В РУЗ"), `${dayLabel(ev.class.start.slice(0, 10))}, ${hours(ev.class.start,
-            ev.class.end)}` + (ev.class.room ? ", " + place(ev.class.room) : "")));
-          actions.push(ev.own ? cardButton(L("Undo your correction", "Отменить свою правку"), remove, {danger: true})
-            : cardButton(L("The correction is wrong: as in RUZ", "Правка неверна — как в РУЗ"), () => hide(true),
-              {danger: true}));
-          foot = ev.own ? L("Your correction: the calendars and Tablo show the class so, until RUZ itself changes it.",
-            "Ваша правка: так пара стоит в календарях и в Tablo, пока РУЗ сам её не изменит.")
-            : L(`The chat ${ev.cancelled ? "cancelled" : "moved"} the class; the calendars show it so.`,
-              `В чате пару ${ev.cancelled ? "отменили" : "перенесли"}; так она и стоит в календарях.`);
-        } else if (ev && ev.hidden) {
-          actions.push(cardButton(L("Apply the chat's correction", "Применить правку из чата"), () => hide(false)));
-          foot = L(`${ev.chat || "A chat"} ${ev.cancelled ? "cancelled the class" : "moved the class to " + when(ev.start, ev.end)}, `
-            + "but you turned the correction off: the class is as in RUZ.", `${ev.chat || "В чате"}: пару `
-            + `${ev.cancelled ? "отменили" : "перенесли на " + when(ev.start, ev.end)}, но вы отключили правку — пара `
-            + "стоит как в РУЗ.");
-        }
-      } else if (ev) {
-        actions = [cardButton(L("Edit", "Изменить"), () => push(() => eventPage(item))),
-          cardButton(item.required ? L("Make it optional", "Сделать необязательным")
-            : L("Make it required", "Сделать обязательным"), () => change("api/events/" + ev.id, "PATCH",
-            {required: !item.required}, "api/agenda")),
-          ev.own ? cardButton(L("Delete", "Удалить"), async () => {
-            if (await askYes(L("Delete this event?", "Удалить событие?"))) remove();
-          }, {danger: true}) : cardButton(L("Remove from the timetable", "Убрать из расписания"), () => hide(true),
-            {danger: true})];
-        foot = item.required ? L("Required: in the main calendar, where you must be.",
-          "Обязательное — в основном календаре, где нужно быть.") : L("Optional: in the second calendar, where you "
-          + "may come.", "По желанию — во втором календаре, куда можно прийти.");
+        fact(L("Calendar", "Календарь"), item.required ? L("main", "основной") : L("optional", "по желанию")),
+        fact(L("From", "Откуда"), linkTo(fromText, link)),
+        was ? fact(L("Was", "Было"), linkTo((was.title !== item.title ? `${was.title} · ` : "")
+          + `${dayLabel(was.start.slice(0, 10))}, ${hours(was.start, was.end)}`
+          + (was.room ? ", " + place(was.room) : "") + (ev.original && ev.original.chat ? ` · ${ev.original.chat}` : ""),
+          ev.original && ev.original.link)) : null];
+
+      const actions = [cardButton(L("Edit", "Изменить"), () => push(() => eventPage(item)))];
+      let foot;
+      if (isClass && ev && ev.own) {
+        actions.push(cardButton(L("As it was", "Как было"), remove));
+        foot = L("Your change: the calendars and Tablo show the class so, until RUZ itself changes it.",
+          "Ваша правка: так пара стоит в календарях и в Tablo, пока РУЗ сам её не изменит.");
+      } else if (isClass && ev && !ev.hidden) {
+        actions.push(cardButton(L("As it was: as in RUZ", "Как было — как в РУЗ"), () => hide(true)));
+        foot = L(`The chat ${ev.cancelled ? "cancelled" : "changed"} the class; the calendars show it so.`,
+          `В чате пару ${ev.cancelled ? "отменили" : "изменили"}; так она и стоит в календарях.`);
+      } else if (isClass && ev && ev.hidden) {
+        actions.push(cardButton(L("Apply the chat's change", "Применить правку из чата"), () => hide(false)));
+        foot = L(`${ev.chat || "A chat"} ${ev.cancelled ? "cancelled the class" : "moved the class to " + when(ev.start, ev.end)}, `
+          + "but you turned the change off: the class is as in RUZ.", `${ev.chat || "В чате"}: пару `
+          + `${ev.cancelled ? "отменили" : "перенесли на " + when(ev.start, ev.end)}, но вы отключили правку — пара `
+          + "стоит как в РУЗ.");
+      } else if (ev && ev.copy) {
+        actions.push(cardButton(L("As it was", "Как было"), remove));
+        foot = L("Your copy stands in for the chat's event: a later message of the chat changes only the hidden one.",
+          "Ваша копия стоит вместо события из чата: следующее сообщение чата изменит только скрытое.");
+      } else if (isClass) {
+        foot = L("As in RUZ. A change of yours moves, renames or cancels the class in the calendars and in Tablo; RUZ "
+          + "stays as it is.", "Как в РУЗ. Ваша правка переносит, переименовывает или отменяет пару в календарях и в "
+          + "Tablo; сам РУЗ не меняется.");
+      } else {
+        foot = ev && ev.own ? L("Your own event: in the calendars and in Tablo.", "Своё событие — в календарях и в Tablo.")
+          : L("From a chat. A change of yours makes your own copy in its place.",
+            "Из чата. Ваша правка сделает свою копию на его месте.");
+      }
+      // Remove: a class is cancelled (it stays struck out), a chat's event and your copy are hidden, yours deleted.
+      if (isClass && !item.cancelled) {
+        actions.push(cardButton(L("Remove", "Убрать"), async () => {
+          if (await askYes(L("Cancel this class in the calendars?", "Отменить пару в календарях?"))) {
+            change("api/corrections", "POST", {...entryValues(item), cancelled: true}, "api/agenda");
+          }
+        }, {danger: true}));
+      } else if (!isClass && ev && ev.own && !ev.copy) {
+        actions.push(cardButton(L("Remove", "Убрать"), async () => {
+          if (await askYes(L("Delete this event?", "Удалить событие?"))) remove();
+        }, {danger: true}));
+      } else if (!isClass && ev) {
+        actions.push(cardButton(L("Remove", "Убрать"), () => hide(true), {danger: true}));
       }
       openCard(cardHead(el("span", {className: item.cancelled ? "struck" : ""}, item.title),
-        item.cancelled ? el("span", {className: "late"}, L("Cancelled", "Отменена")) : null),
-        cardList(facts), actions.length ? cardList(actions) : null, foot ? cardFoot(foot) : null);
+        item.cancelled ? el("span", {className: "late"}, L("Cancelled", "Отменено")) : null),
+        cardList(facts), cardList(actions), cardFoot(foot));
+    }
+
+    // An entry as the form sends it: a class's correction keeps what the entry shows.
+    function entryValues(item) {
+      return {class_uid: item.uid, title: item.title, kind: item.type, start: item.start, end: item.end,
+        room: item.room,
+        required: item.required, cancelled: item.cancelled};
     }
 
     async function hiddenEventsPage() {
@@ -1137,45 +1169,48 @@
         })) : empty(L("Nothing is removed.", "Убранных нет."))];
     }
 
-    // A new event, an event changed, or a RUZ class moved or cancelled (a correction of your own).
+    // One form for every entry (D49): a new event, an event changed, a RUZ class changed (a correction of your own).
     async function eventPage(item) {
       const data = await get("api/agenda");
       const ev = item && item.event;
-      const isClass = item && (item.source === "ruz" || (ev && ev.correction));
-      const title = input(item && item.title, {maxLength: 120, placeholder: L("Meeting with the supervisor",
+      const isClass = Boolean(item && (item.source === "ruz" || (ev && ev.correction)));
+      const values = item ? entryValues(item) : {title: "", kind: "Event", start: `${data.today}T10:00:00`,
+        end: `${data.today}T11:20:00`, room: "", required: true, cancelled: false};
+      const title = input(values.title, {maxLength: 120, placeholder: L("Meeting with the supervisor",
         "Встреча с научруком")});
-      const day = input(item ? item.start.slice(0, 10) : data.today, {type: "date"});
-      const timed = item && !allDay(item.start);  // an all-day event gets its time here
-      const from = input(timed ? item.start.slice(11, 16) : "10:00", {type: "time"});
-      const to = input(timed ? item.end.slice(11, 16) : "11:20", {type: "time"});
-      const where = input(item && item.location, {placeholder: L("Room or link", "Аудитория или ссылка")});
-      let kind = item ? item.type : "Event";
-      let required = item ? item.required : true;
-      let cancelled = item ? item.cancelled : false;
-      const fields = isClass ? [] : [field(L("Title", "Название"), title),
-        field(L("Type", "Тип"), selectOf([...new Set([...EVENT_TYPES, kind])].map((t) => [t, TYPES()[t] || t.toLowerCase()]),
-          kind, (value) => { kind = value; }))];
-      fields.push(field(L("Date", "Дата"), day), field(L("From", "С"), from), field(L("To", "До"), to),
-        field(L("Where", "Где"), where));
+      let kind = values.kind, wholeDay = allDay(values.start), required = values.required, cancelled = values.cancelled;
+      const day = input(values.start.slice(0, 10), {type: "date"});
+      const from = input(wholeDay ? "10:00" : values.start.slice(11, 16), {type: "time"});
+      const to = input(wholeDay || !values.end ? "11:20" : values.end.slice(11, 16), {type: "time"});
+      const where = input(values.room, {placeholder: L("Room or link", "Аудитория или ссылка")});
+      const times = [field(L("From", "С"), from), field(L("To", "До"), to)];
+      const showTimes = () => times.forEach((f) => { f.hidden = wholeDay; });
+      showTimes();
       const save = () => {
-        const start = `${day.value}T${from.value}:00`, end = `${day.value}T${to.value}:00`;
-        if (isClass) return submit("api/corrections", "POST", {class_uid: item.uid, start, end, room: where.value, cancelled});
-        const values = {title: title.value, kind, start, end, room: where.value, required};
-        return ev ? submit("api/events/" + ev.id, "PATCH", values) : submit("api/events", "POST", values);
+        const start = wholeDay ? day.value : `${day.value}T${from.value}:00`;
+        const end = wholeDay ? null : `${day.value}T${to.value}:00`;
+        const sent = {title: title.value, kind, start, end, room: where.value, required, cancelled};
+        if (isClass) return submit("api/corrections", "POST", {...sent, class_uid: item.uid});
+        return ev ? submit("api/events/" + ev.id, "PATCH", sent) : submit("api/events", "POST", sent);
       };
-      return [el("h1", {className: "title"}, !item ? L("New event", "Новое событие") : isClass
-        ? L("Move or cancel the class", "Перенести или отменить пару") : L("Edit event", "Изменить событие")),
-        isClass ? el("p", {className: "subtitle"}, item.title) : null,
-        section(null, fields),
-        section(null, [isClass ? row({title: L("Cancelled", "Отменена"), control: toggle(cancelled, (on) => { cancelled = on; })})
-          : row({title: L("Required", "Обязательное"), sub: L("off: the optional calendar", "выкл. — необязательный календарь"),
-            control: toggle(required, (on) => { required = on; })})],
-        isClass ? L("RUZ stays as it is: your correction moves or cancels the class in the calendars and in Tablo, until "
-          + "RUZ itself changes the class.", "РУЗ не меняется: ваша правка переносит или отменяет пару в календарях и "
-          + "в Tablo, пока РУЗ сам её не изменит.")
-          : ev && !ev.own ? L("The chat's event is hidden and your own copy with the changes takes its place: a later "
-            + "message of the chat does not undo them.", "Событие чата скроется, его место займёт ваша копия с "
-            + "изменениями: следующее сообщение чата их не отменит.")
+      const types = [...new Set([...EVENT_TYPES, kind])].map((t) => [t, TYPES()[t] || t.toLowerCase()]);
+      return [el("h1", {className: "title"}, item ? L("Edit", "Изменить") : L("New event", "Новое событие")),
+        section(null, [field(L("Title", "Название"), title),
+          field(L("Type", "Тип"), selectOf(types, kind, (value) => { kind = value; }))]),
+        section(null, [field(L("Date", "Дата"), day),
+          row({title: L("All day", "Весь день"), control: toggle(wholeDay, (on) => { wholeDay = on; showTimes(); })}),
+          ...times, field(L("Where", "Где"), where)]),
+        section(null, [
+          row({title: L("Required", "Обязательное"), sub: L("off: the optional calendar", "выкл. — второй календарь"),
+            control: toggle(required, (on) => { required = on; })}),
+          row({title: L("Cancelled", "Отменено"), sub: L("stays in the calendar, struck out", "остаётся в календаре, зачёркнутым"),
+            control: toggle(cancelled, (on) => { cancelled = on; })})],
+          isClass ? L("RUZ stays as it is: your change applies in the calendars and in Tablo until RUZ itself changes "
+            + "the class; «As it was» undoes it.", "РУЗ не меняется: ваша правка действует в календарях и в Tablo, пока "
+            + "РУЗ сам не изменит пару; «Как было» её отменит.")
+          : ev && !ev.own ? L("The chat's event is hidden and your own copy takes its place: a later message of the chat "
+            + "does not undo your changes; «As it was» does.", "Событие чата скроется, его место займёт ваша копия: "
+            + "следующее сообщение чата правку не отменит, «Как было» — отменит.")
           : L("Your own event: in the calendars and in Tablo.", "Своё событие — в календарях и в Tablo.")),
         primary(L("Save", "Сохранить"), save)];
     }

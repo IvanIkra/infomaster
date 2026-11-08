@@ -27,6 +27,7 @@ import hashlib
 import hmac
 import html
 import json
+import re
 import time
 from functools import partial
 from pathlib import Path
@@ -83,7 +84,8 @@ SHEET_COURSE_LIMIT, SHEET_NUMBER_LIMIT = 60, 20
 GRADE_LABEL_LIMIT = 40
 EVENT_TITLE_LIMIT = 120
 ROOM_LIMIT = 300  # a room, or a meeting's link
-EVENT_FIELDS = ("title", "kind", "start", "end", "room", "required")
+EVENT_FIELDS = ("title", "kind", "start", "end", "room", "required", "cancelled")
+NEW_EVENT = {"title", "kind", "start", "end", "room", "required"}  # what a new event needs; cancelled may come too
 KIND_LIMIT = 40  # the kind is the type of the feeds once processing/schedule.py's type_of has read it
 CHART_DAYS = 30
 
@@ -283,10 +285,19 @@ def _event_fields(request: web.Request, values: dict, names: set[str]) -> dict:
             raise web.HTTPBadRequest(text=f"kind: a word up to {KIND_LIMIT} characters, as Event or Consultation")
         fields["kind"] = kind.strip()
     if {"start", "end"} & names:
-        start, end = _moment(request, values.get("start")), _moment(request, values.get("end"))
-        if end <= start:
-            raise bad_request(request, "the end comes after the start", "конец — позже начала")
-        fields["start"], fields["end"] = start.isoformat(timespec="seconds"), end.isoformat(timespec="seconds")
+        day = values.get("start") if isinstance(values.get("start"), str) else ""
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):  # all day: a date, no end (D46)
+            if values.get("end"):
+                raise bad_request(request, "an all-day event has no end", "у события на весь день нет конца")
+            try:
+                fields["start"], fields["end"] = dt.date.fromisoformat(day).isoformat(), None
+            except ValueError:
+                raise bad_request(request, "a date like 2026-10-22", "дата вида 2026-10-22") from None
+        else:
+            start, end = _moment(request, values.get("start")), _moment(request, values.get("end"))
+            if end <= start:
+                raise bad_request(request, "the end comes after the start", "конец — позже начала")
+            fields["start"], fields["end"] = start.isoformat(timespec="seconds"), end.isoformat(timespec="seconds")
     if "room" in names:
         room = values.get("room", "")
         if not isinstance(room, str) or len(room) > ROOM_LIMIT:
@@ -307,14 +318,16 @@ def _event_id(request: web.Request) -> int:
 
 
 async def add_event(request: web.Request) -> web.Response:
-    """{title, kind, start, end, room, required}: an own event."""
-    request.app[SCHEDULE_KEY].add_event(_event_fields(request, await _json(request), set(EVENT_FIELDS)))
+    """{title, kind, start, end, room, required, cancelled?}: an own event; a start that is a date alone and no end
+    make it an all-day one."""
+    values = await _json(request)
+    request.app[SCHEDULE_KEY].add_event(_event_fields(request, values, NEW_EVENT | ({"cancelled"} & set(values))))
     return respond(request, _agenda_state(request))
 
 
 async def update_event(request: web.Request) -> web.Response:
     """{required?, hidden?} for the newest version of an event, as the forum's buttons; or some of {title, kind,
-    start, end, room, required}: the owner's change of an event of its own (not a correction)."""
+    start, end, room, required, cancelled}: the owner's change of an event of its own (not a correction)."""
     event_id = _event_id(request)
     values = await _json(request)
     timetable = request.app[SCHEDULE_KEY]
@@ -350,11 +363,14 @@ async def delete_event(request: web.Request) -> web.Response:
 
 
 async def correct_class(request: web.Request) -> web.Response:
-    """{class_uid, start, end, room, cancelled}: the owner moves or cancels a RUZ class."""
+    """{class_uid, start, end, room, cancelled, title?, kind?, required?}: the owner changes a RUZ class as any other
+    entry (D49): moves, cancels, renames it, gives it another type or the optional calendar."""
     values = await _json(request)
-    fields = _event_fields(request, values, {"start", "end", "room", "cancelled"})
+    fields = _event_fields(request, values, {"start", "end", "room", "cancelled"} |
+                           ({"title", "kind", "required"} & set(values)))
     if not isinstance(values.get("class_uid"), str) or await request.app[SCHEDULE_KEY].correct_class(
-            values["class_uid"], fields["start"], fields["end"], fields["room"], fields["cancelled"]) is None:
+            values["class_uid"], fields["start"], fields["end"], fields["room"], fields["cancelled"],
+            title=fields.get("title"), kind=fields.get("kind"), required=fields.get("required", True)) is None:
         raise web.HTTPNotFound(text="no such class")
     return respond(request, _agenda_state(request))
 

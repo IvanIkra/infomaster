@@ -29,7 +29,7 @@ from ..store import Store
 from .deadlines import same_label
 
 FIELDS = ("uid", "source", "chat_id", "msg_ids", "class_uid", "course", "title", "kind", "start", "end", "room",
-          "required", "chosen", "hidden", "cancelled")
+          "required", "chosen", "hidden", "cancelled", "copy_of")
 IN_FORCE = "replaced_by is null and gone_at is null"
 OWN = "own"  # the source of the owner's own events and corrections
 
@@ -135,8 +135,8 @@ class Events:
 
     def add(self, event: dict, at: dt.datetime) -> int:
         """`event`: uid, source, chat_id, msg_ids, class_uid, course, title, kind, start, end, room, required;
-        optionally chosen, hidden, cancelled."""
-        values = {"chosen": False, "hidden": False, "cancelled": False, "class_uid": None, **event}
+        optionally chosen, hidden, cancelled, copy_of."""
+        values = {"chosen": False, "hidden": False, "cancelled": False, "class_uid": None, "copy_of": None, **event}
         values["msg_ids"] = json.dumps(values["msg_ids"])
         values["course"] = values["course"] or None
         values["end"] = values["end"] or None
