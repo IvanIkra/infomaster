@@ -368,6 +368,12 @@
     .grade { color: var(--text); font-variant-numeric: tabular-nums; }
     .row.fact .name { color: var(--hint); }
     .row.fact .value { max-width: 68%; color: var(--text); white-space: normal; overflow-wrap: anywhere; }
+    /* A source message as the twin read it (D50). */
+    .message { display: block; padding: 11px 16px; }
+    .message > div { padding: 0; }
+    .message .who { color: var(--hint); font-size: 13px; margin-bottom: 4px; }
+    .message .text { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+    .message .file { color: var(--hint); font-size: 15px; margin-top: 6px; }
     .text { padding: 12px 16px; font-size: 15px; line-height: 1.4; }
     .row.field .label { flex: none; width: 92px; color: var(--hint); }
     .row.field .grow { flex: 1; min-width: 0; }
@@ -707,6 +713,43 @@
 
     const runs = (n) => count(n, ["call", "calls"], ["вызов", "вызова", "вызовов"]);
 
+    // A source shown as a link to its message's page in the Mini App (D50): your own account need not be in the chat;
+    // the page links to the message itself. Without a stored reference, the t.me link as it is.
+    function toMessage(text, ref, url) {
+      if (ref) return el("a", {href: "#", onclick: (e) => { e.preventDefault(); closeCard(true);
+        push(() => messagePage(ref.chat, ref.msg)); }}, text);
+      return url ? el("a", {href: url, onclick: (e) => { e.preventDefault(); openLink(url); }}, text) : text;
+    }
+
+    async function messagePage(chat, msg) {
+      const data = await get(`api/message?chat=${chat}&msg=${msg}`);
+      const title = data.source === "mail" ? data.subject || L("Letter", "Письмо") : data.chat.title;
+      const bubble = (m) => {
+        const marks = [m.forward ? L(`forwarded from ${m.forward}`, `переслано от ${m.forward}`) : null,
+          m.edited ? L("edited", "изменено") : null, m.deleted ? L("deleted", "удалено") : null].filter(Boolean);
+        return el("div", {className: "row message"},
+          el("div", {className: "who"}, [m.sender, m.at ? when(m.at) : null, ...marks].filter(Boolean).join(" · ")),
+          m.text ? el("div", {className: "text"}, m.text) : null,
+          ...(m.files || []).map((f) => el("div", {className: "file"}, "📎 " + (f.name || f.kind || L("file", "файл")))));
+      };
+      const parts = [el("h1", {className: "title"}, title)];
+      if (!data.stored) {
+        parts.push(empty(L("The message is no longer kept: messages are kept for 14 days.",
+          "Сообщение уже не хранится: сообщения хранятся 14 дней.")));
+      } else {
+        if (data.reply) parts.push(...section(L("In reply to", "В ответ на"), [bubble(data.reply)]));
+        parts.push(...section(data.reply ? L("The message", "Сообщение") : null, [bubble(data.message)],
+          L("As the twin read it.", "Как его прочитал твинк.")));
+      }
+      if (data.link) {
+        parts.push(el("div", {className: "list", style: "margin-top: 22px"}, button(L("Open in Telegram",
+          "Открыть в Telegram"), () => openLink(data.link))));
+        parts.push(el("p", {className: "foot"}, L("Opens if your own account is in the chat.",
+          "Откроется, если ваш аккаунт есть в чате.")));
+      }
+      return parts;
+    }
+
     function openLink(url) {  // a t.me link opens in Telegram itself, not in a browser
       if (url.startsWith("https://t.me/")) tg.openTelegramLink(url); else tg.openLink(url);
     }
@@ -941,8 +984,7 @@
       const days = daysFrom(data.today, d.due);
       const due = (days === 0 || days === 1 ? dueMark(d.due, data.today) + ", " : "") + dayLabel(d.due)
         + (days < 0 ? L(" · overdue", " · просрочен") : "");
-      const from = d.link ? el("a", {href: d.link, onclick: (e) => { e.preventDefault(); openLink(d.link); }},
-        deadlineFrom(d)) : deadlineFrom(d);
+      const from = toMessage(deadlineFrom(d), d.message, d.link);
       openCard(cardHead(d.title),
         cardList(fact(L("Due", "Срок"), el("span", {className: days < 0 ? "late" : ""}, due)),
           fact(L("Course", "Предмет"), d.course), fact(L("From", "Откуда"), from),
@@ -1098,10 +1140,10 @@
           : place(item.location)),
         fact(L("What", "Что"), TYPES()[item.type] || item.type),
         fact(L("Calendar", "Календарь"), item.required ? L("main", "основной") : L("optional", "по желанию")),
-        fact(L("From", "Откуда"), linkTo(fromText, link)),
-        was ? fact(L("Was", "Было"), linkTo((was.title !== item.title ? `${was.title} · ` : "")
-          + `${dayLabel(was.start.slice(0, 10))}, ${hours(was.start, was.end)}`
-          + (was.room ? ", " + place(was.room) : "") + (ev.original && ev.original.chat ? ` · ${ev.original.chat}` : ""),
+        fact(L("From", "Откуда"), toMessage(fromText, ev && (!ev.correction || !ev.hidden) ? ev.message : null, link)),
+        was ? fact(L("Was", "Было"), toMessage((was.title !== item.title ? `${was.title} · ` : "")
+          + `${dayLabel(was.start.slice(0, 10))}, ${hours(was.start, was.end)}` + (was.room ? ", " + place(was.room) : "")
+          + (ev.original && ev.original.chat ? ` · ${ev.original.chat}` : ""), ev.original && ev.original.message,
           ev.original && ev.original.link)) : null];
 
       const actions = [cardButton(L("Edit", "Изменить"), () => push(() => eventPage(item)))];
@@ -2318,7 +2360,9 @@
       document.documentElement.lang = lang;
       drawTabbar();
       const event = /^ev-[0-9a-f]{12}$/.test(screen || "") ? screen.slice(3) : null;  // a link in the calendar
-      const [tab, inner] = event ? ["schedule"] : SCREENS[screen] || ["deadlines"];
+      const told = /^m-(-?\d+)-(\d+)$/.exec(screen || "");  // a source message's page (D50)
+      const [tab, inner] = event ? ["schedule"] : told ? ["deadlines", () => messagePage(told[1], told[2])]
+        : SCREENS[screen] || ["deadlines"];
       nav.tab = tab;
       nav.stack = typeof inner === "function" ? [inner] : [];
       if (typeof inner === "string") nav.study = inner;

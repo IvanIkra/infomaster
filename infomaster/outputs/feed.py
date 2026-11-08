@@ -64,18 +64,21 @@ def day(due: str, lang: str) -> str:
     return f"{WEEKDAYS[lang][date.weekday()]} {date:%d.%m}"
 
 
-def source(inbox: Inbox, row: dict, lang: str) -> str:
-    """Where a news item, deadline or event (`row`: source, chat_id, msg_ids) came from: the chat's name with a link
-    to the message where the platform has one; for a letter its subject (§8.3), while the letter is kept."""
+def source(inbox: Inbox, row: dict, lang: str, page: Callable[[int, int], str | None] | None = None) -> str:
+    """Where a news item, deadline or event (`row`: source, chat_id, msg_ids) came from: the chat's name, for a letter
+    its subject (§8.3) while the letter is kept, with a link to the message's page in the Mini App (`page`, D50: your
+    own account need not be in the chat); without one, to the message itself where the platform has a link."""
+    url = page(row["chat_id"], row["msg_ids"][0]) if page and row["chat_id"] is not None and row["msg_ids"] else None
     if row["source"] == "mail":
         subject = inbox.subject(row["msg_ids"])
         letter = tr(lang, "letter", "письмо")
-        return f"{letter} «{html.escape(subject)}»" if subject else letter
+        text = f"{letter} «{html.escape(subject)}»" if subject else letter
+        return f'<a href="{html.escape(url)}">{text}</a>' if url else text
     chat = inbox.chat(row["chat_id"]) if row["chat_id"] is not None else None
     if chat is None:
         return "?"
     title = html.escape(chat["title"])
-    link = message_link(chat, row["msg_ids"][0]) if row["msg_ids"] else None
+    link = url or (message_link(chat, row["msg_ids"][0]) if row["msg_ids"] else None)
     return f'<a href="{html.escape(link)}">{title}</a>' if link else title
 
 
@@ -163,7 +166,7 @@ class Feed:
                 item = self.news.get(news_id)
                 if item and item["replaced_by"] is None and item["gone_at"] is None and not item["hidden"] \
                         and item["importance"] >= ALERT_IMPORTANCE:
-                    text = f"🔔 {html.escape(item['full'])}\n{source(self.inbox, item, self.forum.lang)}"
+                    text = f"🔔 {html.escape(item['full'])}\n{self._source(item, self.forum.lang)}"
                     hide = [[Button.inline(self.forum.tr("Hide", "Скрыть"), f"nw:hide:{news_id}".encode())]]
                     self._remember(await self.forum.post("news", text, buttons=hide, html=True), "news_alert",
                                    news_id)
@@ -177,9 +180,12 @@ class Feed:
             text = html.escape(item["full"])
             if item["importance"] >= 5:
                 text = f"<b>{text}</b>"
-            lines.append(f"{icon(self.inbox, item)} {text} · {source(self.inbox, item, lang)}")
+            lines.append(f"{icon(self.inbox, item)} {text} · {self._source(item, lang)}")
         return split(tr(lang, "<b>News</b>\n", "<b>Новости</b>\n"),
                      lines or [tr(lang, "No live news.", "Живых новостей нет.")], MESSAGE_LIMIT)
+
+    def _source(self, item: dict, lang: str) -> str:
+        return source(self.inbox, item, lang, self.forum.message_url)
 
     async def _rebuild(self) -> None:
         """The list as it should be; a change deletes the alerts, whose items are on it already. Under the lock."""

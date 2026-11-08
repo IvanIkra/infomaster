@@ -147,7 +147,7 @@ class DeadlineTopic:
         if d.ref.startswith("dl:") and d.source in ("tg", "mail"):
             row = self.merged.deadlines.get(int(d.ref[3:]))
             if row is not None and (row["chat_id"] is not None or row["source"] == "mail"):
-                return icon(self.inbox, row), source(self.inbox, row, lang)
+                return icon(self.inbox, row), source(self.inbox, row, lang, self.forum.message_url)
         names = {"ical": tr(lang, "RUZ", "РУЗ"), "hseapp": "HSE App X", "ha": tr(lang, "own", "свой")}
         return ICONS.get(d.source, "•"), names.get(d.source, "?")
 
@@ -233,7 +233,7 @@ class DeadlineTopic:
         if ref.startswith("dl:"):
             row = self.merged.deadlines.get(int(ref[3:]))
             if row is not None and row["chat_id"] is not None:
-                return [source(self.inbox, row, self.forum.lang)]
+                return [source(self.inbox, row, self.forum.lang, self.forum.message_url)]
         elif ref.startswith("hseapp:"):
             item_id = ref.removeprefix("hseapp:")
             item = next((item for item in self.merged.hseapp.current() if item["id"] == item_id), None)

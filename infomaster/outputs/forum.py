@@ -41,12 +41,16 @@ SCREENS = {"hseapp": Phrase("The HSE App X login is in the Mini App.", "Вход
 
 EVENT_SCREEN = re.compile(r"ev-[0-9a-f]{12}")  # an event's card: a link in one's own calendar (ical_feed.py)
 EVENT_TEXT = Phrase("The event is in the Mini App.", "Событие — в Mini App.")
+# A source message's page (D50): m-<chat_id>-<msg_id>, the mailbox's chat is 0; your own account need not be in it.
+MESSAGE_SCREEN = re.compile(r"m-(-?\d{1,20})-(\d{1,20})")
+MESSAGE_TEXT = Phrase("The message is in the Mini App.", "Сообщение — в Mini App.")
 
 
 def start_screen(text: str) -> str | None:
     """'/start hseapp' -> 'hseapp': the screen a deep link under a forum post or in the calendar asks for."""
     words = text.split()
-    if len(words) > 1 and (words[1] in SCREENS or EVENT_SCREEN.fullmatch(words[1])):
+    if len(words) > 1 and (words[1] in SCREENS or EVENT_SCREEN.fullmatch(words[1]) or
+                           MESSAGE_SCREEN.fullmatch(words[1])):
         return words[1]
     return None
 
@@ -98,7 +102,20 @@ class Forum:
         when the bot has a main Mini App, else through the chat with the bot and its button. None before the start."""
         if not self.username:
             return None
-        return f"https://t.me/{self.username}?{'startapp' if self.main_app else 'start'}=ev-{key}"
+        return self._app_link(f"ev-{key}")
+
+    def message_url(self, chat_id: int | None, msg_id: int | None) -> str | None:
+        """A link to a source message's page in the Mini App (D50): the message as the twin read it and its own t.me
+        link, for a chat your own account is not in. None before the start or without a message."""
+        if chat_id is None or msg_id is None:
+            return None
+        return self._app_link(f"m-{chat_id}-{msg_id}")
+
+    def _app_link(self, screen: str) -> str | None:
+        """The Mini App opened on a screen: at once with a main Mini App, else through the chat with the bot."""
+        if not self.username:
+            return None
+        return f"https://t.me/{self.username}?{'startapp' if self.main_app else 'start'}={screen}"
 
     async def start(self) -> None:
         await self.client.start(bot_token=self.env.bot_token)
@@ -338,7 +355,8 @@ class Forum:
         screen = start_screen(event.raw_text)  # from a button under a forum post
         url = self.screen_url(screen) if screen else self.miniapp_url
         open_app = types.KeyboardInlineButton(self.tr("Open", "Открыть"), types.InlineButtonTypeWebView(url))
-        text = (SCREENS.get(screen) or EVENT_TEXT).get(self.lang) if screen else \
+        text = (SCREENS.get(screen) or (MESSAGE_TEXT if screen.startswith("m-") else EVENT_TEXT)).get(self.lang) \
+            if screen else \
             self.tr("The settings are in the Mini App.", "Настройки — в Mini App.")
         await event.respond(text, buttons=[open_app])
 

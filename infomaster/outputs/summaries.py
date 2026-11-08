@@ -58,8 +58,10 @@ def header(collected: Collected) -> str:
     return f"<b>{html.escape(collected.chat['title'])}</b> · {span(collected)}"
 
 
-def point_line(collected: Collected, point: dict) -> str:
-    link = message_link(collected.chat, point["msg_id"]) if point["msg_id"] else None
+def point_line(collected: Collected, point: dict, page: Callable[[int, int], str | None] | None = None) -> str:
+    """A point with a link to its message: its page in the Mini App (D50), else the message itself."""
+    link = (page and page(collected.chat["id"], point["msg_id"]) or message_link(collected.chat, point["msg_id"])) \
+        if point["msg_id"] else None
     return f"• {html.escape(point['text'])}" + (f' <a href="{html.escape(link)}">→</a>' if link else "")
 
 
@@ -199,7 +201,8 @@ class SummaryTopic:
     async def publish(self, collected: Collected) -> int:
         """Post a summary to the topic, in several messages when long; the id of the first."""
         first = None
-        for text in split(header(collected), [point_line(collected, p) for p in collected.points], MESSAGE_LIMIT):
+        lines = [point_line(collected, p, self.forum.message_url) for p in collected.points]
+        for text in split(header(collected), lines, MESSAGE_LIMIT):
             msg_id = await self.forum.post(TOPIC, text, html=True)
             first = first or msg_id
         return first

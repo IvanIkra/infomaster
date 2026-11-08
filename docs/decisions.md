@@ -191,6 +191,14 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   it. A chat's event gets an own copy as before, which now remembers the event it stands in for (`events.copy_of`):
   **As it was** withdraws the copy and shows the chat's event again; the hidden list leaves out an event with a copy.
   **Remove** cancels a class (it stays struck out), hides a chat's event or an own copy, and deletes an own event.
+- **D50. A source links to its message's page in the Mini App, 09.11.2026.** This changes §8.3 and D48. The twin
+  reads chats your own account may not be in, so a t.me link to the message does not open for you. Every "where it
+  came from" link (the news, deadlines and timetable topics, the reminders, the sheets, the summaries' points, the
+  calendar's "From:", the Mini App's cards) now opens the message's page: `m-<chat_id>-<msg_id>` as a start parameter
+  (the mailbox is chat 0), through the bot as the **Edit** link of D48 is. The page (`GET /app/api/message`) shows
+  the chat or the letter's subject, the sender, the time, the text, the files' names and the message it answers, as
+  the twin read it, and **Open in Telegram** with the t.me link. After its 14 days (D29) only the chat and the link
+  are left. Before the bot has started the links are t.me as before; `X-INFOMASTER-LINK` for Tablo stays t.me.
 
 ## Open questions
 

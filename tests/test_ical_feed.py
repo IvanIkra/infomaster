@@ -198,6 +198,10 @@ def test_origin_and_edit_link(feed):
     assert "From: Матан https://t.me/c/1234567890/5" in str(moved["DESCRIPTION"])
     tablo = events_of(feed.render("tablo"))
     assert all("URL" not in e and "From:" not in str(e["DESCRIPTION"]) for e in tablo.values())
+    feed.message_page = lambda chat_id, msg_id: f"https://t.me/example_bot?start=m-{chat_id}-{msg_id}"  # D50
+    consult = events_of(feed.render("main"))[event_uid("tg", CHAT, 1)]
+    assert "From: Матан https://t.me/example_bot?start=m--1001234567890-1\n" in str(consult["DESCRIPTION"])
+    feed.message_page = None
     feed.edit_link = lambda uid: None  # before the bot has started: the source only
     assert str(events_of(feed.render("main"))["2000001@ruz.hse.ru"]["DESCRIPTION"]) == "Seminar\nFrom: RUZ"
 

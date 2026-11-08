@@ -184,6 +184,10 @@ async def test_hseapp_wiring(tmp_path):
         service.forum.main_app = True  # a main Mini App: the link opens it at once
         assert service.forum.event_link("0123456789ab") == "https://t.me/example_bot?startapp=ev-0123456789ab"
         service.forum.main_app = False
+        assert forum_module.start_screen("/start m--1001234567890-15") == "m--1001234567890-15"  # a message's page
+        assert service.forum.message_url(-1001234567890, 15) == "https://t.me/example_bot?start=m--1001234567890-15"
+        assert service.forum.message_url(None, 15) is None
+        assert service.calendar.message_page == service.forum.message_url
         several = [types.Username("old_bot", editable=True, active=False), types.Username("main", active=True)]
         assert forum_module.bot_username(types.User(id=1, usernames=several)) == "main"
         assert forum_module.bot_username(types.User(id=1, username="one_bot")) == "one_bot"

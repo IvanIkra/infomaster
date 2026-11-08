@@ -39,7 +39,7 @@ from .. import clock
 from ..collectors.files import UPLOAD_MAX_SIZE
 from ..collectors.grades import sheet_id, short_course
 from ..collectors.hseapp import CALLBACK_PATH, HseApp
-from ..collectors.inbox import MAILBOX, Inbox
+from ..collectors.inbox import MAILBOX, Inbox, message_link
 from ..collectors.telegram import LoginError, Twin
 from ..config import Env
 from ..i18n import LANGUAGES, json_default, reason, tr
@@ -47,7 +47,7 @@ from ..llm.budget import SOFT_SHARE, Budget
 from ..llm.journal import Journal
 from ..processing.grades import Grades, budget
 from ..processing.merge import DeadlineList
-from ..processing.schedule import Schedule
+from ..processing.schedule import Schedule, message_ref
 from ..processing.sheets import SUMMARY_CHARS
 from ..processing.subjects import ABBR_CHARS, TITLE_CHARS, SubjectError, Subjects
 from ..processing.todo import CATEGORIES, uid
@@ -375,15 +375,50 @@ async def correct_class(request: web.Request) -> web.Response:
     return respond(request, _agenda_state(request))
 
 
+# --- a source message (D50) -------------------------------------------------------------------
+
+def _message_view(message: dict) -> dict:
+    return {"sender": message["sender_name"], "at": message["at"], "text": message["text"],
+            "files": [{"kind": f.get("kind"), "name": f.get("name")} for f in message["files"]],
+            "forward": (message["forward"] or {}).get("from"), "edited": message["edited_at"] is not None,
+            "deleted": message["deleted_at"] is not None}
+
+
+async def message(request: web.Request) -> web.Response:
+    """?chat=<chat_id>&msg=<msg_id>: a message as the twin read it (a letter for chat 0), with what it answers and its
+    own t.me link, for a chat your own account is not in. Kept 14 days (D29): after that only the chat and the link."""
+    try:
+        chat_id, msg_id = int(request.query["chat"]), int(request.query["msg"])
+    except (KeyError, ValueError):
+        raise web.HTTPBadRequest(text="expected ?chat=<id>&msg=<id>") from None
+    inbox = request.app[INBOX_KEY]
+    source = "mail" if chat_id == MAILBOX else "tg"
+    chat = inbox.chat(chat_id) if source == "tg" else None
+    if source == "tg" and chat is None:
+        raise web.HTTPNotFound(text="no such chat")
+    stored = inbox.message(chat_id, msg_id, source)
+    about = {"id": chat["id"], "title": chat["title"], "kind": chat["kind"]} if chat else None
+    body = {"source": source, "chat": about, "link": message_link(chat, msg_id) if chat else None,
+            "stored": stored is not None,
+            "subject": stored["subject"] if stored else None, "message": _message_view(stored) if stored else None,
+            "reply": None}
+    if stored and stored["reply_to"]:
+        replied = inbox.message(chat_id, stored["reply_to"], source)
+        body["reply"] = _message_view(replied) if replied else {"text": stored["reply_quote"] or "", "sender": None}
+    elif stored and stored["reply_quote"]:
+        body["reply"] = {"text": stored["reply_quote"], "sender": None}
+    return respond(request, body)
+
+
 # --- deadlines -------------------------------------------------------------------------------
 
 def _origin(request: web.Request, d) -> dict:
     """The chat or the letter a deadline of the chats or the mail came from, with the link to its message."""
     row = request.app[DEADLINES_KEY].deadlines.get(int(d.ref[3:])) if d.ref.startswith("dl:") else None
     if row is None or row["source"] not in ("tg", "mail"):
-        return {"from": None, "link": None}
+        return {"from": None, "link": None, "message": None}
     timetable = request.app[SCHEDULE_KEY]
-    return {"from": timetable.told_by(row), "link": timetable.link(row)}
+    return {"from": timetable.told_by(row), "link": timetable.link(row), "message": message_ref(row)}
 
 
 def _deadlines_state(request: web.Request) -> dict:
@@ -1034,6 +1069,7 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
     app.router.add_put("/app/api/subjects", put_subject)
     app.router.add_delete("/app/api/subjects", delete_subject)
     app.router.add_get("/app/api/agenda", agenda)
+    app.router.add_get("/app/api/message", message)
     app.router.add_post("/app/api/events", add_event)
     app.router.add_patch("/app/api/events/{event_id}", update_event)
     app.router.add_delete("/app/api/events/{event_id}", delete_event)

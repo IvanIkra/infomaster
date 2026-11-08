@@ -109,7 +109,8 @@ class Timetable:
 
     def _source(self, event: dict) -> str:
         """The message that told it, or the letter's subject."""
-        return source(self.inbox, event, self.forum.lang) if event["chat_id"] is not None else ""
+        return source(self.inbox, event, self.forum.lang, self.forum.message_url) if event["chat_id"] is not None \
+            else ""
 
     def _new_text(self, event: dict) -> str:
         lang = self.forum.lang

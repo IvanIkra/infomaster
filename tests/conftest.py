@@ -80,6 +80,11 @@ class FakeForum:
     def tr(self, en, ru):
         return tr(self.lang, en, ru)
 
+    pages = False  # the bot's links to a message's page in the Mini App (D50); off: the t.me link as before
+
+    def message_url(self, chat_id, msg_id):
+        return f"https://t.me/example_bot?start=m-{chat_id}-{msg_id}" if self.pages and chat_id is not None else None
+
     async def post(self, topic, text, buttons=None, *, html=False, reply_to=None):
         assert html
         text = say(text, self.lang)

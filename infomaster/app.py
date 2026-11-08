@@ -97,6 +97,7 @@ class Service:
         self.timetable = Timetable(self.forum, self.store, self.inbox, self.schedule, env.owner_id)
         self.calendar = CalendarFeed(self.schedule)
         self.calendar.edit_link = lambda uid: self.forum.event_link(event_key(uid))  # a card, from the calendar
+        self.calendar.message_page = self.forum.message_url  # a source message's page (D50)
         self.hseapp = HseApp(self.store, self.settings, callback_url=env.public_url + CALLBACK_PATH)
         self.hseapp_deadlines = HseAppDeadlines(self.store, self.subjects, self.llm)
         self.mail = Mail(env, self.store, self.settings, self.inbox)

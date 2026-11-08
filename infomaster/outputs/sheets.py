@@ -158,4 +158,4 @@ class SheetTopic:
         if sheet["chat_id"] == OWN_CHAT:
             return self.forum.tr("added by hand", "добавлен вручную")
         return source(self.inbox, {"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]]},
-                      self.forum.lang)
+                      self.forum.lang, self.forum.message_url)

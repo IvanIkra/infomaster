@@ -341,3 +341,11 @@ async def test_a_letter_and_a_channel_in_the_list(topic, forum):
         "",
         '📢 <b>Course survey</b> — вс 25.10 · <a href="https://t.me/c/9876543210/5">Учебный офис</a>',
         "✉️ <b>Elective choice</b> — пн 26.10 · письмо «Elective &lt;choice&gt;»"])
+
+
+async def test_the_source_links_to_the_message_page(topic, forum):
+    """D50: the source opens the message's page in the Mini App, which your own account sees outside the chat."""
+    forum.pages = True
+    add(topic)
+    await topic.refresh()
+    assert board(forum).endswith('· <a href="https://t.me/example_bot?start=m--1001234567890-3">Матан &lt;2026&gt;</a>')

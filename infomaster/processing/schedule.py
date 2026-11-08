@@ -114,6 +114,7 @@ class Entry:
     of_class: bool = False      # a RUZ class: its own calendar marks its type in the title
     abbr: str | None = None     # a class's course abbreviation: an event may name the class by it
     origin: str | None = None   # who told it, in English: a chat's name, a letter's subject; None for RUZ itself
+    message: tuple[int, int] | None = None  # the message that told it, (chat_id, msg_id): its page in the Mini App
 
 
 @dataclass
@@ -125,6 +126,17 @@ class MidtermChanges:
 
     def __bool__(self) -> bool:
         return bool(self.deadlines or self.moved or self.gone)
+
+
+def told_in(row: dict) -> tuple[int, int] | None:
+    """The message that told an event, a correction or a deadline: (chat_id, its first msg_id)."""
+    return (row["chat_id"], row["msg_ids"][0]) if row["chat_id"] is not None and row["msg_ids"] else None
+
+
+def message_ref(row: dict) -> dict | None:
+    """told_in for the Mini App: {chat, msg}, which its message page asks the server for (D50)."""
+    told = told_in(row)
+    return {"chat": told[0], "msg": told[1]} if told else None
 
 
 def local(text: str) -> dt.datetime:
@@ -213,6 +225,7 @@ class Schedule:
         if not applies(item, correction):
             return entry
         entry.source, entry.link, entry.origin = correction["source"], self.link(correction), self.origin(correction)
+        entry.message = told_in(correction)
         by = "by hand" if correction["source"] == OWN else "in a chat"
         if correction["source"] == OWN:
             entry.title = correction["title"] or entry.title
@@ -241,7 +254,7 @@ class Schedule:
                       local(event["end"]) if event["end"] else start + DEFAULT_LENGTH,
                       type=type_of(event["kind"], of_class=False), location=event["room"],
                       required=event["required"], cancelled=event["cancelled"], source=event["source"],
-                      link=self.link(event), all_day=whole_day, origin=self.origin(event))
+                      link=self.link(event), all_day=whole_day, origin=self.origin(event), message=told_in(event))
         if subject := self.subjects.get(event["course"]):  # a course not named yet stays out: the feed is English
             entry.notes.append(subject.title)
         earlier = self.events.previous(event["id"])
@@ -331,11 +344,12 @@ class Schedule:
         return {"id": event["id"], "correction": item is not None, "own": event["source"] == OWN,
                 "copy": original is not None, "hidden": event["hidden"], "cancelled": event["cancelled"],
                 "start": event["start"], "end": self._end(event), "room": event["room"], "chat": self.told_by(event),
-                "link": self.link(event),
+                "link": self.link(event), "message": message_ref(event),
                 "class": {"title": self.class_title(item), "start": item["start"], "end": item["end"],
                           "room": item["room"]} if item else None,
                 "original": {"title": original["title"], "start": original["start"], "end": self._end(original),
-                             "room": original["room"], "chat": self.told_by(original), "link": self.link(original)}
+                             "room": original["room"], "chat": self.told_by(original), "link": self.link(original),
+                             "message": message_ref(original)}
                 if original is not None else None}
 
     # --- the owner's choices ------------------------------------------------------------

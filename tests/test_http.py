@@ -404,8 +404,8 @@ async def test_miniapp_deadlines(aiohttp_client, budget, journal, store, schedul
     item, essay = body["items"]
     assert item == {"uid": merged.items()[0]["uid"], "title": "Calc HW 3", "due": "2026-10-21", "category": "study",
                     "source": "tg", "course": "Математический анализ", "overdue": False, "from": "Матан",
-                    "link": None}  # where the chat and the letter it came from are known (D44)
-    assert (essay["from"], essay["link"]) == ("letter", None)
+                    "link": None, "message": {"chat": -1001, "msg": 1}}  # its chat and message (D44, D50)
+    assert (essay["from"], essay["link"]) == ("letter", None) and essay["message"] is not None
     with merged.db:
         merged.deadlines.drop([letter], merged.now())
     assert body["own"] == [] and body["hidden"] == []
@@ -544,3 +544,31 @@ async def test_miniapp_one_form_for_every_entry(aiohttp_client, budget, journal,
     assert (own["start"], own["end"], own["required"]) == ("2026-10-25", None, False)
     for bad in ({**new, "start": "2026-13-01"}, {**new, "start": "2026-10-25", "end": "2026-10-25T10:00"}):
         assert (await client.post("/app/api/events", json=bad, headers=owner())).status == 400
+
+
+async def test_miniapp_message(aiohttp_client, budget, journal, store, schedule, now, merged):
+    """A source message's page (D50): as the twin read it, what it answers, its t.me link; a letter; one not kept."""
+    client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
+    inbox = schedule.inbox
+    inbox.put_chat(-1001234567890, "Матан", "supergroup", None, 0)
+    inbox.add(-1001234567890, 4, {"sender_id": 7, "sender_name": "Студент", "at": now(), "text": "А семинар будет?"})
+    inbox.add(-1001234567890, 5, {"sender_id": 8, "sender_name": "Староста", "at": now(), "reply_to": 4,
+                                  "text": "Консультация завтра в S301",
+                                  "files": [{"kind": "pdf", "name": "plan.pdf", "mime": "application/pdf", "size": 1}]})
+    inbox.add_letter(7, {"sender_name": "Office", "at": now(), "text": "Choose an elective", "subject": "Electives"})
+    assert (await client.get("/app/api/message?chat=-1001234567890&msg=5")).status == 401
+
+    body = await (await client.get("/app/api/message?chat=-1001234567890&msg=5", headers=owner())).json()
+    assert (body["source"], body["chat"]["title"], body["link"], body["stored"]) == (
+        "tg", "Матан", "https://t.me/c/1234567890/5", True)
+    assert (body["message"]["sender"], body["message"]["text"], body["message"]["files"]) == (
+        "Староста", "Консультация завтра в S301", [{"kind": "pdf", "name": "plan.pdf"}])
+    assert body["reply"]["text"] == "А семинар будет?"
+
+    body = await (await client.get("/app/api/message?chat=0&msg=7", headers=owner())).json()
+    assert (body["source"], body["subject"], body["link"], body["message"]["text"]) == (
+        "mail", "Electives", None, "Choose an elective")
+    body = await (await client.get("/app/api/message?chat=-1001234567890&msg=99", headers=owner())).json()
+    assert body["stored"] is False and body["link"] == "https://t.me/c/1234567890/99"  # after its 14 days
+    assert (await client.get("/app/api/message?chat=-5&msg=1", headers=owner())).status == 404
+    assert (await client.get("/app/api/message?chat=x&msg=1", headers=owner())).status == 400

@@ -77,7 +77,8 @@ classes announced in chats. Each comes with a link to the message and the button
 applying. The Mini App's Timetable tab shows the same as the feeds: classes with changes, events and your own; a tap
 opens a card where an item can be moved, cancelled, made optional, removed, or a chat's change corrected, and **+**
 adds your own event (D44). Every entry has the same card (**Edit**, **As it was**, **Remove**) and the same form
-(D49). In `main.ics` and `optional.ics` an event's notes end with its source (the chat
+(D49). A source's link (in the forum, the calendar and the cards) opens the message's page in the Mini App: the
+message as the twin read it, which your own account sees without being in the chat, and **Open in Telegram** (D50). In `main.ics` and `optional.ics` an event's notes end with its source (the chat
 with a link to the message, the letter, RUZ, you) and an **Edit** link to its card, also its URL (D48). **Settings → Course dictionary** holds manual entries (Haiku leaves them alone; Haiku
 names a deleted entry again; `<abbr> Midterm` is renamed right after an edit). If `RUZ_ICAL_URL` changes, the next
 poll counts as the first one: System reports the new number of classes, without a stream of "removed" messages in
