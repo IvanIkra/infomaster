@@ -170,6 +170,7 @@ The logic moves over from Tablo unchanged:
 - **How.** One call per chat: the new messages since the last run, up to a size limit (a long batch is split into
   several calls). The prompt also carries the chat name, the course dictionary, live news, upcoming deadlines and
   events from chats, so that the model can point out a replacement or a move, as in §6.4.
+  Before the new messages come a few earlier ones of the same chat, for context only (D51).
 - **What the model returns** for every meaningful message (nothing for chatter):
 
 ```json

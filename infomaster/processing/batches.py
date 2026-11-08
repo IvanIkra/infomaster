@@ -46,6 +46,11 @@ gets them after the run.
 Images (D12): in a chat with «Картинки» on, the image of a message is downloaded when its batch comes and read by
 Haiku in a call of its own (processing/images.py), within the daily number of images and while optional tasks run. The
 model of the batch sees what was read on it: what it shows and its text.
+
+Context: before the new messages of a chat the model sees up to `CONTEXT_MESSAGES` earlier, parsed ones of the same
+chat and forum topic, from `CONTEXT_AGE` before the first new one, each cut to `CONTEXT_CHARS`: what a short reply or
+«перенесли на пятницу» refers to. They give no items; a new message that replies to one of them says so instead of
+quoting it. Letters get none: each letter stands on its own.
 """
 
 import asyncio
@@ -81,6 +86,9 @@ CHUNK_CHARS = 24_000      # of message text in one call
 TEXT_LIMIT = 4_000        # characters of one message in the prompt
 MAIL_TEXT_LIMIT = 8_000   # of one letter: as much as Tablo gave Haiku (§6.2)
 QUOTE_LIMIT = 300         # characters of a replied message that is not in the batch
+CONTEXT_MESSAGES = 6      # earlier messages of the chat before the new ones, for context only
+CONTEXT_CHARS = 300       # characters of each of them
+CONTEXT_AGE = dt.timedelta(hours=12)  # before the first new message: older talk is another conversation
 FIRST_PAGE_LIMIT = 2_000  # characters of a PDF's first page in the prompt
 IMAGE_LIMIT = 2_500       # characters of what was read on an image, in the prompt
 URGENT_QUIET = 60         # seconds of silence in the chat that end an urgent burst
@@ -161,6 +169,9 @@ Also given: the course dictionary (each course with its abbreviation, its Englis
 by), the current news items (ids n...), the \
 upcoming deadlines (ids d...) and events (ids e...) already known from all chats, and for a study chat the classes of \
 the timetable in the next weeks (ids c...).
+Before the new messages a few earlier messages of the chat may come, for context only: use them to understand what \
+the new ones refer to (a short reply, "moved to Friday"), but make no items from them and never put their ids in \
+msg_ids; what they told is already in the news, deadlines and events when it mattered.
 
 A PDF of a message comes with its name and the text of its first page; a scanned one has its first page attached \
 as a document instead. An image of a message (a photo, a screenshot) comes as another model read it: what it shows \
@@ -864,8 +875,12 @@ class Batches:
         if settings["study"]:
             lines += ["", "Timetable classes:"]
             lines += [_class_line(c) for c in context.classes] or ["(none)"]
-        lines += ["", "New messages:"]
         by_id = {m["msg_id"]: m for m in messages}
+        if earlier := self._earlier(chat, messages):
+            lines += ["", "Earlier messages, for context only (no items, their ids not in msg_ids):"]
+            lines += [line for message in earlier for line in self._earlier_lines(message, set(settings["people"]))]
+            by_id |= {m["msg_id"]: m for m in earlier}  # a reply to one of them is shown as such, without a quote
+        lines += ["", "New messages:"]
         album_first: dict[int, int] = {}
         for message in messages:
             if message["grouped_id"]:
@@ -875,6 +890,30 @@ class Batches:
             lines += self._render(chat, message, by_id, album_first, set(settings["people"]),
                                   (notes or {}).get(message["msg_id"]), scans)
         return "\n".join(lines)
+
+    def _earlier(self, chat: dict, messages: list[dict]) -> list[dict]:
+        """The messages of the chat just before the first new one (`CONTEXT_MESSAGES`), none for the mailbox."""
+        if chat["source"] == "mail" or not messages:
+            return []
+        first = messages[0]
+        since = dt.datetime.fromisoformat(first["at"]) - CONTEXT_AGE
+        new = {m["msg_id"] for m in messages}
+        return [m for m in self.inbox.before(chat["id"], first, since, CONTEXT_MESSAGES) if m["msg_id"] not in new]
+
+    @staticmethod
+    def _earlier_lines(message: dict, people: set[int]) -> list[str]:
+        head = [str(message["msg_id"]), message["sender_name"] or "unknown sender"]
+        if message["sender_id"] in people:
+            head.append("listed person")
+        head.append(f"{dt.datetime.fromisoformat(message['at']):%a %Y-%m-%d %H:%M}")
+        if message["reply_to"]:
+            head.append(f"reply to {message['reply_to']}")
+        if message["files"]:
+            head.append("files: " + ", ".join(f.get("name") or f["kind"] for f in message["files"]))
+        text = " ".join(message["text"].split())
+        if len(text) > CONTEXT_CHARS:
+            text = text[:CONTEXT_CHARS - 1].rstrip() + "…"
+        return ["- " + " · ".join(head)] + ([f"  {text}"] if text else [])
 
     def _scans(self, messages: list[dict]) -> list[Document]:
         """The first pages of the scanned PDFs, in the order of the prompt. A file that cannot be attached (gone

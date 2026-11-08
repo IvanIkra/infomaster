@@ -200,6 +200,12 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   the chat or the letter's subject, the sender, the time, the text, the files' names and the message it answers, as
   the twin read it, and **Open in Telegram** with the t.me link. After its 14 days (D29) only the chat and the link
   are left. Before the bot has started the links are t.me as before; `X-INFOMASTER-LINK` for Tablo stays t.me.
+- **D51. A batch sees a few earlier messages of its chat, 09.11.2026.** This changes §6.1. Haiku saw only the new
+  messages, so «её перенесли на субботу» or «ок, в R405» right after an earlier batch meant nothing to it. Before the
+  new messages the prompt now gives up to 6 earlier, already parsed messages of the same chat and forum topic, from
+  12 hours before the first new one, each cut to 300 characters (sender, time, reply, files' names, text; not what
+  images or PDFs showed). They are context only: they give no items, and a new message that answers one of them is shown as a reply
+  to it instead of with a quote. Letters get none. About 2,000 characters more per call.
 
 ## Open questions
 

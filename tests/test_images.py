@@ -247,7 +247,8 @@ async def test_without_images_a_photo_alone_is_skipped(batches, llm, images):
     llm.answers = [{"items": []}]
     await parse(batches)
     assert llm.tasks() == ["batch"] and batches.files.downloads == []
-    assert "- 1 ·" not in llm.calls[0].prompt and "files: photo" in llm.calls[0].prompt
+    new = llm.calls[0].prompt.split("New messages:\n")[1]
+    assert "- 1 ·" not in new and "files: photo" in new  # a photo alone is only context
     assert pending(batches) == []
 
     batches.chat_settings.update(CHAT, {"images": True})

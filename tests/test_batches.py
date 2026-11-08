@@ -139,6 +139,35 @@ async def test_selection(batches):
     assert batches.inbox.pending(CHAT) == []
 
 
+async def test_earlier_messages_as_context(batches):
+    add(batches, 1, "Пара по матану в пятницу", ago=dt.timedelta(hours=16))  # 12+ hours before the new ones
+    add(batches, 2, "Консультация по матану\nв пятницу в R405", ago=dt.timedelta(hours=3))
+    add(batches, 3, "удалено", ago=dt.timedelta(hours=2))
+    add(batches, 4, "в другой теме", ago=dt.timedelta(hours=2), topic_id=77)
+    add(batches, 5, "", ago=dt.timedelta(hours=2))                          # nothing to show
+    add(batches, 6, "а " * 400, ago=dt.timedelta(hours=2))
+    batches.llm.answers = [{"items": []}]
+    await parse_chat(batches)
+    assert "Earlier messages" not in batches.llm.prompts[0]  # nothing before the first new one
+    batches.inbox.delete([3], CHAT, batches.now())
+
+    add(batches, 7, "её перенесли на субботу", reply_to=2)
+    add(batches, 8, "ок")
+    batches.llm.answers = [{"items": [item([2, 7], full="Calc consult moved to Sat")]}]
+    await parse_chat(batches)
+    prompt = batches.llm.prompts[1]
+    earlier = prompt.split("Earlier messages, for context only (no items, their ids not in msg_ids):\n")[1]
+    earlier = earlier.split("\n\nNew messages:\n")[0]
+    assert earlier.startswith("- 2 · Староста · Tue 2026-10-20 09:00\n  Консультация по матану в пятницу в R405\n"
+                              "- 6 · Староста · Tue 2026-10-20 10:00\n  а а")
+    assert earlier.endswith("…") and len(earlier.splitlines()[-1]) == 2 + batches_module.CONTEXT_CHARS
+    assert "- 1 ·" not in earlier and "- 3 ·" not in earlier and "- 4 ·" not in earlier and "- 5 ·" not in earlier
+    assert "- 7 · Староста · Tue 2026-10-20 11:30 · reply to 2\n  её перенесли" in prompt
+    assert "> replied message" not in prompt
+    [news] = batches.news.live(batches.now(), 24)
+    assert news["msg_ids"] == [7]  # an earlier message gives nothing
+
+
 async def test_retry_for_length(batches):
     add(batches, 1, "ДЗ 5 до 22.10")
     long = "Calc homework number five has to be handed in by Thursday October 22"

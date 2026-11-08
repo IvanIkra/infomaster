@@ -144,6 +144,19 @@ class Inbox:
                                "order by at, msg_id", (source, chat_id))
         return [_decode(row) for row in rows]
 
+    def before(self, chat_id: int, message: dict, since: dt.datetime, limit: int) -> list[dict]:
+        """Up to `limit` messages of the chat just before `message`, in its forum topic, not older than `since`,
+        oldest first: the context of a batch. Deleted ones, those waiting for a batch of their own and those with
+        neither text nor files are left out."""
+        rows = self.db.execute(
+            "select * from messages where source = ? and chat_id = ? and topic_id is ? and deleted_at is null "
+            "and parsed_at is not null and (edited_at is null or edited_at <= parsed_at) "
+            "and at >= ? and (at < ? or (at = ? and msg_id < ?)) and (text <> '' or files is not null) "
+            "order by at desc, msg_id desc limit ?",
+            (message["source"], chat_id, message["topic_id"], clock.local_iso(since), message["at"], message["at"],
+             message["msg_id"], limit))
+        return [_decode(row) for row in reversed(rows.fetchall())]
+
     def pending_counts(self) -> dict[int, int]:
         rows = self.db.execute(f"select chat_id, count(*) n from messages where {PENDING} group by chat_id")
         return {row["chat_id"]: row["n"] for row in rows}
