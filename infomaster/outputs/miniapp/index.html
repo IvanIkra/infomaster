@@ -649,14 +649,19 @@
 
     // --- dates -----------------------------------------------------------------
 
+    // An all-day event (its day told, not its time) has a date alone for its start and no end.
+    const allDay = (start) => start.length === 10;
+
     function when(start, end) {
       const day = new Date(start.slice(0, 10) + "T00:00:00");
-      let text = `${WEEKDAYS()[day.getDay()]} ${start.slice(8, 10)}.${start.slice(5, 7)} ${start.slice(11, 16)}`;
+      let text = `${WEEKDAYS()[day.getDay()]} ${start.slice(8, 10)}.${start.slice(5, 7)}`
+        + (allDay(start) ? "" : " " + start.slice(11, 16));
       if (end && end.slice(0, 10) === start.slice(0, 10)) text += "–" + end.slice(11, 16);
       return text;
     }
 
     function hours(start, end) {
+      if (allDay(start)) return L("all day", "весь день");
       let text = start.slice(11, 16);
       if (end && end.slice(0, 10) === start.slice(0, 10)) text += "–" + end.slice(11, 16);
       return text;
@@ -1056,7 +1061,8 @@
     }
 
     function agendaRow(item, data) {
-      const time = el("div", {className: "time"}, el("b", {}, item.start.slice(11, 16)),
+      const time = allDay(item.start) ? el("div", {className: "time"}, el("b", {}, L("all", "весь")),
+        el("span", {}, L("day", "день"))) : el("div", {className: "time"}, el("b", {}, item.start.slice(11, 16)),
         el("span", {}, item.end.slice(11, 16)));
       const sub = [place(item.location), TYPES()[item.type] || item.type.toLowerCase(), itemFrom(item)].filter(Boolean);
       const tags = [];
@@ -1139,8 +1145,9 @@
       const title = input(item && item.title, {maxLength: 120, placeholder: L("Meeting with the supervisor",
         "Встреча с научруком")});
       const day = input(item ? item.start.slice(0, 10) : data.today, {type: "date"});
-      const from = input(item ? item.start.slice(11, 16) : "10:00", {type: "time"});
-      const to = input(item ? item.end.slice(11, 16) : "11:20", {type: "time"});
+      const timed = item && !allDay(item.start);  // an all-day event gets its time here
+      const from = input(timed ? item.start.slice(11, 16) : "10:00", {type: "time"});
+      const to = input(timed ? item.end.slice(11, 16) : "11:20", {type: "time"});
       const where = input(item && item.location, {placeholder: L("Room or link", "Аудитория или ссылка")});
       let kind = item ? item.type : "Event";
       let required = item ? item.required : true;

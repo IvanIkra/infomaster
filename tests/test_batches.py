@@ -634,3 +634,85 @@ async def test_deleted_superseded_version_never_comes_back(timetable, forum, now
                            "снова: пт 23.10 18:10–19:30\n")
     changes = await parse_chat(batches)  # nothing more to withdraw
     assert changes.events_gone == []
+
+
+async def test_an_event_that_repeats_a_class_is_not_saved(timetable):
+    batches = timetable
+    add(batches, 1, "Завтра в 13:00 лекция по алгебре, не опаздывайте")
+    add(batches, 2, "Семинар по SE в пятницу в 109")
+    add(batches, 3, "Пара по алгебре переносится на 24.10 10:00")
+    batches.llm.answers = [{"items": [
+        item([1], events=[happening(title="Algebra", start="2026-10-20T13:00", room="", kind="lecture", course="")]),
+        item([2], events=[happening(title="SE seminar", start="2026-10-23T09:30", room="109", kind="class",
+                                    course="")]),
+        item([3], events=[happening(title="Algebra", start="2026-10-24T10:00", kind="class", moves="c99")]),
+    ]}]
+    changes = await parse_chat(batches)
+    assert changes.events == [] and batches.events.in_force_all() == []  # the classes themselves; c99 is not listed
+
+    add(batches, 4, "Во время лекции по алгебре будет консультация по КР")  # not a regular kind: it stays
+    batches.llm.answers = [{"items": [item([4], events=[happening(start="2026-10-20T13:30", room="R401")])]}]
+    assert len((await parse_chat(batches)).events) == 1
+
+
+async def test_an_event_without_its_time_is_all_day(timetable):
+    batches = timetable
+    add(batches, 1, "Завтра консультация в S301")
+    batches.llm.answers = [{"items": [item([1], events=[happening(start="2026-10-21", end="2026-10-21T19:00",
+                                                                  room="S301", required=False)])]}]
+    [event_id] = (await parse_chat(batches)).events
+    event = batches.events.get(event_id)
+    assert (event["start"], event["end"], event["room"]) == ("2026-10-21", None, "S301")
+    [entry] = [e for e in batches.schedule.entries() if e.uid == event["uid"]]
+    assert entry.all_day and (entry.start, entry.end) == (dt.datetime(2026, 10, 21), dt.datetime(2026, 10, 22))
+
+    add(batches, 2, "Консультация завтра в 18:10")  # the time comes: the event moves, its day kept
+    batches.llm.answers = [{"items": [item([2], events=[happening(start="2026-10-21T18:10", moves=f"e{event_id}")])]}]
+    [(_, moved)] = (await parse_chat(batches)).events_moved
+    assert (batches.events.get(moved)["start"], batches.events.get(moved)["end"]) == ("2026-10-21T18:10:00", None)
+    assert f'- e{event_id}: Wed 2026-10-21 (all day) "Alg consult" consultation, S301, optional' in \
+        batches.llm.prompts[1]
+
+
+async def test_own_events_are_listed_but_not_moved(timetable):
+    batches = timetable
+    own = batches.schedule.add_event({"title": "Alg consult", "kind": "consultation", "start": "2026-10-23T18:10:00",
+                                      "end": "2026-10-23T19:30:00", "room": "R205", "required": True})
+    add(batches, 1, "Консультация по алгебре переносится на субботу 12:00")
+    batches.llm.answers = [{"items": [item([1], events=[happening(start="2026-10-24T12:00", moves=f"e{own}")])]}]
+    changes = await parse_chat(batches)
+    assert f'- e{own}: Fri 2026-10-23 18:10-19:30 "Alg consult" consultation, R205, required, own' in \
+        batches.llm.prompts[0]
+    assert changes.events_moved == [] and changes.events == [] and batches.events.get(own)["replaced_by"] is None
+
+
+async def test_a_day_without_a_time_joins_the_event_of_that_day(timetable):
+    batches = timetable
+    add(batches, 1, "Консультация по алгебре в пятницу в 18:10")
+    batches.llm.answers = [{"items": [item([1], events=[happening(room="", end="2026-10-23T19:30")])]}]
+    [first] = (await parse_chat(batches)).events
+
+    add(batches, 2, "Консультация в пятницу в S301")  # the room of the known one, not an all-day event of its own
+    batches.llm.answers = [{"items": [item([2], events=[happening(start="2026-10-23", room="S301")])]}]
+    changes = await parse_chat(batches)
+    [(old, joined)] = changes.events_moved
+    version = batches.events.get(joined)
+    assert old == first and changes.events == []
+    assert (version["start"], version["end"], version["room"], version["uid"]) == (
+        "2026-10-23T18:10:00", "2026-10-23T19:30:00", "S301", batches.events.get(first)["uid"])
+
+    add(batches, 3, "Консультация по алгебре в субботу")  # all day first, its time later
+    batches.llm.answers = [{"items": [item([3], events=[happening(start="2026-10-24", room="R205")])]}]
+    [day] = (await parse_chat(batches)).events
+    add(batches, 4, "Консультация в субботу в 12:00")
+    batches.llm.answers = [{"items": [item([4], events=[happening(start="2026-10-24T12:00", room="")])]}]
+    [(old, timed)] = (await parse_chat(batches)).events_moved
+    assert old == day and (batches.events.get(timed)["start"], batches.events.get(timed)["room"]) == (
+        "2026-10-24T12:00:00", "R205")
+
+    own = batches.schedule.add_event({"title": "Alg consult", "kind": "consultation", "start": "2026-10-26T15:00:00",
+                                      "end": None, "room": "", "required": True})
+    add(batches, 5, "В понедельник консультация в S301")  # the owner's own: left as it is, no copy either
+    batches.llm.answers = [{"items": [item([5], events=[happening(start="2026-10-26", room="S301")])]}]
+    changes = await parse_chat(batches)
+    assert changes.events == changes.events_moved == [] and batches.events.get(own)["replaced_by"] is None

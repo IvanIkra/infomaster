@@ -276,12 +276,13 @@ async def test_own_events_and_corrections(loaded, now):
     assert loaded.events.get(own)["replaced_by"] == newer
     assert loaded.events.get(newer)["uid"] == loaded.events.get(own)["uid"]
 
-    # A chat's event changed: hidden, an own copy in its place; the batches see neither the copy nor any own event.
+    # A chat's event changed: hidden, an own copy in its place; the batches see the copy and the own events too, so a
+    # chat does not tell them again (they never move them).
     copy = loaded.edit_event(talk, {"title": "Alg consult, moved", "start": "2026-10-23T19:00:00",
                                     "end": "2026-10-23T20:00:00"})
     assert loaded.events.get(talk)["hidden"] and loaded.events.get(talk)["replaced_by"] is None
     assert (loaded.events.get(copy)["source"], loaded.events.get(copy)["course"]) == ("own", "Алгебра")
-    assert [e["id"] for e in loaded.events.upcoming(dt.date(2026, 10, 20))] == [talk]
+    assert [e["id"] for e in loaded.events.upcoming(dt.date(2026, 10, 20))] == [talk, copy, newer]
 
     # The owner's move of a class wins over the chats' corrections, a later one too; undone, the chats' newest applies.
     uid = "2000005@ruz.hse.ru"
@@ -335,3 +336,13 @@ def test_new_tables_join_an_older_database(tmp_path):
     assert store.db.execute("select count(*) n from deadlines").fetchone()["n"] == 1
     assert {row["name"] for row in store.db.execute("select name from sqlite_master where type = 'table'")} >= {
         "subjects", "classes", "events", "deadlines", "messages"}
+
+
+def test_all_day_event_in_the_agenda(loaded, now):
+    from infomaster.outputs.timetable import moment
+    event_id = add(loaded, now, start="2026-10-21", end=None, room="S301")
+    [item] = [i for i in loaded.agenda(dt.date(2026, 10, 20))["items"] if i["title"] == "Alg consult"]
+    assert (item["start"], item["end"], item["event"]["start"], item["event"]["end"]) == (
+        "2026-10-21", None, "2026-10-21", None)
+    assert item["event"]["id"] == event_id
+    assert moment("2026-10-21", "en") == "Wed 21.10" and moment("2026-10-21T18:10:00", "en") == "Wed 21.10 18:10"

@@ -14,8 +14,12 @@ port without its secret has no routes.
 Every event has an English SUMMARY, a DESCRIPTION whose first line is the type (Lecture, Seminar, Consultation, Event,
 Interim assessment...), LOCATION with the room or the link, a stable UID, X-INFOMASTER-SOURCE (ruz, tg, mail, pdf) and,
 when there is a source message, X-INFOMASTER-LINK. Never URL: Tablo takes an event with URL for an online class (§4.2).
-Times are in UTC, which every calendar converts by itself. A cancelled event stays with STATUS:CANCELLED, so a
-calendar that has it shows the cancellation.
+Times are in UTC, which every calendar converts by itself; an event told without its time is an all-day one, a DTSTART
+date and the next day's DTEND. A cancelled event stays with STATUS:CANCELLED, so a calendar that has it shows the
+cancellation.
+
+In main and optional, a class's SUMMARY ends with its type, "Calculus · Seminar", since a calendar app shows the title
+alone. tablo.ics keeps the bare title: Tablo takes SUMMARY for the course name.
 """
 
 import datetime as dt
@@ -32,10 +36,18 @@ FEEDS = ("main", "optional", "tablo")
 PUBLIC_FEEDS = ("main", "optional")  # tablo.ics with its X- fields is Tablo's, it stays inside
 NAMES = {"main": "Study", "optional": "Study: optional", "tablo": "Study for Tablo"}
 REFRESH = "PT1H"  # RUZ is polled hourly; a calendar that honours the hint asks as often
+MARKS = {"Interim assessment": "Midterm"}  # a type in a class's title, where the word is too long
 
 
 def utc(local: dt.datetime) -> dt.datetime:
     return local.replace(tzinfo=clock.TZ).astimezone(dt.UTC)
+
+
+def summary(entry: Entry, feed: str) -> str:
+    """The title, with a class's type in one's own calendar ("Calculus · Seminar"); a type not known stays out."""
+    if feed == "tablo" or not entry.of_class or entry.type == "Class":
+        return entry.title
+    return f"{entry.title} · {MARKS.get(entry.type, entry.type)}"
 
 
 def build(entries: list[Entry], feed: str, stamp: dt.datetime) -> bytes:
@@ -56,10 +68,14 @@ def build(entries: list[Entry], feed: str, stamp: dt.datetime) -> bytes:
         event = icalendar.Event()
         event.add("uid", entry.uid)
         event.add("dtstamp", stamp)
-        event.add("dtstart", utc(entry.start))
-        if entry.end > entry.start:  # DTEND must be later than DTSTART; without it the event ends where it starts
-            event.add("dtend", utc(entry.end))
-        event.add("summary", entry.title)
+        if entry.all_day:
+            event.add("dtstart", entry.start.date())
+            event.add("dtend", entry.start.date() + dt.timedelta(days=1))
+        else:
+            event.add("dtstart", utc(entry.start))
+            if entry.end > entry.start:  # DTEND must be later than DTSTART; without it the event ends where it starts
+                event.add("dtend", utc(entry.end))
+        event.add("summary", summary(entry, feed))
         event.add("description", "\n".join([entry.type, *entry.notes]))
         if entry.location:
             event.add("location", entry.location)

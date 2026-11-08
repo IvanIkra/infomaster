@@ -20,6 +20,14 @@ knows the course, withdrawn when the class is cancelled or removed. It follows t
 chat's correction in force moves or withdraws it too: the Midterms are synced after every RUZ poll, every batch run,
 every hiding of a correction by the owner and every change of the dictionary by hand (its abbr starts the label). The
 merge with the other sources is processing/merge.py's.
+
+An event whose day is told but not its time ("tomorrow a consultation in S301") is an all-day one: its start is a date
+alone, "2026-11-06", and it has no end; the feeds give it a date and no time.
+
+A chat's event that only repeats a class of the timetable (the model wrote "Calc seminar" for the Calculus seminar at
+its own time) is no event: a regular kind (a lecture, a seminar, a lab, a class) starting while a class of the same
+course, title or room goes on, as the feeds show it (`repeats_class`). The batches do not save such an event, and the
+feeds leave out one saved before or one whose class came to RUZ later. Own events are the owner's: they always stay.
 """
 
 import datetime as dt
@@ -32,7 +40,7 @@ from ..collectors.inbox import Inbox, message_link
 from ..collectors.ruz import Diff, Ruz
 from ..i18n import Phrase
 from ..store import Store
-from .deadlines import Deadlines
+from .deadlines import Deadlines, same_label
 from .events import OWN, Events, own_uid
 from .subjects import Subjects
 
@@ -42,6 +50,7 @@ DEFAULT_LENGTH = dt.timedelta(minutes=80)  # an event whose end nobody said: one
 CLASS_DAYS = 21           # classes shown to the model, from today on: moves and cancellations come close to the date
 AGENDA_DAYS = 28          # the Mini App's timetable, from today on
 MIDTERM_KINDS = ("рубежный контроль", "interim assessment")  # §4.4
+REGULAR = ("Lecture", "Seminar", "Lab", "Class")  # types of an event that may only repeat a class
 
 # Words of a kind, from RUZ (Russian or English) or from the model -> the type; the first match wins.
 TYPES = (
@@ -66,6 +75,11 @@ def type_of(kind: str, of_class: bool) -> str:
     return "Class" if of_class else "Event"
 
 
+def all_day(start: str) -> bool:
+    """An event told with its day but not its time: the start is a date alone."""
+    return len(start) == 10
+
+
 def midterm(kind: str) -> bool:
     folded = (kind or "").casefold()
     return any(word in folded for word in MIDTERM_KINDS)
@@ -85,6 +99,9 @@ class Entry:
     source: str                 # ruz, tg, mail, pdf
     link: str | None = None     # the source message
     notes: list[str] = field(default_factory=list)  # DESCRIPTION after the type
+    all_day: bool = False       # an event without a time: start is the day's midnight, end the next one's
+    of_class: bool = False      # a RUZ class: its own calendar marks its type in the title
+    abbr: str | None = None     # a class's course abbreviation: an event may name the class by it
 
 
 @dataclass
@@ -139,11 +156,33 @@ class Schedule:
 
     def entries(self) -> list[Entry]:
         """Every class not removed by RUZ and every event in force that is not hidden, by start."""
-        corrections = self.events.corrections()
-        entries = [self.class_entry(item, corrections.get(item["uid"])) for item in self.ruz.classes()]
-        entries += [self.event_entry(event) for event in self.events.in_force_all()
-                    if event["class_uid"] is None and not event["hidden"]]
+        classes = self.class_entries()
+        entries = classes + [self.event_entry(event) for event in self.events.in_force_all()
+                             if event["class_uid"] is None and not event["hidden"]
+                             and not self.repeats_class(event, classes)]
         return sorted(entries, key=lambda e: (e.start, e.title))
+
+    def class_entries(self) -> list[Entry]:
+        corrections = self.events.corrections()
+        return [self.class_entry(item, corrections.get(item["uid"])) for item in self.ruz.classes()]
+
+    def repeats_class(self, event: dict, classes: list[Entry]) -> bool:
+        """A chat's event of a regular kind that starts while a class of the same course, title or room goes on:
+        it only repeats the class. Own events, corrections and all-day events never do."""
+        if event["source"] == OWN or event["class_uid"] is not None or all_day(event["start"]) or \
+                type_of(event["kind"], of_class=False) not in REGULAR:
+            return False
+        moment, room = local(event["start"]), (event["room"] or "").casefold()
+        course = self.subjects.title(event["course"]) if event["course"] else None
+        words = event["title"].casefold().split()
+        for entry in classes:
+            if entry.cancelled or not entry.start <= moment < entry.end:
+                continue
+            if course == entry.title or same_label(event["title"], entry.title) or \
+                    (entry.abbr and words and words[0] == entry.abbr.casefold()) or \
+                    (room and room == entry.location.casefold()):
+                return True
+        return False
 
     def class_title(self, item: dict) -> str:
         return self.subjects.title(item["subject"])
@@ -152,7 +191,7 @@ class Schedule:
         entry = Entry(uid=item["uid"], title=self.class_title(item), start=local(item["start"]),
                       end=local(item["end"]), type=type_of(item["kind"], of_class=True),
                       location=location(item["room"], item["link"]), required=True, cancelled=item["cancelled"],
-                      source="ruz")
+                      source="ruz", of_class=True, abbr=self.subjects.abbr(item["subject"]))
         if not applies(item, correction):
             return entry
         entry.source, entry.link = correction["source"], self.link(correction)
@@ -168,12 +207,13 @@ class Schedule:
         return entry
 
     def event_entry(self, event: dict) -> Entry:
-        start = local(event["start"])
+        start, whole_day = local(event["start"]), all_day(event["start"])
         entry = Entry(uid=event["uid"], title=event["title"], start=start,
-                      end=local(event["end"]) if event["end"] else start + DEFAULT_LENGTH,
+                      end=start + dt.timedelta(days=1) if whole_day else
+                      local(event["end"]) if event["end"] else start + DEFAULT_LENGTH,
                       type=type_of(event["kind"], of_class=False), location=event["room"],
                       required=event["required"], cancelled=event["cancelled"], source=event["source"],
-                      link=self.link(event))
+                      link=self.link(event), all_day=whole_day)
         if subject := self.subjects.get(event["course"]):  # a course not named yet stays out: the feed is English
             entry.notes.append(subject.title)
         earlier = self.events.previous(event["id"])
@@ -233,14 +273,18 @@ class Schedule:
                 continue
             item = classes.get(entry.uid)
             event = corrections.get(entry.uid) if item is not None else events.get(entry.uid)
-            items.append({"uid": entry.uid, "title": entry.title, "start": entry.start.isoformat(),
-                          "end": entry.end.isoformat(), "type": entry.type, "location": entry.location,
+            items.append({"uid": entry.uid, "title": entry.title,
+                          "start": entry.start.date().isoformat() if entry.all_day else entry.start.isoformat(),
+                          "end": None if entry.all_day else entry.end.isoformat(), "type": entry.type,
+                          "location": entry.location,
                           "required": entry.required, "cancelled": entry.cancelled, "source": entry.source,
                           "link": entry.link, "notes": entry.notes,
                           "event": self._behind(event, item) if event is not None else None})
         return {"items": items, "hidden": hidden}
 
-    def _end(self, event: dict) -> str:
+    def _end(self, event: dict) -> str | None:
+        if all_day(event["start"]):
+            return None
         return event["end"] or (local(event["start"]) + DEFAULT_LENGTH).isoformat()
 
     def _behind(self, event: dict, item: dict | None) -> dict:

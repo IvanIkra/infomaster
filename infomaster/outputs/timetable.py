@@ -47,9 +47,9 @@ CORRECTION_ANSWERS = {"hide": ("The correction is off: the class is as RUZ has i
 
 
 def moment(text: str, lang: str) -> str:
-    """'2026-10-22T18:10:00' -> 'Thu 22.10 18:10'."""
+    """'2026-10-22T18:10:00' -> 'Thu 22.10 18:10'; an all-day event's '2026-10-22' -> 'Thu 22.10'."""
     when = dt.datetime.fromisoformat(text)
-    return f"{WEEKDAYS[lang][when.weekday()]} {when:%d.%m %H:%M}"
+    return f"{WEEKDAYS[lang][when.weekday()]} {when:%d.%m}" + ("" if len(text) == 10 else f" {when:%H:%M}")
 
 
 def span(start: str, end: str | None, lang: str) -> str:

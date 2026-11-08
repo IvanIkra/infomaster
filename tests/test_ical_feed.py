@@ -110,7 +110,9 @@ def by_summary(text: bytes) -> dict[str, icalendar.Event]:
 
 def test_main_and_optional(feed):
     main, optional = by_summary(feed.render("main")), by_summary(feed.render("optional"))
-    assert {"Calculus", "Algebra", "Intro to SE", "Alg consult", "Rus Statehood", "Intro to Prog"} <= set(main)
+    # A class's title ends with its type in one's own calendar; an event's title is the model's own.
+    assert {"Calculus · Seminar", "Algebra · Lecture", "Intro to SE · Seminar", "Alg consult",
+            "Rus Statehood · Lecture", "Intro to Prog · Midterm"} <= set(main)
     assert set(optional) == {"Career fair", "Old talk"}  # the hidden club is in no feed
     assert "Club" not in main and str(optional["Career fair"]["STATUS"]) == "CONFIRMED"
     assert str(icalendar.Calendar.from_ical(feed.render("main"))["X-WR-CALNAME"]) == "Study"
@@ -126,7 +128,7 @@ def test_tablo_feed(feed):
         "https://events.hse.ru/fair"
     assert all("URL" not in e for e in events.values())  # Tablo would take it for an online class
 
-    calc = events["2000001@ruz.hse.ru"]
+    calc = events["2000001@ruz.hse.ru"]  # the bare title: Tablo takes SUMMARY for the course
     assert (str(calc["SUMMARY"]), str(calc["DESCRIPTION"]), str(calc["LOCATION"]), str(calc["STATUS"])) == (
         "Calculus", "Seminar", "D208", "CONFIRMED")
     assert str(calc["X-INFOMASTER-SOURCE"]) == "ruz"
@@ -166,6 +168,21 @@ def test_event_without_end(schedule, now):
     add_event(schedule, now, end=None)
     [event] = events_of(CalendarFeed(schedule, now=now).render("main")).values()
     assert event.decoded("DTEND") - event.decoded("DTSTART") == dt.timedelta(minutes=80)
+
+
+async def test_all_day_event_and_class_twins(feed, schedule, now):
+    """A day without a time is an all-day event; a chat's event that only repeats a class is in no feed."""
+    add_event(schedule, now, msg_ids=[7], title="Alg consult", start="2026-10-21", end=None, room="S301")
+    add_event(schedule, now, msg_ids=[8], title="Calc seminar", kind="class", course="Математический анализ",
+              start="2026-10-19T09:30:00", end=None, room="")  # Calculus, Mon Oct 19 09:30, D208
+    add_event(schedule, now, msg_ids=[9], title="Algebra", kind="lecture", course="",
+              start="2026-10-20T13:00:00", end=None, room="R401")  # cancelled by a chat: the twin is not a class
+    events = events_of(feed.render("main"))
+    day = events[event_uid("tg", CHAT, 7)]
+    assert (day.decoded("DTSTART"), day.decoded("DTEND")) == (dt.date(2026, 10, 21), dt.date(2026, 10, 22))
+    assert event_uid("tg", CHAT, 8) not in events and event_uid("tg", CHAT, 9) in events
+    read = {uid: rest for uid, *rest in tablo_parse(feed.render("tablo"), ZoneInfo("Europe/Moscow"))}
+    assert read[event_uid("tg", CHAT, 7)][:2] == [dt.datetime(2026, 10, 21), dt.datetime(2026, 10, 22)]
 
 
 async def test_routes(aiohttp_client, budget, schedule, now, merged):

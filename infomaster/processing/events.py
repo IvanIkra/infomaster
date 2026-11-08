@@ -12,7 +12,8 @@ one; a superseded version whose messages are deleted is withdrawn too, so it nev
 
 The owner's own events and corrections come from the Mini App (source `own`, D44). An own correction of a class wins
 over the chats' corrections of it; the chats' versions go on under it, so they apply again once it is undone. The
-batches never see the own ones: the model is not to move them, nor a chat's message to supersede them.
+batches see the own events, marked, so a chat does not tell them again, but never move them, nor does a chat's message
+supersede them.
 
 Writing methods of the processing do not commit: call them inside `with store.db`. The owner's choices commit
 themselves.
@@ -71,10 +72,10 @@ class Events:
         return [_decode(row) for row in rows]
 
     def upcoming(self, today: dt.date) -> list[dict]:
-        """Events of their own in force from today on, by time: the batches show them to the model. The owner's own
-        are left out: they are not the model's to move."""
+        """Events of their own in force from today on, by time, the owner's own too: the batches show them to the
+        model, so a chat does not repeat them."""
         rows = self.db.execute(f"select * from events where {IN_FORCE} and class_uid is null and start >= ? "
-                               "and source != ? order by start, id", (today.isoformat(), OWN))
+                               "order by start, id", (today.isoformat(),))
         return [_decode(row) for row in rows]
 
     def corrections(self) -> dict[str, dict]:
@@ -100,6 +101,12 @@ class Events:
         rows = self.db.execute(f"select * from events where {IN_FORCE} and class_uid is null and start = ?",
                                (start,))
         return next((_decode(row) for row in rows if same_label(row["title"], title)), None)
+
+    def on_day(self, day: str) -> list[dict]:
+        """Events of their own in force on a day ('2026-11-05'), all-day ones too."""
+        rows = self.db.execute(f"select * from events where {IN_FORCE} and class_uid is null "
+                               "and substr(start, 1, 10) = ? order by start, id", (day,))
+        return [_decode(row) for row in rows]
 
     def by_uid(self, uid: str) -> dict | None:
         row = self.db.execute(f"select * from events where {IN_FORCE} and uid = ?", (uid,)).fetchone()

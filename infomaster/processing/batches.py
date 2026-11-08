@@ -28,9 +28,13 @@ Events (§6.5) are consultations, talks, meetings: things to attend that are not
 upcoming chat events (e...) and, in a study chat, the RUZ classes of the next weeks (c...), so it can point a move or
 a cancellation at one of them: a chat event gets a new version with the same UID, a class gets a correction (§6.5,
 D28). A class counts by the later of its RUZ time and its correction's, so a moved class stays listed until the
-move is past. The model also sees the whole course dictionary (§6.1, §6.2): each course with its title, its abbreviation
-and every name it goes by, so it knows a course under any name («ВвП», «матан»), gives it as the dictionary names it
-and uses the dictionary's abbreviations in labels, titles and news. Course names of the saved deadlines and events go to
+move is past. The owner's own events are listed too, so a chat does not repeat them, but the model does not move
+them. A new event that only repeats a class (Schedule.repeats_class) is not saved, nor is a move of a class the model
+was not shown. An event whose day is told without its time is an all-day one, unless that day has the same event with
+a time: then it only gives that one its room, and a timed one gives an all-day one its time. The model also sees the
+whole course dictionary (§6.1, §6.2): each course with its title, its abbreviation and every name it goes by, so it
+knows a course under any name («ВвП», «матан»), gives it as the dictionary names it and uses the dictionary's
+abbreviations in labels, titles and news. Course names of the saved deadlines and events go to
 the dictionary; only names it does not know yet cost a call. After every run the Midterms follow the corrections of
 their classes (§4.4).
 
@@ -62,10 +66,10 @@ from ..settings import CHAT_SPECS, ChatSettings, Settings
 from ..store import Store
 from . import pdf
 from .deadlines import Deadlines, same_label
-from .events import event_uid
+from .events import OWN, event_uid
 from .images import Images
 from .news import News
-from .schedule import Schedule, local, moved_back
+from .schedule import Schedule, all_day, local, moved_back, type_of
 from .sheets import Sheets
 from .subjects import TITLE_CHARS, Subject, dictionary_lines
 
@@ -219,16 +223,20 @@ make-up class, a test or an exam with its time, a talk, a meeting, a fair, an op
 - title: short English within the event title budget, a course named by its abbreviation as in deadline labels: \
 "Alg consult", "Calc KR-1", "Career fair".
 - start, end: YYYY-MM-DDTHH:MM, Moscow time; end "" when the message does not tell it. Relative dates count from the \
-message time.
+message time. When the message tells the day but not the time, start is the day alone (YYYY-MM-DD) and end is "": \
+the event is still worth giving.
 - room: the room ("R405"), a meeting link, or "".
 - kind: one English word in lower case: consultation, exam, test, class, talk, meeting, event.
 - required: true when the student has to be there (a consultation before an exam, a test, a make-up class, a \
 mandatory meeting); false when it is up to the student (an optional consultation, a talk, a fair, a club).
 - moves: the message moves a listed event (e12) or a listed class (c34) to another time or room: its id, with the new \
-start, end and room (the title of the listed one is kept); otherwise "".
+start, end and room (the title of the listed one is kept); otherwise "". A message that only adds a room or a time to \
+a listed event (the same course and kind on that day) moves it too: start is the day alone when no time is told.
 - cancels: the message cancels a listed event or class: its id, with title and start of the listed one; otherwise "".
 - A listed event with the same title and time: leave it out. A regular class is not an event: only its move or \
-cancellation is, and only when the message makes clear which class it is.
+cancellation is, and only when the message makes clear which class it is. A message that only mentions a listed \
+class (it takes place, its room, what it covers, a test held during it) gives no event for it; never an event at the \
+time of a listed class of the same course. An event marked "own" was added by the student: never move or cancel it.
 
 Sheets: a sheet (листок) is a PDF with tasks for the students to do: homework (ДЗ, ИДЗ), a problem set, a seminar \
 sheet, a lab or project assignment, a test or exam variant. Not lecture notes or slides, a textbook, a timetable, a \
@@ -261,6 +269,9 @@ deadlines: {course "Математический анализ", label "Calc KR-1
 consult Fri Oct 23 18:10, R205", short "Alg consult Oct 23 18:10", importance 5, events: {course "Алгебра", title \
 "Alg consult", start "2026-10-23T18:10", end "", room "R205", kind "consultation", required true, moves "", \
 cancels ""}
+(study, chat "Алгебра, поток 2", posted Wed 2026-11-04 19:50) "Завтра консультация в S301" -> full "Alg consult \
+Thu Nov 5, S301", short "Alg consult Nov 5, S301", importance 5, events: {course "Алгебра", title "Alg consult", \
+start "2026-11-05", end "", room "S301", kind "consultation", required false, moves "", cancels ""}
 (study) "Формула оценивания алгебра 1 семестр" with a PDF -> full "Alg grading formula for term 1 posted", short \
 "Alg grading formula posted", importance 4, sheets: []
 (study, posted Mon 2026-10-19) 1301 "Новый листок" with PDF "matan_list3.pdf", first page "Листок 3. Ряды. Сдать до \
@@ -372,14 +383,25 @@ def _due(value) -> str | None:
         return None
 
 
-def _moment(value) -> str | None:
-    """'2026-10-23T18:10' -> local ISO with seconds; None for anything else."""
-    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", value.strip()):
-        return None
+def _moment(value, day_alone: bool = False) -> str | None:
+    """'2026-10-23T18:10' -> local ISO with seconds; with `day_alone`, '2026-10-23' stays a date (an all-day event);
+    None for anything else."""
+    value = value.strip() if isinstance(value, str) else ""
     try:
-        return dt.datetime.fromisoformat(value.strip()).isoformat(timespec="seconds")
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", value):
+            return dt.datetime.fromisoformat(value).isoformat(timespec="seconds")
+        if day_alone and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            return dt.date.fromisoformat(value).isoformat()
     except ValueError:
-        return None
+        pass
+    return None
+
+
+def _on_day(start: str, timed: str) -> str:
+    """A move told by its day alone keeps the time of what it moves; an all-day event stays one."""
+    if not all_day(start) or all_day(timed):
+        return start
+    return f"{start}T{timed[11:]}"
 
 
 def _ref(value) -> str:
@@ -391,7 +413,8 @@ def _ref(value) -> str:
 def _event(raw: dict) -> dict | None:
     cancels = _ref(raw.get("cancels"))
     moves = "" if cancels else _ref(raw.get("moves"))
-    title, start, end = (raw.get("title") or "").strip(), _moment(raw.get("start")), _moment(raw.get("end"))
+    title, start = (raw.get("title") or "").strip(), _moment(raw.get("start"), day_alone=True)
+    end = _moment(raw.get("end")) if start and not all_day(start) else None
     if not cancels and not start:
         return None  # a new event or a move needs its time
     if not (cancels or moves) and not title:
@@ -468,12 +491,15 @@ def fit(item: dict) -> None:
 
 def _span(start: str, end: str | None) -> str:
     begin = dt.datetime.fromisoformat(start)
+    if all_day(start):
+        return f"{begin:%a %Y-%m-%d} (all day)"
     return f"{begin:%a %Y-%m-%d %H:%M}" + (f"-{dt.datetime.fromisoformat(end):%H:%M}" if end else "")
 
 
 def _event_line(event: dict) -> str:
     facts = [event["kind"], *([event["room"]] if event["room"] else []),
-             "required" if event["required"] else "optional", *(["cancelled"] if event["cancelled"] else [])]
+             "required" if event["required"] else "optional", *(["cancelled"] if event["cancelled"] else []),
+             *(["own"] if event["source"] == OWN else [])]
     return f"- e{event['id']}: {_span(event['start'], event['end'])} \"{event['title']}\" " + ", ".join(facts)
 
 
@@ -1002,6 +1028,8 @@ class Batches:
         ref = event["cancels"] or event["moves"]
         listed = next((e for e in context.events if f"e{e['id']}" == ref), None)
         if listed is not None:
+            if listed["source"] == OWN:
+                return  # the owner's own: not a chat's to move
             target = self.events.current(listed["id"])  # another message of this batch may have moved it already
             if target is None or target["gone_at"] is not None:
                 return
@@ -1010,10 +1038,10 @@ class Batches:
             if event["cancels"]:
                 new["cancelled"] = True
             else:
-                end = event["end"]
-                if end is None and target["end"]:  # the same length as before
-                    end = (local(event["start"]) + (local(target["end"]) - local(target["start"]))).isoformat()
-                new.update(start=event["start"], end=end, room=event["room"] or target["room"], cancelled=False)
+                start, end = _on_day(event["start"], target["start"]), event["end"]
+                if end is None and target["end"] and not all_day(start):  # the same length as before
+                    end = (local(start) + (local(target["end"]) - local(target["start"]))).isoformat()
+                new.update(start=start, end=end, room=event["room"] or target["room"], cancelled=False)
             if all(new[key] == target[key] for key in ("start", "end", "room", "cancelled")):
                 settled.add(target["id"])  # told again, nothing new
                 return
@@ -1030,7 +1058,7 @@ class Batches:
             start, end, room = item["start"], item["end"], item["room"]
             earlier = self.events.correction(item["uid"])
             if event["moves"]:
-                start, room = event["start"], event["room"] or item["room"]
+                start, room = _on_day(event["start"], item["start"]), event["room"] or item["room"]
                 end = event["end"] or (local(start) + (local(item["end"]) - local(item["start"]))).isoformat()
                 if (start, end, room) == (item["start"], item["end"], item["room"]) and earlier is None:
                     return  # the class where it always is: no move (with a correction in force, it is a move back)
@@ -1048,7 +1076,7 @@ class Batches:
             changes.events.append(new_id)
             return
 
-        if event["cancels"] or event["start"] is None or not event["title"]:
+        if event["cancels"] or event["moves"].startswith("c") or event["start"] is None or not event["title"]:
             return  # cancels or moves something that was not listed: nothing to apply it to
         uid = event_uid(chat["source"], chat["id"], ids[0], n)
         new = {**told, "uid": uid, "course": event["course"], "title": event["title"], "kind": event["kind"],
@@ -1067,7 +1095,40 @@ class Batches:
             return
         if self.events.by_uid(uid) is not None:
             return  # another message has moved this event since: this text no longer tells it
+        if self.schedule.repeats_class({**new, "class_uid": None}, self.schedule.class_entries()):
+            log.info("event %r at %s of %s repeats a class: not saved", new["title"], new["start"], chat["id"])
+            return
+        if (twin := self._day_twin(new)) is not None:
+            self._join(twin, new, told, settled, now, changes)
+            return
         changes.events.append(self.events.add(new, now))
+
+    def _day_twin(self, new: dict) -> dict | None:
+        """The event a new one tells again when one of the two has no time: the same type on the same day, of the same
+        course or with the same title ("tomorrow the consultation is in S301" for the consultation known at 18:10)."""
+        kind = type_of(new["kind"], of_class=False)
+        for event in self.events.on_day(new["start"][:10]):
+            if all_day(event["start"]) == all_day(new["start"]) or type_of(event["kind"], of_class=False) != kind:
+                continue  # two timed ones on a day may well be two events
+            if (new["course"] and event["course"] == new["course"]) or same_label(event["title"], new["title"]):
+                return event
+        return None
+
+    def _join(self, twin: dict, new: dict, told: dict, settled: set[int], now: dt.datetime,
+              changes: Changes) -> None:
+        """What the new event adds to its twin, as a new version of it: the time of the timed one, the newer room."""
+        settled.add(twin["id"])
+        if twin["source"] == OWN:
+            return  # the owner's: theirs to change
+        timed = twin if all_day(new["start"]) else new
+        start, end, room = timed["start"], timed["end"], new["room"] or twin["room"]
+        if (start, end, room) == (twin["start"], twin["end"], twin["room"]) and not twin["cancelled"]:
+            return
+        version = {**{key: twin[key] for key in ("uid", "class_uid", "course", "title", "kind", "required")}, **told,
+                   "start": start, "end": end, "room": room, "cancelled": False}
+        new_id = self.events.add(version, now)
+        self.events.supersede(twin["id"], new_id)
+        changes.events_moved.append((twin["id"], new_id))
 
     def _retract(self, chat: dict, changes: Changes) -> None:
         """Items all of whose messages were deleted are withdrawn; an event withdrawn this way brings back the version

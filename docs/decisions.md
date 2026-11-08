@@ -136,7 +136,8 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
     chats' changes until it is cancelled or RUZ changes the class itself (then it goes, like chats' changes, §6.5);
     chats' changes stay underneath and apply again after a cancellation. Editing an event from a chat hides it and
     puts an own copy in its place, as with deadlines (§5.4): the chat's next message changes only the hidden one.
-    Batch processing does not see own items: the model cannot move them, and a chat message cannot replace them.
+    Batch processing does not move own items, and a chat message cannot replace them (since D46 the model sees own
+    events, so a chat does not repeat them).
   - **Own grades** (`own_grades`) are grades added by hand and corrections of grades from sheets. A correction holds
     until the sheet itself changes that grade. Both go to Tablo through `GET /api/grades` as new grades and are not
     posted to the Grades topic: the owner set them.
@@ -153,6 +154,18 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   another date at most 14 days away: the letter's date stands. It is the reason the 14-day window of completed work
   exists: extensions are announced in letters and chats, while HSE App X keeps the first date. RUZ and own deadlines
   do not move it.
+- **D46. Chat events do not repeat classes; a day without a time is an all-day event; one's own calendar shows the
+  class type, 09.11.2026.** This changes §6.5 and D44. A chat's event of a regular kind (lecture, seminar, lab,
+  class) that starts while a class of the same course, title or room goes on only repeats the class: the batch does
+  not save it, and the feeds leave out one saved earlier or one whose class came to RUZ later. A move of a class the
+  model was not shown is ignored instead of becoming a new event. The model sees the owner's own events, marked
+  "own", so a chat does not tell them again; it still never moves them. A message that tells the day of an event
+  but not its time ("tomorrow a consultation in S301") gives an all-day event: its start is a date alone, the feeds
+  give a DTSTART date, Tablo reads it as midnight. When the same day already has an event of the same type and course
+  (or title) with a time, the message only adds to it, as a new version: its room, or, the other way round, its
+  time (an own event is left as it is). In `main.ics` and `optional.ics` a class's SUMMARY ends with its
+  type ("Calculus · Seminar", "Midterm" for an interim assessment), since a calendar app shows the title alone;
+  `tablo.ics` keeps the bare title, which Tablo takes for the course name.
 
 ## Open questions
 

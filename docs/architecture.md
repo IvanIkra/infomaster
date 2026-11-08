@@ -288,6 +288,10 @@ for a translation; a manual entry or the course disappearing from the source cle
 - Titles are English, from the dictionary (`title`). The first line of `DESCRIPTION` is the type: *Lecture*,
   *Seminar*, *Consultation*, *Event*, *Interim assessment*. `LOCATION` is the room or a link. This way Tablo's
   current `ical.py` reads the feed unchanged (§4.2, §4.4).
+  In `main` and `optional` a class's title also ends with its type ("Calculus · Seminar"); `tablo` keeps the bare
+  title (D46).
+- An event from a chat that only repeats a class (a regular kind during a class of the same course) is not an
+  event; an event whose day is told without its time is an all-day one (D46).
 - The `UID` is stable: classes take it from RUZ; events from chats use a hash of the chat and the id of the first
   message. Moving an event changes the time and keeps the `UID`.
 - A cancellation or move of a class announced in a chat **is applied** to the RUZ class; Tablo did not do this
