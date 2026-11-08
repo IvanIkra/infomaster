@@ -2,7 +2,7 @@
 
 General settings arrive with the stages that use them. Chat settings are all here from the start, so the Mini App can
 set a chat up once; the twin uses `enabled`, the batches `study`, `filter`, `people`, `urgent`, `batch_hours` and
-`images`, the sheets `pdf_content`, the summaries `summary` (and `filter` and `people`).
+`images` and `note`, the sheets `pdf_content`, the summaries `summary` (and `filter`, `people` and `note`).
 """
 
 import copy
@@ -117,6 +117,22 @@ def _grade_sheets(value: Any) -> list[dict]:
     return sheets
 
 
+ABOUT_ME_CHARS = 500  # what the student tells the models about themselves
+CHAT_NOTE_CHARS = 300
+
+
+def _text(limit: int) -> Callable[[Any], str]:
+    """Free text for the models' prompts: lines kept, spaces within them squeezed, empty lines dropped."""
+    def check(value: Any) -> str:
+        if not isinstance(value, str):
+            raise SettingsError("expected text")
+        text = "\n".join(line for line in (" ".join(line.split()) for line in value.splitlines()) if line)
+        if len(text) > limit:
+            raise SettingsError(f"at most {limit} characters, got {len(text)}")
+        return text
+    return check
+
+
 def _flag(value: Any) -> bool:
     if not isinstance(value, bool):
         raise SettingsError(f"expected true or false, got {value!r}")
@@ -155,6 +171,9 @@ SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     # What the owner reads (D41): the bot's posts and the models' summaries for them, and the Mini App.
     "forum_language": ("en", _language),
     "miniapp_language": ("en", _language),
+    # What the student tells the batches and the summaries about themselves (D52): group, subgroup, English group,
+    # electives, so that what is meant for others does not count.
+    "about_me": ("", _text(ABOUT_ME_CHARS)),
 }
 
 
@@ -186,6 +205,7 @@ CHAT_SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "summary": (False, _flag),
     "urgent": (False, _flag),
     "batch_hours": (None, _batch_hours),
+    "note": ("", _text(CHAT_NOTE_CHARS)),  # for the batches and the summaries: its course, who is who (D52)
 }
 
 

@@ -106,7 +106,7 @@ class Service:
         self.deadline_topic = DeadlineTopic(self.forum, self.store, self.inbox, self.merged, env.owner_id)
         self.reminders = DeadlineReminders(self.forum, self.store, self.deadline_topic, self.settings, env.owner_id)
         # Summaries are made from the raw messages, the daily one and /summary (§6.6).
-        summaries = Summaries(self.chat_settings, self.inbox, self.llm, subjects=self.subjects)
+        summaries = Summaries(self.chat_settings, self.inbox, self.llm, subjects=self.subjects, settings=self.settings)
         summaries.files = self.files  # what the batches read on images
         self.summary_topic = SummaryTopic(self.forum, self.store, self.inbox, self.chat_settings, summaries,
                                           self.settings, env.owner_id, env.forum_id)

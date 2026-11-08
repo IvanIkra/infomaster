@@ -593,6 +593,13 @@
       return input;
     }
 
+    // Free text saved when it loses focus: what the models are told (D52).
+    function proseInput(value, attrs, onchange) {
+      const text = el("textarea", {className: "prose", rows: 3, value: value || "", ...attrs});
+      text.onchange = () => onchange(text.value);
+      return el("div", {className: "row"}, text);
+    }
+
     // A row of a list: a title with a line under it, something on the right; with `go` the whole row is a button.
     function row({title, sub, value, control, go, lead, className = "", wrap = false}) {
       const main = el("div", {className: "main"}, el("div", {className: "name" + (wrap ? " wrap" : "")}, title),
@@ -1810,6 +1817,11 @@
             (value) => change({batch_hours: value ? Number(value) : null}))})],
           L("Important: the people below, pins, files, dates and the replies to them.",
             "Важное — люди ниже, закрепы, файлы, даты и ответы на них.")),
+        section(L("Note for the model", "Заметка для модели"), [proseInput(s.note, {maxLength: 300,
+          placeholder: L("The Calculus chat; the seminar teacher writes here",
+            "Чат по матану; сюда пишет семинарист")}, (value) => change({note: value}))],
+          L("The batches and the summaries see it: the chat's course, who is who.",
+            "Это видят разбор пачек и сводки: предмет чата, кто есть кто.")),
         section(L("Important people", "Важные люди"), people.length ? people : [row({title: L("Nobody has written yet",
           "Пока никто не писал"), className: "faded"})],
           L("For «important only» and «Urgent»: the group head, the teachers.",
@@ -2143,7 +2155,13 @@
         section(null, [row({title: L("News lives, hours", "Новости живут, часов"), control: numberInput(data.news_ttl_hours,
           {min: 1, max: 168}, (value) => act("api/general", "PATCH", {news_ttl_hours: value}))})],
           L("In the forum and in Tablo; non-study messages older than this are parsed without the model.",
-            "В форуме и в Tablo; неучебное старше этого разбирается без модели."))];
+            "В форуме и в Tablo; неучебное старше этого разбирается без модели.")),
+        section(L("About you", "Обо мне"), [proseInput(data.about_me, {maxLength: 500,
+          placeholder: L("Group 3, subgroup 2, English B2 group 5, minor: Data Science",
+            "Группа 3, подгруппа 2, английский B2 — группа 5, майнор: анализ данных")},
+          (value) => act("api/general", "PATCH", {about_me: value}))],
+          L("The batches and the summaries see it: what is meant for other groups counts for little.",
+            "Это видят разбор пачек и сводки: то, что для других групп, идёт как неважное."))];
     }
 
     // --- the dictionary ------------------------------------------------------------------------------

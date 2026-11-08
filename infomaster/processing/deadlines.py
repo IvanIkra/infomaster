@@ -15,7 +15,7 @@ import re
 from .. import clock
 from ..store import Store
 
-LOOKBACK = dt.timedelta(days=3)  # past deadlines still shown to the model and merged (§6.4, §5.3)
+LOOKBACK = dt.timedelta(days=3)  # past deadlines still merged and named by the dictionary (§6.4, §5.3)
 
 
 def same_label(a: str, b: str) -> bool:
@@ -30,10 +30,10 @@ class Deadlines:
         row = self.db.execute("select * from deadlines where id = ?", (deadline_id,)).fetchone()
         return _decode(row) if row else None
 
-    def upcoming(self, today: dt.date) -> list[dict]:
-        """From chats and mail, in force and not older than three days, by date."""
+    def upcoming(self, today: dt.date, lookback: dt.timedelta = LOOKBACK) -> list[dict]:
+        """From chats and mail, in force and due `lookback` ago or later, by date."""
         rows = self.db.execute("select * from deadlines where moved_by is null and gone_at is null and due >= ? "
-                               "and source in ('tg', 'mail') order by due, id", ((today - LOOKBACK).isoformat(),))
+                               "and source in ('tg', 'mail') order by due, id", ((today - lookback).isoformat(),))
         return [_decode(row) for row in rows]
 
     def listed(self, since: dt.date) -> list[dict]:

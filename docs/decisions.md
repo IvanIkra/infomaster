@@ -206,6 +206,15 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   12 hours before the first new one, each cut to 300 characters (sender, time, reply, files' names, text; not what
   images or PDFs showed). They are context only: they give no items, and a new message that answers one of them is shown as a reply
   to it instead of with a quote. Letters get none. About 2,000 characters more per call.
+- **D52. The models know who the student is and what a chat is about, 09.11.2026.** This changes §6.1 and §6.6.
+  The prompts said only "first year, Software Engineering", so «у 2 подгруппы пара отменена» meant for another
+  subgroup came as the student's own cancellation, and «ДЗ до пятницы» in a course chat had no course. Two texts go
+  to the batches and the summaries when they are set: **About you** (`about_me`, at most 500 characters: group,
+  subgroup, English group, electives) in «Settings → Batches and news», and a chat's **Note for the model** (`note`,
+  at most 300: its course, who is who) on its screen. A message meant only for other groups is at most importance 2
+  and gives no deadlines or events; a task that names no course gets the course of the note. The batch model also
+  sees the deadlines passed in the last 7 days instead of 3, marked "passed", so an extension after the date moves the
+  deadline instead of adding a second one; the merge still keeps 3 days.
 
 ## Open questions
 

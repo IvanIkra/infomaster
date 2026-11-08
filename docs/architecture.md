@@ -112,6 +112,7 @@ The rule: collectors never call the LLM, and processing never goes to the networ
 | `summary` | no | include in the daily summary (D17) |
 | `urgent` | no | a pin, a PDF or a message from the people list starts processing at once (D19) |
 | `batch_hours` | the common N | an individual processing interval |
+| `note` | empty | for the batches and the summaries: the chat's course, who is who (D52) |
 
 **Stage 9 details (images, D12):**
 
@@ -170,7 +171,8 @@ The logic moves over from Tablo unchanged:
 - **How.** One call per chat: the new messages since the last run, up to a size limit (a long batch is split into
   several calls). The prompt also carries the chat name, the course dictionary, live news, upcoming deadlines and
   events from chats, so that the model can point out a replacement or a move, as in §6.4.
-  Before the new messages come a few earlier ones of the same chat, for context only (D51).
+  Before the new messages come a few earlier ones of the same chat, for context only (D51), and when the owner
+  wrote them, what they told about themselves and the chat's note; passed deadlines stay listed for a week (D52).
 - **What the model returns** for every meaningful message (nothing for chatter):
 
 ```json

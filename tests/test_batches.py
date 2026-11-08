@@ -168,6 +168,36 @@ async def test_earlier_messages_as_context(batches):
     assert news["msg_ids"] == [7]  # an earlier message gives nothing
 
 
+async def test_the_student_the_note_and_passed_deadlines(batches):
+    batches.settings.set("about_me", "Group 3, subgroup 2")
+    batches.chat_settings.update(CHAT, {"note": "The Calculus chat"})
+    add(batches, 1, "ДЗ 5 до 12.10")
+    batches.llm.answers = [{"items": [item([1], deadlines=[deadline(due="2026-10-12")])]},
+                           {"items": [item([2], deadlines=[deadline(due="2026-10-19")])]}]
+    await parse_chat(batches)  # Oct 12 is 8 days ago: past the window
+    add(batches, 2, "ДЗ 5 до 19.10")
+    await parse_chat(batches)
+    [passed] = [d for d in batches.deadlines.upcoming(clock.local_day(batches.now()), dt.timedelta(days=30))
+                if d["due"] == "2026-10-19"]
+
+    add(batches, 3, "ДЗ 5 продлили до 25.10")
+    batches.llm.answers = [{"items": [item([3], deadlines=[deadline(due="2026-10-25", moves=f"d{passed['id']}")])]}]
+    changes = await parse_chat(batches)
+    prompt = batches.llm.prompts[2]
+    assert "\nAbout the student:\nGroup 3, subgroup 2\n\nChat: " in prompt
+    assert '(group, study)\nNote on the chat:\nThe Calculus chat\n\nCourse dictionary' in prompt
+    assert f'Deadlines (upcoming and recently passed):\n- d{passed["id"]}: "Calc HW 5" 2026-10-19 passed\n' in prompt
+    assert "2026-10-12" not in prompt.split("New messages:")[0]
+    assert changes.moved == [(passed["id"], changes.moved[0][1])]
+
+    batches.settings.set("about_me", "")
+    batches.chat_settings.update(CHAT, {"note": ""})
+    add(batches, 4, "ок")
+    batches.llm.answers = [{"items": []}]
+    await parse_chat(batches)
+    assert "About the student" not in batches.llm.prompts[3] and "Note on the chat" not in batches.llm.prompts[3]
+
+
 async def test_retry_for_length(batches):
     add(batches, 1, "ДЗ 5 до 22.10")
     long = "Calc homework number five has to be handed in by Thursday October 22"

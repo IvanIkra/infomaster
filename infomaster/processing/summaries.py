@@ -24,7 +24,7 @@ from ..collectors.files import Files
 from ..collectors.inbox import Inbox
 from ..i18n import Phrase
 from ..llm.client import Haiku
-from ..settings import ChatSettings
+from ..settings import ChatSettings, Settings
 from .batches import IMAGE_LIMIT, KINDS, image_size, important, readable, replies_to_important
 from .subjects import Subjects, dictionary_lines
 
@@ -126,7 +126,9 @@ Input: the chat's name, whether it is a study chat, the course dictionary (each 
 English title and the names it goes by), the period and its messages, mostly in Russian. Each message has \
 its id, the sender, the time and its context: a reply, a forward, files, a pin. "listed person" marks a sender the \
 student follows (the group head, a teacher): such messages are usually official. An image comes as another model \
-read it: what it shows and the text on it.
+read it: what it shows and the text on it. When the student wrote them: what they told about themselves (their \
+group, subgroup, English group, electives) and a note on the chat (its course, who is who); what is meant only for \
+other groups or subgroups is the least important.
 
 Output: points, the most important first. One point is one topic of the chat: an announcement, a decision, a question \
 and the answer that settled it, a discussion and what came of it, a file posted, a plan. The messages of one topic \
@@ -229,8 +231,10 @@ def check(answer: dict, msg_ids: set[int], limit: int) -> list[dict]:
 
 class Summaries:
     def __init__(self, chat_settings: ChatSettings, inbox: Inbox, llm: Haiku,
-                 now: Callable[[], dt.datetime] = clock.now_utc, subjects: Subjects | None = None):
+                 now: Callable[[], dt.datetime] = clock.now_utc, subjects: Subjects | None = None,
+                 settings: Settings | None = None):
         self.chat_settings, self.inbox, self.llm, self.now = chat_settings, inbox, llm, now
+        self.settings = settings  # what the student wrote about themselves (D52)
         self.subjects = subjects  # the course dictionary for the prompt; without it, courses as the chat names them
         self.files: Files | None = None  # the readings of images; without it images are files by name
 
@@ -264,8 +268,8 @@ class Summaries:
         else:
             local_start = start.astimezone(clock.TZ).replace(tzinfo=None)
         dates = period is not None and local_start.time() == local_end.time() == dt.time()
-        return Collected({**chat, "study": settings["study"], "people": people}, local_start, local_end, seen,
-                         chosen, fresh=period is None, dates=dates)
+        return Collected({**chat, "study": settings["study"], "people": people, "note": settings["note"]},
+                         local_start, local_end, seen, chosen, fresh=period is None, dates=dates)
 
     async def summarize(self, collected: Collected, *, asked: bool, lang: str) -> list[dict]:
         """The points of a summary in `lang`, also kept in `collected`. `asked`: by the owner (/summary), which runs
@@ -320,9 +324,12 @@ class Summaries:
     def _header(self, collected: Collected, task: str) -> list[str]:
         chat = collected.chat
         courses = dictionary_lines(self.subjects.all()) if self.subjects is not None else []
+        about = self.settings.get("about_me") if self.settings is not None else ""
         return [f"Today: {self.now().astimezone(clock.TZ):%a %Y-%m-%d %H:%M}",
+                *(["About the student:", *about.splitlines()] if about else []),
                 f"Chat: \"{chat['title']}\" ({KINDS.get(chat['kind'], chat['kind'])}, "
                 f"{'study' if chat['study'] else 'not a study chat'})",
+                *(["Note on the chat:", *chat["note"].splitlines()] if chat.get("note") else []),
                 "Course dictionary (abbreviation \"title\": the names it goes by):",
                 *(courses or ["(empty)"]),
                 f"Period: {collected.start:%a %Y-%m-%d %H:%M} — {collected.end:%a %Y-%m-%d %H:%M}",

@@ -12,9 +12,10 @@ login (§5.2, D7), the limits of reading a PDF, the time of the daily summary an
 the name, the sheets and what was read in them, the LLM spending (§7, D40): today, this week and this month by task
 and by chat, the cost of each of the last 30 days and the daily limit, which can be changed or raised for today. Tablo
 and HA show no spending: this screen is the one place. The general settings: the batches' N, how long news lives, the
-prices of the models and the languages of the forum and the Mini App (D41). Every setting is here (D33); only the
-secrets of .env are not. The Mini App's texts are the page's own; what the service says here (errors, the reasons of a
-failed login, the statuses) comes in the Mini App's language too.
+prices of the models, the languages of the forum and the Mini App (D41) and what the student tells the models about
+themselves (D52). Every setting is here (D33); only the secrets of .env are not. The Mini App's texts are the page's
+own; what the service says here (errors, the reasons of a failed login, the statuses) comes in the Mini App's language
+too.
 
 The same port serves /hseapp/callback, where the browser comes back after the HSE login. It has no initData: the
 PKCE state of the login link is its protection, and it answers with a short page in the Mini App's language. And
@@ -76,7 +77,8 @@ SUMMARIES_KEY = web.AppKey("summaries", SummaryTopic)
 REMINDERS_KEY = web.AppKey("reminders", DeadlineReminders)
 GRADES_KEY = web.AppKey("grades", Grades)
 TWIN_KEY = web.AppKey("twin", Twin)
-GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "forum_language", "miniapp_language")  # of no other screen
+GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "forum_language", "miniapp_language",
+           "about_me")  # of no other screen
 GRADE_SETTINGS = {"student": "grades_student", "sheets": "grades_sheets", "window_days": "grades_window_days"}
 PDF_LIMITS = ("pdf_pages", "pdf_tokens")
 TITLE_LIMIT = 200  # characters of an own deadline's title
@@ -796,8 +798,8 @@ async def general(request: web.Request) -> web.Response:
 
 
 async def update_general(request: web.Request) -> web.Response:
-    """Any of batch_hours, news_ttl_hours, llm_prices and the two languages; all are checked before any is
-    saved."""
+    """Any of batch_hours, news_ttl_hours, llm_prices, the two languages and about_me; all are checked before any
+    is saved."""
     values = await _json(request)
     if not values or set(values) - set(GENERAL):
         raise web.HTTPBadRequest(text=f"expected some of {', '.join(GENERAL)}")

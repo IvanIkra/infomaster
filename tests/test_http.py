@@ -160,6 +160,13 @@ async def test_miniapp_general(aiohttp_client, budget, journal, store, schedule,
     bad = await client.patch("/app/api/general", json={"forum_language": "de"}, headers=owner())
     assert bad.status == 400 and settings.get("forum_language") == "en"
 
+    # what the models are told about the student (D52)
+    assert body["about_me"] == ""
+    body = await (await client.patch("/app/api/general", json={"about_me": " Group 3 \n subgroup 2"},
+                                     headers=owner())).json()
+    assert body["about_me"] == "Group 3\nsubgroup 2" == settings.get("about_me")
+    assert (await client.patch("/app/api/general", json={"about_me": "x" * 501}, headers=owner())).status == 400
+
 
 async def test_miniapp_chats(aiohttp_client, budget, journal, store, schedule, merged):
     inbox = Inbox(store)

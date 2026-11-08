@@ -51,6 +51,11 @@ Context: before the new messages of a chat the model sees up to `CONTEXT_MESSAGE
 chat and forum topic, from `CONTEXT_AGE` before the first new one, each cut to `CONTEXT_CHARS`: what a short reply or
 «перенесли на пятницу» refers to. They give no items; a new message that replies to one of them says so instead of
 quoting it. Letters get none: each letter stands on its own.
+
+The student (D52): what they wrote about themselves (`about_me`: group, subgroup, English group, electives) and the
+chat's note (`note`: its course, who is who) go to the prompt, so that what is meant for other groups counts for
+little and a task without a course name gets the chat's. Deadlines passed in the last `PASSED_DEADLINES` are listed
+too, marked passed, so that an extension after the date moves them instead of adding another.
 """
 
 import asyncio
@@ -89,6 +94,7 @@ QUOTE_LIMIT = 300         # characters of a replied message that is not in the b
 CONTEXT_MESSAGES = 6      # earlier messages of the chat before the new ones, for context only
 CONTEXT_CHARS = 300       # characters of each of them
 CONTEXT_AGE = dt.timedelta(hours=12)  # before the first new message: older talk is another conversation
+PASSED_DEADLINES = dt.timedelta(days=7)  # passed ones are shown this long: an extension after the date moves them
 FIRST_PAGE_LIMIT = 2_000  # characters of a PDF's first page in the prompt
 IMAGE_LIMIT = 2_500       # characters of what was read on an image, in the prompt
 URGENT_QUIET = 60         # seconds of silence in the chat that end an urgent burst
@@ -168,7 +174,12 @@ a sender the student follows (the group head, a teacher): such messages and pinn
 Also given: the course dictionary (each course with its abbreviation, its English title and the names it goes \
 by), the current news items (ids n...), the \
 upcoming deadlines (ids d...) and events (ids e...) already known from all chats, and for a study chat the classes of \
-the timetable in the next weeks (ids c...).
+the timetable in the next weeks (ids c...). Deadlines marked "passed" are past their date and can still be moved \
+(extended).
+When the student wrote them: what they told about themselves (their group, subgroup, English group, electives) and \
+a note on the chat (its course, who is who). A message meant only for other groups, subgroups or streams does not \
+concern the student: importance at most 2, no deadlines, no events, no moves or cancellations. A task that names no \
+course belongs to the course the note gives the chat.
 Before the new messages a few earlier messages of the chat may come, for context only: use them to understand what \
 the new ones refer to (a short reply, "moved to Friday"), but make no items from them and never put their ids in \
 msg_ids; what they told is already in the news, deadlines and events when it mattered.
@@ -779,7 +790,8 @@ class Batches:
     async def _parse(self, chat: dict, settings: dict, chunk: list[dict], changes: Changes) -> None:
         started = self.now()  # an edit during the call is newer than parsed_at and comes back
         today = clock.local_day(started)
-        context = Context(self.news.live(started, self.settings.get("news_ttl_hours")), self.deadlines.upcoming(today),
+        context = Context(self.news.live(started, self.settings.get("news_ttl_hours")),
+                          self.deadlines.upcoming(today, PASSED_DEADLINES),
                           self.events.upcoming(today),
                           self.schedule.upcoming_classes(today) if settings["study"] else [],
                           self.subjects.all())
@@ -857,19 +869,24 @@ class Batches:
         header = MAILBOX_HEADER if chat["source"] == "mail" else \
             f"Chat: \"{chat['title']}\" ({KINDS.get(chat['kind'], chat['kind'])}, " \
             f"{'study' if settings['study'] else 'not a study chat'})"
+        today = now.date().isoformat()
         lines = [f"Today: {now:%a %Y-%m-%d %H:%M}",
                  f"Budgets: full at most 2 lines of {LINE} characters; short at most {LINE} characters; "
                  f"deadline label at most {LABEL_CHARS - 1} characters; event title at most {EVENT_TITLE_CHARS} "
                  "characters.",
-                 "",
-                 header,
-                 "",
-                 "Course dictionary (abbreviation \"title\": the names it goes by):"]
+                 ""]
+        if about := self.settings.get("about_me"):
+            lines += ["About the student:", *about.splitlines(), ""]
+        lines.append(header)
+        if settings["note"]:
+            lines += ["Note on the chat:", *settings["note"].splitlines()]
+        lines += ["", "Course dictionary (abbreviation \"title\": the names it goes by):"]
         lines += dictionary_lines(context.courses) or ["(empty)"]
         lines += ["", "Current news:"]
         lines += [f"- n{n['id']}: \"{n['full']}\"" for n in context.news] or ["(none)"]
-        lines += ["", "Upcoming deadlines:"]
-        lines += [f"- d{d['id']}: \"{d['label']}\" {d['due']}" for d in context.deadlines] or ["(none)"]
+        lines += ["", "Deadlines (upcoming and recently passed):"]
+        lines += [f"- d{d['id']}: \"{d['label']}\" {d['due']}" + (" passed" if d["due"] < today else "")
+                  for d in context.deadlines] or ["(none)"]
         lines += ["", "Upcoming events:"]
         lines += [_event_line(e) for e in context.events] or ["(none)"]
         if settings["study"]:

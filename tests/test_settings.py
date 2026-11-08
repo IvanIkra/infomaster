@@ -54,7 +54,8 @@ def test_unknown(settings):
 def test_chat_defaults():
     chats = ChatSettings(Store())
     assert chats.all(-1001) == {"enabled": False, "study": False, "filter": "all", "people": [], "images": False,
-                                "pdf_content": False, "summary": False, "urgent": False, "batch_hours": None}
+                                "pdf_content": False, "summary": False, "urgent": False, "batch_hours": None,
+                                "note": ""}
     assert chats.enabled_ids() == set()
 
 
@@ -83,3 +84,16 @@ def test_languages(settings):
     for wrong in ("de", "RU", "", None):
         with pytest.raises(SettingsError):
             settings.set("miniapp_language", wrong)
+
+
+def test_texts_for_the_models(settings):
+    assert settings.get("about_me") == ""
+    assert settings.set("about_me", "  Group  3,\n\n subgroup 2 \n") == "Group 3,\nsubgroup 2"
+    with pytest.raises(SettingsError):
+        settings.set("about_me", "x" * 501)
+    with pytest.raises(SettingsError):
+        settings.set("about_me", None)
+    chats = ChatSettings(Store())
+    assert chats.update(-1001, {"note": "Calc  chat"})["note"] == "Calc chat"
+    with pytest.raises(SettingsError):
+        chats.update(-1001, {"note": "x" * 301})

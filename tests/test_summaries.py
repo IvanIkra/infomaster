@@ -191,6 +191,18 @@ async def test_the_dictionary_in_the_prompt(store, chat_settings, inbox, now, na
     assert "a course by its dictionary title" in call["system"]
 
 
+async def test_the_student_and_the_note_in_the_prompt(store, chat_settings, inbox, now):
+    settings = Settings(store)
+    settings.set("about_me", "Group 3")
+    chat_settings.update(CHAT, {"note": "The Calculus chat"})
+    summaries = Summaries(chat_settings, inbox, FakeLLM(), now=now, settings=settings)
+    add(inbox, now, 1, "Семинар по матану переносится на четверг")
+    await summaries.summarize(summaries.collect(CHAT, None), asked=False, lang="en")
+    [call] = summaries.llm.calls
+    assert "\nAbout the student:\nGroup 3\nChat: " in call["prompt"]
+    assert "(group, study)\nNote on the chat:\nThe Calculus chat\nCourse dictionary" in call["prompt"]
+
+
 async def test_a_long_period_goes_by_days(summaries, inbox, now, monkeypatch):
     monkeypatch.setattr(summaries_module, "CALL_CHARS", 400)  # two messages of 100 characters
     add(inbox, now, 1, "а" * 100, ago=dt.timedelta(days=2))
