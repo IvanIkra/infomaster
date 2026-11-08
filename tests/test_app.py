@@ -38,8 +38,9 @@ async def test_after_poll(tmp_path, forum, namer, now, aiohttp_client):
         assert forum.texts("system") == ["РУЗ подключён: в расписании 9 пар."]
         # The first poll is no news: its Midterms join the pinned list without messages of their own.
         assert forum.texts("deadlines") == ["<b>Дедлайны</b>\n\n"
-                                            "📅 <b>RSF Midterm</b> — пн 26.10 · Foundations of Russian Statehood\n"
-                                            "📅 <b>Prog Midterm</b> — чт 29.10 · Введение в программирование"]
+                                            "📅 <b>RSF Midterm</b> — пн 26.10 · Foundations of Russian Statehood"
+                                            " · РУЗ\n"
+                                            "📅 <b>Prog Midterm</b> — чт 29.10 · Введение в программирование · РУЗ"]
         assert forum.texts("news") == []  # the RUZ task leaves the news list to the batches
         assert service._ruz_status() == {"ok_at": None, "error": "RUZ_ICAL_URL is not set", "classes": 9,
                                          "subjects_error": None}
@@ -129,8 +130,8 @@ async def test_deadlines_wiring(tmp_path, forum, now):
 
         lists(("h1", "DM HW 3", "2026-10-22"), ("h2", "Calc HW 1", "2026-10-23"))
         await service._hseapp_changed(True)
-        assert forum.texts("deadlines") == ["<b>Дедлайны</b>\n\n🎓 <b>DM HW 3</b> — чт 22.10\n"
-                                            "🎓 <b>Calc HW 1</b> — пт 23.10"]
+        assert forum.texts("deadlines") == ["<b>Дедлайны</b>\n\n🎓 <b>DM HW 3</b> — чт 22.10 · HSE App X\n"
+                                            "🎓 <b>Calc HW 1</b> — пт 23.10 · HSE App X"]
         lists(("h1", "DM HW 3", "2026-10-22"), ("h2", "Calc HW 1", "2026-10-23"), ("h3", "Eng essay", "2026-10-25"))
         await service._hseapp_changed(False)
         assert forum.texts("deadlines")[-1] == "🆕 <b>Eng essay</b> — вс 25.10\nHSE App X"

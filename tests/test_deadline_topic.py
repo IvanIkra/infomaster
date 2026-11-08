@@ -7,7 +7,7 @@ import pytest
 from conftest import Press, labels
 
 from infomaster import clock
-from infomaster.collectors.inbox import Inbox
+from infomaster.collectors.inbox import MAILBOX, Inbox
 from infomaster.outputs import deadlines as topic_module
 from infomaster.outputs.deadlines import BUTTON, DeadlineTopic, due_mark, hide_button
 from infomaster.processing.todo import Deadline
@@ -16,6 +16,10 @@ CHAT = -1001234567890
 OWNER = 42
 LINK = '<a href="https://t.me/c/1234567890/3">Матан &lt;2026&gt;</a>'
 HEADER = "<b>Дедлайны</b>\n"
+
+
+def link(msg_id: int) -> str:
+    return f'<a href="https://t.me/c/1234567890/{msg_id}">Матан &lt;2026&gt;</a>'
 
 
 @pytest.fixture
@@ -69,11 +73,11 @@ async def test_the_first_refresh_takes_the_list_as_it_is(topic, forum):
     assert posts(forum) == [] and forum.pinned == [101]  # no flood: only the list
     assert board(forum) == HEADER + "\n".join([
         "",
-        "🎓 <b>DM HW 3</b> — сегодня · Дискретная математика",
-        "🎓 <b>Записаться на майнор</b> — завтра",
-        "💬 <b>Calc HW 5</b> — чт 22.10 · Матанализ",
-        "📅 <b>RSF Midterm</b> — пн 26.10 · Основы российской государственности",
-        "💬 <b>Old HW</b> — просрочен (пн 19.10)"])
+        "🎓 <b>DM HW 3</b> — сегодня · Дискретная математика · HSE App X",
+        "🎓 <b>Записаться на майнор</b> — завтра · HSE App X",
+        f"💬 <b>Calc HW 5</b> — чт 22.10 · Матанализ · {link(3)}",  # the source, as in the news list
+        "📅 <b>RSF Midterm</b> — пн 26.10 · Основы российской государственности · РУЗ",
+        f"💬 <b>Old HW</b> — просрочен (пн 19.10) · {link(4)}"])
     assert [row["ref"] for row in topic.store.get_json("deadlines.shown")] == ["hseapp:h1", "hseapp:h2", "dl:1",
                                                                               "dl:2", "dl:3"]
     await topic.refresh()
@@ -104,7 +108,7 @@ async def test_new_moved_and_withdrawn(topic, forum):
                             f"✖️ <b>Calc KR</b> (пт 23.10) снят: сообщение удалено или исправлено\n{LINK}"]  # past: no
     assert topic.db.execute("select ref, key from bot_posts where kind = 'deadline' order by id desc").fetchone()[
         "key"] is None  # «снят» has no button
-    assert board(forum) == HEADER + "\n💬 <b>Calc HW 5</b> — сб 24.10 · Матанализ" and moved
+    assert board(forum) == HEADER + f"\n💬 <b>Calc HW 5</b> — сб 24.10 · Матанализ · {LINK}" and moved
 
 
 async def test_renames_only_edit_the_list(topic, forum):
@@ -182,7 +186,7 @@ async def test_quiet_midterms_and_what_leaves_quietly(topic, forum):
     topic.merged.remove(hidden)  # by the owner: the list changes, no message
     own = topic.merged.add("Dentist", dt.date(2026, 10, 23), "personal")
     await forum.settle()
-    assert posts(forum) == [] and board(forum) == HEADER + "\n🏠 <b>Dentist</b> — пт 23.10"
+    assert posts(forum) == [] and board(forum) == HEADER + "\n🏠 <b>Dentist</b> — пт 23.10 · свой"
     topic.merged.edit(own, None, dt.date(2026, 10, 24))  # moved by the owner: quiet too
     await forum.settle()
     assert posts(forum) == [] and "сб 24.10" in board(forum)
@@ -318,5 +322,22 @@ async def test_english_forum(topic, merged, forum):
     forum.lang = "en"
     assert topic.board([]) == ["<b>Deadlines</b>\n\nNo deadlines."]
     d = Deadline("Minor sign-up", clock.local_day(topic.now()), "study", "ha", None, ref="ha:1")
-    assert topic.board([d]) == ["<b>Deadlines</b>\n\n🏠 <b>Minor sign-up</b> — today"]
+    assert topic.board([d]) == ["<b>Deadlines</b>\n\n🏠 <b>Minor sign-up</b> — today · own"]
     assert labels(hide_button(d, "en")) == [[("Delete", b"dl:hide")]]
+
+
+async def test_a_letter_and_a_channel_in_the_list(topic, forum):
+    topic.inbox.put_chat(-1009876543210, "Учебный офис", "channel", None, 0)
+    with topic.db:
+        topic.merged.deadlines.add({"source": "tg", "chat_id": -1009876543210, "msg_ids": [5], "course": None,
+                                    "label": "Course survey", "due": "2026-10-25"}, topic.now())
+    topic.inbox.add_letter(7, {"sender_name": "Office", "at": topic.now(), "text": "...",
+                               "subject": "Elective <choice>"})
+    with topic.db:
+        topic.merged.deadlines.add({"source": "mail", "chat_id": MAILBOX, "msg_ids": [7], "course": None,
+                                    "label": "Elective choice", "due": "2026-10-26"}, topic.now())
+    await topic.refresh()
+    assert board(forum) == HEADER + "\n".join([
+        "",
+        '📢 <b>Course survey</b> — вс 25.10 · <a href="https://t.me/c/9876543210/5">Учебный офис</a>',
+        "✉️ <b>Elective choice</b> — пн 26.10 · письмо «Elective &lt;choice&gt;»"])

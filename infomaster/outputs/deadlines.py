@@ -1,8 +1,9 @@
 """The «Дедлайны» topic (§6.4, §8.3, D24): the merged list pinned, and a message for every new or moved deadline.
 
 - The pinned list: every deadline the merge shows (processing/merge.py: the list Tablo and HA get), in its order, with
-  its source's icon, the title, when it is due (today, tomorrow, overdue, else the weekday and the date) and the
-  course as the source names it. The bot edits it in place, several messages in a row when it is long.
+  its source's icon, the title, when it is due (today, tomorrow, overdue, else the weekday and the date), the course
+  as the source names it and, as in the news list, the source: the chat with a link to the message, the letter's
+  subject, RUZ, HSE App X or "own". The bot edits it in place, several messages in a row when it is long.
 - A message for every deadline that joins the list or moves there, from any source. The list is compared with the
   one shown last (kv "deadlines.shown") by the row each deadline comes from (`Deadline.ref`), so a rename (a Midterm
   once the dictionary knows its course, an HSE App X label once Haiku answers) only edits the list, and a move of the
@@ -35,7 +36,7 @@ from ..i18n import Phrase, tr
 from ..processing.merge import DeadlineList, same
 from ..processing.todo import Deadline
 from ..store import Store
-from .feed import MESSAGE_LIMIT, Board, day, remember, source, split
+from .feed import MESSAGE_LIMIT, Board, day, icon, remember, source, split
 from .forum import Forum
 
 log = logging.getLogger(__name__)
@@ -131,12 +132,24 @@ class DeadlineTopic:
         today, lang = clock.local_day(self.now()), self.forum.lang
         lines = []
         for d in shown:
-            line = f"{ICONS.get(d.source, '•')} <b>{html.escape(d.title)}</b> — {due_mark(d.due, today, lang)}"
+            mark, where = self._where(d)
+            line = f"{mark} <b>{html.escape(d.title)}</b> — {due_mark(d.due, today, lang)}"
             if d.name:
                 line += f" · {html.escape(d.name)}"
-            lines.append(line)
+            lines.append(f"{line} · {where}")
         return split(tr(lang, "<b>Deadlines</b>\n", "<b>Дедлайны</b>\n"),
                      lines or [tr(lang, "No deadlines.", "Дедлайнов нет.")], MESSAGE_LIMIT)
+
+    def _where(self, d: Deadline) -> tuple[str, str]:
+        """The icon and the source of a line, as the news list shows them: a chat's kind and its name with a link to
+        the message, a letter's subject; RUZ, HSE App X or "own" for the others."""
+        lang = self.forum.lang
+        if d.ref.startswith("dl:") and d.source in ("tg", "mail"):
+            row = self.merged.deadlines.get(int(d.ref[3:]))
+            if row is not None and (row["chat_id"] is not None or row["source"] == "mail"):
+                return icon(self.inbox, row), source(self.inbox, row, lang)
+        names = {"ical": tr(lang, "RUZ", "РУЗ"), "hseapp": "HSE App X", "ha": tr(lang, "own", "свой")}
+        return ICONS.get(d.source, "•"), names.get(d.source, "?")
 
     # --- the messages --------------------------------------------------------------------------
 
