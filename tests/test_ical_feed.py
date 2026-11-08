@@ -185,6 +185,23 @@ async def test_all_day_event_and_class_twins(feed, schedule, now):
     assert read[event_uid("tg", CHAT, 7)][:2] == [dt.datetime(2026, 10, 21), dt.datetime(2026, 10, 22)]
 
 
+def test_origin_and_edit_link(feed):
+    """One's own calendar says where an event came from and links to its card; tablo.ics has neither."""
+    feed.edit_link = lambda uid: "https://t.me/example_bot?start=ev-" + ("c" if uid.endswith("ruz.hse.ru") else "e")
+    events = events_of(feed.render("main"))
+    consult, calc = events[event_uid("tg", CHAT, 1)], events["2000001@ruz.hse.ru"]
+    assert str(consult["DESCRIPTION"]) == "Consultation\nAlgebra\nFrom: Матан https://t.me/c/1234567890/1\n" \
+                                          "Edit: https://t.me/example_bot?start=ev-e"
+    assert str(consult["URL"]) == "https://t.me/example_bot?start=ev-e"
+    assert str(calc["DESCRIPTION"]) == "Seminar\nFrom: RUZ\nEdit: https://t.me/example_bot?start=ev-c"
+    moved = events["2000005@ruz.hse.ru"]  # a class moved by a chat: the chat told it
+    assert "From: Матан https://t.me/c/1234567890/5" in str(moved["DESCRIPTION"])
+    tablo = events_of(feed.render("tablo"))
+    assert all("URL" not in e and "From:" not in str(e["DESCRIPTION"]) for e in tablo.values())
+    feed.edit_link = lambda uid: None  # before the bot has started: the source only
+    assert str(events_of(feed.render("main"))["2000001@ruz.hse.ru"]["DESCRIPTION"]) == "Seminar\nFrom: RUZ"
+
+
 async def test_routes(aiohttp_client, budget, schedule, now, merged):
     env = Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, forum_id=-100, api_token="tok",
               public_url="https://x.ts.net", calendar_secret=SECRET)

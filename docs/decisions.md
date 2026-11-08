@@ -174,6 +174,13 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   and a slot missed while the service was down is sent when it starts again the same day. On, off and the times are
   in the Mini App, «Settings → Deadline reminders». The pinned list shows each deadline's source too, as the news
   list does: the chat with a link to the message, the letter's subject, RUZ, HSE App X or "own".
+- **D48. One's own calendar links each event to its source and its card, 09.11.2026.** In `main.ics` and
+  `optional.ics` DESCRIPTION ends with "From: <chat> <link to the message>" (the letter's subject, "RUZ", "you" for an
+  own one) and "Edit: <link>"; URL is the same link, which a calendar app shows as one tap. It is a t.me link with the
+  start parameter `ev-<key>`, the key the first 12 hex digits of SHA-1 of the UID (a UID has '@' and dots, which a
+  start parameter does not allow); the Mini App opens the Timetable tab and the card of the entry with that key. With
+  a main Mini App set in @BotFather the link is `?startapp=` and opens it at once; without one it is `?start=` and the
+  bot answers with the Mini App's button. `tablo.ics` has neither: Tablo takes an event with URL for an online class.
 
 ## Open questions
 

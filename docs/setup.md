@@ -21,6 +21,9 @@ Mini App use the Russian names.
    without a secret its feeds are off.
 5. Fill in the rest of `.env` following `.env.example` and run `docker compose up -d --build`.
 6. Send `/start` to the bot: an **Open** button and a **Settings** menu button appear; both open the Mini App.
+   Optional: in @BotFather, **Bot Settings → Configure Mini App**, turn the Mini App on with `<PUBLIC_URL>/app/`. Then
+   the **Edit** link in your own calendar's events opens the event's card at once, not through the chat with the bot
+   (D48; the bot notices it at its next start).
 7. **Twin.** A separate Telegram account (neither your main one nor a bot). Log it in from the Mini App under
    **Settings → Twin and chats**: phone, code (it comes to the twin's Telegram or by SMS; do not forward it in
    Telegram, or it stops working) and the cloud password if there is one. Chats are read at once, with no restart;
@@ -73,7 +76,8 @@ classes announced in chats. Each comes with a link to the message and the button
 (**Don't apply** for a change to a class). If RUZ later changes the class itself, the change from the chat stops
 applying. The Mini App's Timetable tab shows the same as the feeds: classes with changes, events and your own; a tap
 opens a card where an item can be moved, cancelled, made optional, removed, or a chat's change corrected, and **+**
-adds your own event (D44). **Settings → Course dictionary** holds manual entries (Haiku leaves them alone; Haiku
+adds your own event (D44). In `main.ics` and `optional.ics` an event's notes end with its source (the chat
+with a link to the message, the letter, RUZ, you) and an **Edit** link to its card, also its URL (D48). **Settings → Course dictionary** holds manual entries (Haiku leaves them alone; Haiku
 names a deleted entry again; `<abbr> Midterm` is renamed right after an edit). If `RUZ_ICAL_URL` changes, the next
 poll counts as the first one: System reports the new number of classes, without a stream of "removed" messages in
 Timetable. RUZ state is in `GET /api/status` (`ruz`: the number of classes in the last feed, the poll error without

@@ -44,7 +44,7 @@ from .processing.hseapp import HseAppDeadlines
 from .processing.images import Images
 from .processing.merge import DeadlineList
 from .processing.news import News
-from .processing.schedule import MidtermChanges, Schedule
+from .processing.schedule import MidtermChanges, Schedule, event_key
 from .processing.sheets import Sheets
 from .processing.subjects import Subjects
 from .processing.summaries import Summaries
@@ -96,6 +96,7 @@ class Service:
         self.feed = Feed(self.forum, self.store, self.inbox, self.news, self.settings, env.owner_id)
         self.timetable = Timetable(self.forum, self.store, self.inbox, self.schedule, env.owner_id)
         self.calendar = CalendarFeed(self.schedule)
+        self.calendar.edit_link = lambda uid: self.forum.event_link(event_key(uid))  # a card, from the calendar
         self.hseapp = HseApp(self.store, self.settings, callback_url=env.public_url + CALLBACK_PATH)
         self.hseapp_deadlines = HseAppDeadlines(self.store, self.subjects, self.llm)
         self.mail = Mail(env, self.store, self.settings, self.inbox)

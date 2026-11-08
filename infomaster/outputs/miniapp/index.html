@@ -2282,11 +2282,17 @@
       lang = me.language;
       document.documentElement.lang = lang;
       drawTabbar();
-      const [tab, inner] = SCREENS[screen] || ["deadlines"];
+      const event = /^ev-[0-9a-f]{12}$/.test(screen || "") ? screen.slice(3) : null;  // a link in the calendar
+      const [tab, inner] = event ? ["schedule"] : SCREENS[screen] || ["deadlines"];
       nav.tab = tab;
       nav.stack = typeof inner === "function" ? [inner] : [];
       if (typeof inner === "string") nav.study = inner;
-      draw(true);
+      await draw(true);
+      if (event) {
+        const data = await get("api/agenda");
+        const item = data.items.find((i) => i.key === event);
+        if (item) agendaCard(item, data);
+      }
     }
 
     start(startScreen);

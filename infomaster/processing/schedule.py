@@ -31,6 +31,7 @@ feeds leave out one saved before or one whose class came to RUZ later. Own event
 """
 
 import datetime as dt
+import hashlib
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -80,6 +81,12 @@ def all_day(start: str) -> bool:
     return len(start) == 10
 
 
+def event_key(uid: str) -> str:
+    """A short key of an entry for links into the Mini App (a Telegram start parameter allows 64 of A-Z a-z 0-9 _ -,
+    a UID has '@' and dots)."""
+    return hashlib.sha1(uid.encode()).hexdigest()[:12]
+
+
 def midterm(kind: str) -> bool:
     folded = (kind or "").casefold()
     return any(word in folded for word in MIDTERM_KINDS)
@@ -102,6 +109,7 @@ class Entry:
     all_day: bool = False       # an event without a time: start is the day's midnight, end the next one's
     of_class: bool = False      # a RUZ class: its own calendar marks its type in the title
     abbr: str | None = None     # a class's course abbreviation: an event may name the class by it
+    origin: str | None = None   # who told it, in English: a chat's name, a letter's subject; None for RUZ itself
 
 
 @dataclass
@@ -194,7 +202,7 @@ class Schedule:
                       source="ruz", of_class=True, abbr=self.subjects.abbr(item["subject"]))
         if not applies(item, correction):
             return entry
-        entry.source, entry.link = correction["source"], self.link(correction)
+        entry.source, entry.link, entry.origin = correction["source"], self.link(correction), self.origin(correction)
         by = "by hand" if correction["source"] == OWN else "in a chat"
         if correction["cancelled"]:
             entry.cancelled = True
@@ -213,7 +221,7 @@ class Schedule:
                       local(event["end"]) if event["end"] else start + DEFAULT_LENGTH,
                       type=type_of(event["kind"], of_class=False), location=event["room"],
                       required=event["required"], cancelled=event["cancelled"], source=event["source"],
-                      link=self.link(event), all_day=whole_day)
+                      link=self.link(event), all_day=whole_day, origin=self.origin(event))
         if subject := self.subjects.get(event["course"]):  # a course not named yet stays out: the feed is English
             entry.notes.append(subject.title)
         earlier = self.events.previous(event["id"])
@@ -226,6 +234,11 @@ class Schedule:
         the chat has links."""
         chat = self.inbox.chat(event["chat_id"]) if event["chat_id"] is not None else None
         return message_link(chat, event["msg_ids"][0]) if chat and event["msg_ids"] else None
+
+    def origin(self, event: dict) -> str | None:
+        """Who told it, for the feeds' DESCRIPTION: English, as the feeds are."""
+        told = self.told_by(event)
+        return told.en if isinstance(told, Phrase) else told
 
     def told_by(self, event: dict) -> str | Phrase | None:
         """Who told it (an event, or any row with source, chat_id, msg_ids), for the Mini App: the chat's name, or
@@ -273,7 +286,7 @@ class Schedule:
                 continue
             item = classes.get(entry.uid)
             event = corrections.get(entry.uid) if item is not None else events.get(entry.uid)
-            items.append({"uid": entry.uid, "title": entry.title,
+            items.append({"uid": entry.uid, "key": event_key(entry.uid), "title": entry.title,
                           "start": entry.start.date().isoformat() if entry.all_day else entry.start.isoformat(),
                           "end": None if entry.all_day else entry.end.isoformat(), "type": entry.type,
                           "location": entry.location,

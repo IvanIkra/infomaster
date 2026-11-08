@@ -345,4 +345,6 @@ def test_all_day_event_in_the_agenda(loaded, now):
     assert (item["start"], item["end"], item["event"]["start"], item["event"]["end"]) == (
         "2026-10-21", None, "2026-10-21", None)
     assert item["event"]["id"] == event_id
+    from infomaster.processing.schedule import event_key
+    assert item["key"] == event_key(item["uid"]) and len(item["key"]) == 12  # a link from the calendar finds it
     assert moment("2026-10-21", "en") == "Wed 21.10" and moment("2026-10-21T18:10:00", "en") == "Wed 21.10 18:10"

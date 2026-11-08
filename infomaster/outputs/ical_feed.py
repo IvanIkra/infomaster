@@ -20,6 +20,11 @@ cancellation.
 
 In main and optional, a class's SUMMARY ends with its type, "Calculus · Seminar", since a calendar app shows the title
 alone. tablo.ics keeps the bare title: Tablo takes SUMMARY for the course name.
+
+main and optional also say where an event came from and how to change it, since a calendar app shows the notes and
+one link: DESCRIPTION ends with "From: <the chat> <link to the message>" (a letter's subject, RUZ, "you" for an own
+one) and "Edit: <link>", and URL is that link, which opens the event's card in the Mini App (Forum.event_link).
+tablo.ics has neither: Tablo takes an event with URL for an online class (§4.2).
 """
 
 import datetime as dt
@@ -50,8 +55,19 @@ def summary(entry: Entry, feed: str) -> str:
     return f"{entry.title} · {MARKS.get(entry.type, entry.type)}"
 
 
-def build(entries: list[Entry], feed: str, stamp: dt.datetime) -> bytes:
-    """One of FEEDS as iCalendar text."""
+def origin_line(entry: Entry) -> str:
+    """Where it came from, for one's own calendar: the chat with a link to the message, RUZ, the owner."""
+    if entry.source == "ruz":
+        return "From: RUZ"
+    if entry.source == "own":
+        return "From: you"
+    told = entry.origin or entry.source
+    return f"From: {told}" + (f" {entry.link}" if entry.link else "")
+
+
+def build(entries: list[Entry], feed: str, stamp: dt.datetime,
+          edit_link: Callable[[str], str | None] | None = None) -> bytes:
+    """One of FEEDS as iCalendar text; `edit_link(uid)` is the link to an entry's card in the Mini App."""
     calendar = icalendar.Calendar()
     calendar.add("prodid", "-//infomaster//timetable//EN")
     calendar.add("version", "2.0")
@@ -76,7 +92,14 @@ def build(entries: list[Entry], feed: str, stamp: dt.datetime) -> bytes:
             if entry.end > entry.start:  # DTEND must be later than DTSTART; without it the event ends where it starts
                 event.add("dtend", utc(entry.end))
         event.add("summary", summary(entry, feed))
-        event.add("description", "\n".join([entry.type, *entry.notes]))
+        lines = [entry.type, *entry.notes]
+        link = edit_link(entry.uid) if edit_link and feed != "tablo" else None
+        if feed != "tablo":
+            lines.append(origin_line(entry))
+        if link:
+            lines.append(f"Edit: {link}")
+            event.add("url", link)
+        event.add("description", "\n".join(lines))
         if entry.location:
             event.add("location", entry.location)
         event.add("status", "CANCELLED" if entry.cancelled else "TENTATIVE" if optional else "CONFIRMED")
@@ -92,9 +115,10 @@ def build(entries: list[Entry], feed: str, stamp: dt.datetime) -> bytes:
 class CalendarFeed:
     def __init__(self, schedule: Schedule, now: Callable[[], dt.datetime] = clock.now_utc):
         self.schedule, self.now = schedule, now
+        self.edit_link: Callable[[str], str | None] | None = None  # uid -> its card in the Mini App
 
     def render(self, feed: str) -> bytes:
-        return build(self.schedule.entries(), feed, self.now())
+        return build(self.schedule.entries(), feed, self.now(), self.edit_link)
 
 
 FEED_KEY = web.AppKey("calendar", CalendarFeed)

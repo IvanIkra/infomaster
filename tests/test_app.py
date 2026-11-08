@@ -12,6 +12,7 @@ from infomaster.config import Env
 from infomaster.outputs import api
 from infomaster.outputs import forum as forum_module
 from infomaster.processing.batches import Changes
+from infomaster.processing.schedule import event_key
 
 FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
 
@@ -176,6 +177,13 @@ async def test_hseapp_wiring(tmp_path):
         assert button.type.url == "https://t.me/example_bot?start=hseapp" and button.text == "Log in to HSE App X"
         assert forum_module.start_screen("/start hseapp") == "hseapp" and forum_module.start_screen("/start") is None
         assert forum_module.start_screen("/start other") is None
+        assert forum_module.start_screen("/start ev-0123456789ab") == "ev-0123456789ab"  # an event, from the calendar
+        assert forum_module.start_screen("/start ev-0123") is None
+        assert service.calendar.edit_link("2000001@ruz.hse.ru") == \
+            f"https://t.me/example_bot?start=ev-{event_key('2000001@ruz.hse.ru')}"
+        service.forum.main_app = True  # a main Mini App: the link opens it at once
+        assert service.forum.event_link("0123456789ab") == "https://t.me/example_bot?startapp=ev-0123456789ab"
+        service.forum.main_app = False
         several = [types.Username("old_bot", editable=True, active=False), types.Username("main", active=True)]
         assert forum_module.bot_username(types.User(id=1, usernames=several)) == "main"
         assert forum_module.bot_username(types.User(id=1, username="one_bot")) == "one_bot"

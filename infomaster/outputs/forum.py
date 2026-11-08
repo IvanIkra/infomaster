@@ -39,10 +39,16 @@ SCREENS = {"hseapp": Phrase("The HSE App X login is in the Mini App.", "Вход
                            "Вход твинка — в Mini App, Настройки → Твинк и чаты.")}
 
 
+EVENT_SCREEN = re.compile(r"ev-[0-9a-f]{12}")  # an event's card: a link in one's own calendar (ical_feed.py)
+EVENT_TEXT = Phrase("The event is in the Mini App.", "Событие — в Mini App.")
+
+
 def start_screen(text: str) -> str | None:
-    """'/start hseapp' -> 'hseapp': the screen a deep link under a forum post asks for."""
+    """'/start hseapp' -> 'hseapp': the screen a deep link under a forum post or in the calendar asks for."""
     words = text.split()
-    return words[1] if len(words) > 1 and words[1] in SCREENS else None
+    if len(words) > 1 and (words[1] in SCREENS or EVENT_SCREEN.fullmatch(words[1])):
+        return words[1]
+    return None
 
 
 def bot_username(me: types.User) -> str | None:
@@ -58,6 +64,7 @@ class Forum:
         self.client = TelegramClient(str(session), env.api_id, env.api_hash)
         self._forum: types.TypeInputPeer | None = None
         self.username: str | None = None  # the bot's, for links that open its chat
+        self.main_app = False  # the bot has a main Mini App (@BotFather): a link opens it at once
         self.emoji: dict[str, int] = {}  # emoji -> the pack's custom emoji for it (see emoji.py)
         self._topics_lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
@@ -86,13 +93,21 @@ class Forum:
             return None
         return Button.url(text, f"https://t.me/{self.username}?start={screen}")
 
+    def event_link(self, key: str) -> str | None:
+        """A link that opens an event's card in the Mini App (`key`: schedule.event_key of its UID): straight away
+        when the bot has a main Mini App, else through the chat with the bot and its button. None before the start."""
+        if not self.username:
+            return None
+        return f"https://t.me/{self.username}?{'startapp' if self.main_app else 'start'}=ev-{key}"
+
     async def start(self) -> None:
         await self.client.start(bot_token=self.env.bot_token)
         session_file = self.session.with_name(self.session.name + ".session")
         if session_file.exists():
             session_file.chmod(0o600)
         self._forum = await self.client.get_input_entity(self.env.forum_id)
-        self.username = bot_username(await self.client.get_me())
+        me = await self.client.get_me()
+        self.username, self.main_app = bot_username(me), bool(getattr(me, "bot_has_main_app", False))
         await self._load_emoji()
         self.client.add_event_handler(self._on_start, events.NewMessage(pattern=r"^/start\b",
                                                                         func=lambda e: e.is_private))
@@ -323,8 +338,8 @@ class Forum:
         screen = start_screen(event.raw_text)  # from a button under a forum post
         url = self.screen_url(screen) if screen else self.miniapp_url
         open_app = types.KeyboardInlineButton(self.tr("Open", "Открыть"), types.InlineButtonTypeWebView(url))
-        text = SCREENS[screen].get(self.lang) if screen else self.tr("The settings are in the Mini App.",
-                                                                     "Настройки — в Mini App.")
+        text = (SCREENS.get(screen) or EVENT_TEXT).get(self.lang) if screen else \
+            self.tr("The settings are in the Mini App.", "Настройки — в Mini App.")
         await event.respond(text, buttons=[open_app])
 
     async def _set_menu_button(self, user) -> None:
