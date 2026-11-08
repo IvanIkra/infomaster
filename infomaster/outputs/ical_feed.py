@@ -23,9 +23,10 @@ alone. tablo.ics keeps the bare title: Tablo takes SUMMARY for the course name.
 
 main and optional also say where an event came from and how to change it, since a calendar app shows the notes and
 one link: DESCRIPTION ends with "From: <the chat> <link to the message>" (a letter's subject, RUZ, "you" for an own
-one) and "Edit: <link>", and URL is that link, which opens the event's card in the Mini App (Forum.event_link). The
+one) and "Edit: <link>", which opens the event's card in the Mini App (Forum.event_link); no URL, which iOS shows
+under Location as a web page card above the room. The
 source's link is to the message's page in the Mini App (D50), which your own account sees without being in the chat.
-tablo.ics has neither: Tablo takes an event with URL for an online class (§4.2).
+tablo.ics has neither; no feed has URL, which Tablo also takes for an online class (§4.2).
 """
 
 import datetime as dt
@@ -101,7 +102,6 @@ def build(entries: list[Entry], feed: str, stamp: dt.datetime, edit_link: Callab
             lines.append(origin_line(entry, message_page))
         if link:
             lines.append(f"Edit: {link}")
-            event.add("url", link)
         event.add("description", "\n".join(lines))
         if entry.location:
             event.add("location", entry.location)

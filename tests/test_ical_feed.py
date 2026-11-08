@@ -192,7 +192,7 @@ def test_origin_and_edit_link(feed):
     consult, calc = events[event_uid("tg", CHAT, 1)], events["2000001@ruz.hse.ru"]
     assert str(consult["DESCRIPTION"]) == "Consultation\nAlgebra\nFrom: Матан https://t.me/c/1234567890/1\n" \
                                           "Edit: https://t.me/example_bot?start=ev-e"
-    assert str(consult["URL"]) == "https://t.me/example_bot?start=ev-e"
+    assert "URL" not in consult  # iOS would show it under Location, above the room
     assert str(calc["DESCRIPTION"]) == "Seminar\nFrom: RUZ\nEdit: https://t.me/example_bot?start=ev-c"
     moved = events["2000005@ruz.hse.ru"]  # a class moved by a chat: the chat told it
     assert "From: Матан https://t.me/c/1234567890/5" in str(moved["DESCRIPTION"])
