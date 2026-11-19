@@ -16,10 +16,12 @@ from aiohttp import web
 
 from .. import clock
 from ..config import Env
+from ..library.links import LIBRARY_KEY
 from ..outputs.miniapp import respond
 from ..processing.news import News
 from ..store import Store
 from . import catalog, oauth
+from . import library as library_tools
 from .changes import Changes
 from .mcp import Endpoint
 from .tools import Context, Output, Registry, ToolError
@@ -45,6 +47,8 @@ class Connector:
         services it holds."""
         self.app = app
         catalog.register(self.registry, app)
+        if app.get(LIBRARY_KEY) is not None:  # put there by library.links.add_routes, before this
+            library_tools.register(self.registry, app)
         oauth.add_routes(app, self.oauth)
         app[CONNECTOR_KEY] = self
         app.router.add_route("*", "/mcp", self._mcp)

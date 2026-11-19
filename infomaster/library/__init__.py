@@ -423,8 +423,9 @@ class Library:
         return old
 
     def remove(self, item_id: int) -> None:
-        """Out of every list; the file stays REMOVED_KEEP for an undo (`restore`). Its transcripts go with it."""
-        if self.get(item_id) is None:
+        """Out of every list; the file stays REMOVED_KEEP for an undo (`restore`). Its transcripts go with it. A draft
+        is removed too: its upload link then takes nothing."""
+        if self.get(item_id, drafts=True) is None:
             raise LibraryError(f"no item {item_id}")
         with self.db:
             self.db.execute("update materials set removed_at = ? where (id = ? or parent = ?) and removed_at is null",

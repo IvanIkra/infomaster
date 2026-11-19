@@ -680,9 +680,30 @@ twice.
 | `get_status` (what needs attention, every source, the LLM spending), `list_deadlines`, `list_hidden_deadlines`, `get_timetable` (a range of days), `list_news`, `search_messages` (text, chat, days; 14 days are kept), `get_message` (as D50's page), `list_chats`, `list_chat_senders`, `list_courses`, `get_settings`, `list_sheets`, `get_sheet` (the text; a scan's first page as its JPEG while the file is kept), `list_grades`, `get_gradebook` | deadlines: `add_deadline`, `edit_deadline`, `hide_deadline`, `delete_deadline`, `unhide_deadline`; the timetable: `add_event`, `edit_event`, `set_event_options`, `remove_event`, `correct_class`; `edit_sheet`; `update_chat_settings`; the dictionary: `set_course`, `delete_course`; settings: `update_general_settings`, `update_reminders`, `update_images`, `update_pdf_limits`; grades: `update_grade_settings`, `add_gradebook`, `update_gradebook`, `remove_gradebook`, `read_gradebook_now`, `set_tab_layout`, `reset_tab_layout`, `add_grade`, `change_grade`, `delete_grade` |
 
 Not exposed: the secrets of `.env`, the twin's login and logout, the HSE App X login, the LLM limit and the model
-prices (a lower price would raise the limit too), uploads (stage 14), anything of the summaries. The registry
-(`connector/tools.py`) takes more tools: stage 14 adds the raw material, the inbox, uploads and the knowledge base
-there.
+prices (a lower price would raise the limit too), anything of the summaries.
+
+**Library tools** (`connector/library.py`, stage 14, D58). Registered when the public app holds the library
+(`library.links.add_routes` runs before the connector attaches). They serve §6.8's processing from two kinds of
+client: Claude Code on the owner's Mac, which has a shell, and claude.ai on the web or the phone, which has none.
+
+| Reads | Writes |
+|---|---|
+| `list_library` (courses with counts, the inbox, disk usage), `list_materials` (the inbox, a course, a class; by status or kind; no long text, a 200-character preview), `get_material` (one item: its text, a text file's or a PDF's text, in pages of 30,000 characters by default; a photo inline; `download_url`; the items on it), `list_classes` (a course's started classes with counts and their documents), `list_documents`, `get_document` (versions; a version's source inline in pages, links to its source and PDF), `get_cheatsheet` | `add_material` (a text, a link or a transcript inline; or a file: a draft and its upload link), `sort_material` (course and class of up to 100 items; destructive), `update_material` (title, kind, author, note, status, a text's words; destructive), `remove_material` (destructive), `start_document_version` (not journaled), `publish_document_version` |
+
+Files never travel inside a call (a recording is hundreds of megabytes, and a result is read by the model): a tool
+gives a signed link (§6.8) and the answer carries the exact command, `curl --fail-with-body -T <file> '<link>'` for an
+upload; `download_url` is fetched with `curl -o`. `add_material` with `file_name` makes a draft item (`uploading`)
+and returns its upload link; the item is listed once the bytes are in. `start_document_version` makes a draft
+version, takes the source inline (`source_text`: a cheat sheet, or anything from a client without a shell) and
+returns an upload link for each part still missing (the source, the PDF built locally); `publish_document_version`
+makes it the newest version and marks the items it names processed. A client without a shell reads text inline
+(texts, transcripts, a PDF's text layer) and a photo as an image when it is a JPEG, PNG, GIF or WebP of at most
+3.75 MB, whose base64 stays within the 5 MB the Messages API takes of one image; a bigger photo (a camera's full
+JPEG, a HEIC) is given by its link only. Starting a version is not journaled: a draft is seen by no one and is
+dropped after a day, and the change is the publish. The undos: adding removes the item, sorting puts each item back
+where it was, a change puts the old values back, removing restores the item and its transcripts (30 days), and
+publishing takes the version back, deletes its files and makes the items it marked processed new again. A seminar's
+document is its sheet's topics and new notions; the tools' descriptions say its problems are not solved.
 
 **Journal and undo** (`connector/changes.py`). Every write through the connector is a row of `connector_changes`:
 the time, the connection, the tool, its arguments, one line about it, and the undo steps, which are calls of tools
@@ -798,8 +819,8 @@ own; Claude is an optional door, not the brain (D53).
     messages, sheets and the knowledge base, upload files, and change almost every setting the Mini App changes.
     Not exposed: secrets, the twin's and HSE App X's logins, raising the LLM limit. Tools that change or delete are
     marked destructive so the client asks first, and every change made through the connector goes to a journal
-    with an undo in the Mini App: Claude reads chat messages written by strangers. Built as §8.5 (D57), without
-    the knowledge base and uploads, which come with stage 14.
+    with an undo in the Mini App: Claude reads chat messages written by strangers. Built as §8.5 (D57); the
+    knowledge base and uploads came with stage 14 (`connector/library.py`).
 14. **Raw material and the knowledge base** (§6.8, D58). Two stores per course. *Raw*: an inbox (Haiku was not sure of the
     course) and the course's classes by RUZ date with photos of the board, audio, notes of the owner and classmates,
     slides, links (remembered, not downloaded); each item is new or processed. Sources: study chats (Haiku decides

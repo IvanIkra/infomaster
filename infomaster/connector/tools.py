@@ -6,7 +6,8 @@ of other tools, or of an `undo op` that no client sees (restoring a row the tool
 
 Most tools act through the Mini App's own handlers (`mini_app`): a tool is a tap in the Mini App, with the same checks
 and the same side effects (the caption of a sheet's message edited, the reminders rescheduled), so no rule lives twice.
-Stage 14 (the knowledge base) adds its tools to the same registry.
+The library's tools (stage 14: raw material and the knowledge base) are in connector/library.py, in the same
+registry.
 """
 
 import json
@@ -54,6 +55,7 @@ class Tool:
     write: bool = False                    # changes something: journaled, not read-only
     destructive: bool = True               # of a write: the client asks the owner first
     idempotent: bool = False
+    journal: bool = True                   # of a write: kept in the journal; False for what nobody sees (a draft)
 
     def listing(self) -> dict:
         annotations = {"title": self.title, "readOnlyHint": not self.write, "openWorldHint": False}

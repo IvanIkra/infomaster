@@ -558,8 +558,10 @@ def test_connections_clock(store, seconds):
 
 
 async def test_service_tools(tmp_path, aiohttp_client, sent):
-    """The whole service: every part's tools, among them the sheets', the grades' and the reminders'."""
+    """The whole service: every part's tools, among them the sheets', the grades', the reminders' and the
+    library's."""
     from infomaster.app import Service
+    from infomaster.library import links as library_links
 
     service = Service(env(), tmp_path)  # Telegram clients are made, never connected
     app = miniapp.create_app(service.env, service.budget, service.journal, service.inbox, service.chat_settings,
@@ -567,6 +569,7 @@ async def test_service_tools(tmp_path, aiohttp_client, sent):
                              settings=service.settings, sheet_topic=service.sheet_topic, grade_list=service.grades,
                              twin=service.twin, calendar_feed=service.calendar,
                              deadline_reminders=service.reminders)
+    library_links.add_routes(app, service.library_links)
     service.connector.attach(app)
 
     async def send_code(text):
@@ -577,7 +580,7 @@ async def test_service_tools(tmp_path, aiohttp_client, sent):
     token = (await connect(client, sent))["access_token"]
     names = set(service.connector.registry.tools)
     assert {"list_sheets", "get_sheet", "edit_sheet", "update_pdf_limits", "list_grades", "add_gradebook",
-            "set_tab_layout", "update_reminders"} <= names
+            "set_tab_layout", "update_reminders", "list_library", "add_material", "publish_document_version"} <= names
     assert data(await call(client, token, "list_sheets"))["sheets"] == []
     assert data(await call(client, token, "list_grades"))["sheets"] == []
     settings = data(await call(client, token, "get_settings"))
