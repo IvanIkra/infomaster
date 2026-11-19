@@ -215,6 +215,12 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   and gives no deadlines or events; a task that names no course gets the course of the note. The batch model also
   sees the deadlines passed in the last 7 days instead of 3, marked "passed", so an extension after the date moves the
   deadline instead of adding a second one; the merge still keeps 3 days.
+- **D53. A quiet service with Claude as an optional door, 19.11.2026.** The owner actually uses deadlines and looks
+  at grades and news in Tablo; the rest of the forum went unread and made the service one more thing to check. So
+  only deadlines notify, summaries are gone, and everything else waits until it is opened. Thinking stays with the
+  service (Haiku through the API key for batch parsing, as before), and Claude on the owner's subscription is let in
+  through an MCP connector when the owner wants it: questions, changes, homework help, turning raw lecture material
+  into a LaTeX knowledge base. The plan is §11.1 of [architecture.md](architecture.md).
 
 ## Open questions
 

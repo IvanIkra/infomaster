@@ -660,6 +660,38 @@ Every stage delivers something that works.
 Stage 10 could be moved earlier piece by piece. For example, the iCal feed could be plugged into Tablo right after
 stage 4.
 
+### 11.1 Second round (from 19.11.2026)
+
+The service was meant to take work off the student, but it sends too much and has to be checked all the time. The
+second round makes it quiet by default and lets Claude in when the owner wants it. infomaster keeps working on its
+own; Claude is an optional door, not the brain (D53).
+
+11. **Quiet.** Only deadlines notify: new and moved deadlines, the reminders of D47, and source failures. Grades,
+    news, sheets and the timetable arrive silently or not at all: grades are a section in Tablo and the Mini App,
+    news is a small block in Tablo, and the separate "important news" messages go. Summaries (stage 7) are removed
+    entirely: what matters reaches the news and the deadlines anyway.
+12. **Sheets.** A sheet without a due date is due before the next seminar of its course in RUZ, marked as
+    assumed. Find out on live data why about half of the sheets are missed.
+13. **MCP connector.** infomaster serves a remote MCP server on the public port, added to claude.ai as a custom
+    connector (it works on the Pro plan and in the phone app). Tools read deadlines, the timetable, grades, news,
+    messages, sheets and the knowledge base, upload files, and change almost every setting the Mini App changes.
+    Not exposed: secrets, the twin's and HSE App X's logins, raising the LLM limit. Tools that change or delete are
+    marked destructive so the client asks first, and every change made through the connector goes to a journal
+    with an undo in the Mini App: Claude reads chat messages written by strangers.
+14. **Raw material and the knowledge base.** Two stores per course. *Raw*: an inbox (Haiku was not sure of the
+    course) and the course's classes by RUZ date with photos of the board, audio, notes of the owner and classmates,
+    slides, links (remembered, not downloaded); each item is new or processed. Sources: study chats (Haiku decides
+    during batch parsing), files forwarded to the bot, uploads. *Knowledge base*: the whole course as one LaTeX book,
+    a PDF and `.tex` per lecture and seminar (a seminar is its sheet's topics and new notions, the problems are not
+    solved), and a cheat sheet for Claude (notation, formatting, topics covered); every version is kept. Processing
+    is manual, from Claude Code on the owner's machine through the connector: it sorts the inbox, transcribes audio,
+    writes the LaTeX, builds the PDF and uploads both. The server neither transcribes nor runs TeX.
+15. **New sources.** Homework from the discrete mathematics wiki; grade sheets shared as Dropbox links.
+16. **An app instead of the forum.** The Mini App becomes a home-screen web app with its own login and Web Push
+    for deadlines, reminders and failures. Then the forum is switched off; the bot stays to receive forwarded files.
+
+No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
+
 ## 12. Open questions
 
 1. **The Tailscale sidecar next to the host's Tailscale.** They share one tailnet (a personal one, D31), and the
