@@ -224,5 +224,5 @@ def test_a_sheet_finds_its_seminar(library):
     add_class(library.store, "calc-lec", "Calculus", "2026-11-17T14:40:00", "Лекция")
     night = dt.datetime(2026, 11, 19, 0, 25, tzinfo=clock.TZ)
     assert library.find_class("Calculus", night, seminar=True)["uid"] == "calc-2"
-    assert library.find_class("Calculus", night)["uid"] == "calc-lec"
-    assert library.find_class("Algebra", night, seminar=True)["uid"] == "alg-1"  # no seminar: the last class
+    assert library.find_class("Calculus", night)["uid"] == "calc-1"  # the lecture before it
+    assert library.find_class("Algebra", night, seminar=True) is None  # no seminar, no class started yet
