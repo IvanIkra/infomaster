@@ -16,6 +16,8 @@
 - Under the message of a new or moved deadline «Hide» hides it exactly as HA's to-do lists do (an own deadline,
   «Delete», is deleted); a hidden one gets «Restore». Only the owner may press them. Texts and buttons are in the
   forum's language (D41); the titles are the merge's, English.
+- Only the messages of new and moved deadlines notify (D55): the pinned list is edited silently, and a withdrawn
+  deadline is told silently too.
 
 Several tasks change deadlines (the batches, the RUZ and HSE App X polls, the owner): one refresh runs at a time under
 a lock and compares the list as it is then, so nothing is told twice. The marks move on at midnight.
@@ -245,8 +247,9 @@ class DeadlineTopic:
         return []
 
     async def _post(self, text: str, d: Deadline | None, ref: str) -> None:
+        """A new or moved deadline (`d`) notifies; a withdrawn one goes silently (D55)."""
         buttons = hide_button(d, self.forum.lang) if d is not None else None
-        msg_id = await self.forum.post(TOPIC, text, buttons=buttons, html=True)
+        msg_id = await self.forum.post(TOPIC, text, buttons=buttons, html=True, notify=d is not None)
         row_id = int(ref[3:]) if ref.startswith("dl:") else None
         remember(self.db, TOPIC, msg_id, "deadline", row_id, self.now(), key=ref if d is not None else None)
 

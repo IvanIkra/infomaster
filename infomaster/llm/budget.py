@@ -4,7 +4,7 @@ Before a call the worst case is reserved: input estimated from the text length p
 A reserve that does not fit what is left is refused. After the answer the journal holds the real cost and the
 reserve is dropped.
 
-- 80 % of the limit: optional tasks stop (images, whole PDFs, the daily summary).
+- 80 % of the limit: optional tasks stop (images, whole PDFs).
 - 100 %, or a required call that does not fit: every call stops until midnight or until the limit is raised.
 
 Days that stopped are remembered with their limit (kv "llm.days", the last DAYS_KEPT days) for the chart of the
@@ -31,7 +31,7 @@ PAGE_TOKENS = 3000              # a PDF page given as a document: its image and 
 IMAGE_TOKENS = 4800             # an image: the most a high-resolution model takes for one (2576 px on the long edge)
 SOFT_SHARE = 0.8
 DAYS_KEPT = 40
-OPTIONAL_TASKS = frozenset({"image", "pdf", "summary"})
+OPTIONAL_TASKS = frozenset({"image", "pdf"})
 
 
 class Level(enum.StrEnum):
@@ -93,18 +93,17 @@ class Budget:
             return Level.HARD
         return Level.SOFT if spent >= SOFT_SHARE * limit else Level.OK
 
-    def reserve(self, task: str, cost: float, asked: bool = False) -> int:
-        """A ticket for release(), or BudgetExceeded. `asked`: a call the owner asked for (/summary). It runs above
-        80 % like a required task, but one that does not fit what is left is refused alone (DoesNotFit) instead of
-        stopping every call until midnight."""
+    def reserve(self, task: str, cost: float) -> int:
+        """A ticket for release(), or BudgetExceeded. An optional task that does not fit what is left is refused
+        alone (DoesNotFit); a required one stops every call until midnight."""
         level = self.level()
         if level is Level.HARD:
             raise BudgetExceeded("the daily LLM limit is spent, calls wait for midnight")
-        optional = task in OPTIONAL_TASKS and not asked
+        optional = task in OPTIONAL_TASKS
         if optional and level is Level.SOFT:
             raise BudgetExceeded(f"optional LLM tasks are off above {SOFT_SHARE:.0%} of the daily limit")
         if self.spent() + cost > self.limit():
-            if optional or asked:
+            if optional:
                 raise DoesNotFit("the call does not fit what is left of the daily LLM limit")
             self._announce(Level.HARD)
             raise BudgetExceeded("the daily LLM limit is spent, calls wait for midnight")

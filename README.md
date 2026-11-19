@@ -25,8 +25,9 @@ Tablo, a home dashboard; both integrations are optional.
 - **Problem sheets.** PDFs from chats are downloaded on demand, read within a page limit and versioned; a new
   version edits the old forum message and says what changed.
 - **Grades.** Teachers' Google Sheets and Dropbox .xlsx links are read as xlsx; Haiku maps each tab's header once (cached with the header),
-  grades are normalised to a 0–10 scale and only new or changed ones are announced.
-- **Daily summaries** of chats and the `/summary` command for any chat and period.
+  grades are normalised to a 0–10 scale; the new and changed ones are in the Mini App and the API.
+- **Quiet by default.** In the forum only new and moved deadlines, deadline reminders and source failures notify;
+  everything else arrives silently or not at all.
 - **Images.** Pictures in messages are read by Haiku within a daily count and the budget.
 - **LLM budget.** Every call is journaled with its cost; a daily dollar limit with priorities (study chats first,
   then mail, then the rest) and a 30-day spending chart in the Mini App.
@@ -96,7 +97,7 @@ Secrets live in `.env`; everything else is set in the Mini App.
 | `TG_BOT_TOKEN` | yes | bot from @BotFather, an admin of the forum |
 | `TG_OWNER_ID` | yes | the only Telegram user the bot and the Mini App let in |
 | `TG_FORUM_ID` | yes | the forum group, `-100…` |
-| `ANTHROPIC_API_KEY` | yes | batch processing, sheets, grades, summaries, images |
+| `ANTHROPIC_API_KEY` | yes | batch processing, sheets, grades, images |
 | `API_TOKEN` | yes | Bearer token of the internal API |
 | `PUBLIC_URL` | yes | Funnel address, `https://infomaster.<tailnet>.ts.net` |
 | `TS_AUTHKEY` | first start | auth key for the Tailscale sidecar |
@@ -122,7 +123,7 @@ terminal, `import-tablo --tablo-db <tablo.db>` moves own and hidden deadlines fr
 ```
 infomaster/
 ├── collectors/   # Telegram twin, mail, RUZ, HSE App X, files, grade sheets
-├── processing/   # batches, deadlines and merge, events, schedule, sheets, grades, summaries, images
+├── processing/   # batches, deadlines and merge, events, schedule, sheets, grades, images
 ├── outputs/      # forum bot and its topics, Mini App, iCal feeds, internal API
 ├── llm/          # client with structured output, daily budget, journal
 ├── settings/     # general and per-chat settings
@@ -139,8 +140,12 @@ twin and chat settings, batch processing, the course dictionary and timetable, d
 summaries, grades and images. The API for Tablo (stage 10) is done on the infomaster side, and the service runs
 next to Tablo.
 
-Not yet verified on live Telegram, Haiku and Google Sheets: problem sheets, summaries, grades, images, the
-reworked Mini App and the language switch. Text length is checked in characters rather than by the rendered
+The second round (§11.1) has begun. Stage 11, "Quiet", is done: only deadlines, their reminders and source
+failures notify; grades no longer go to the forum, the separate messages about important news are gone, and the
+summaries of stage 7 are removed.
+
+Not yet verified on live Telegram, Haiku and Google Sheets: problem sheets, grades, images, the reworked Mini App,
+the language switch and the silent posts of stage 11. Text length is checked in characters rather than by the rendered
 width of the Inter font.
 
 ## License

@@ -19,14 +19,13 @@ in the same read); a work listed twice by the model counts once; a tab with many
 (TOKENS_PER_WORK), and a tab the model could not answer for is told in the status rather than skipped silently; a
 sheet removed in the settings, or a new name, drops its grades, so the next read is a baseline again.
 
-The «Оценки» topic posts the events (outputs/grades.py); the API gives the newest event of each work still on
-its sheet within grades_window_days, newest first (Tablo's §3.7).
+The API gives the newest event of each work still on its sheet within grades_window_days, newest first (Tablo's
+§3.7); the Mini App shows the grades. Nothing goes to the forum: the «Grades» topic is gone (D55).
 
 The owner's hand (D44). Every read keeps a view of each tab for the Mini App: the own row's cells under their headers
 and the works laid out in them, never another student's row. The owner may lay out a tab themselves: that layout stands
 over Haiku's, whatever the header does, until given back. The owner adds grades by hand and changes a sheet's grade:
-a changed one stands until the sheet itself changes that grade. Both go to the API with the sheets' new grades, not to
-the «Оценки» topic: the owner made them.
+a changed one stands until the sheet itself changes that grade. Both go to the API with the sheets' new grades.
 """
 
 import datetime as dt
@@ -38,7 +37,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .. import clock
-from ..collectors.grades import Read, Sheet, TabView, sheet_id, short_course, text
+from ..collectors.grades import Read, Sheet, TabView, sheet_id, text
 from ..i18n import Phrase
 from ..llm.client import BadAnswer, Haiku
 from ..settings import SPECS, Settings, SettingsError
@@ -318,23 +317,6 @@ class Grades:
                        "on conflict(sheet_id) do update set title = coalesce(excluded.title, title)",
                        (sid, title, now))
         return first
-
-    # --- the forum ---------------------------------------------------------------------------
-
-    def waiting(self) -> list[dict]:
-        """New grades not posted yet, within the window, oldest first; with their sheet's link, title and course."""
-        sheets = {sheet_id(s["url"]): s for s in self.settings.get("grades_sheets")}
-        titles = {row["sheet_id"]: row["title"] for row in self.db.execute("select * from grade_sheets")}
-        rows = self.db.execute("select * from grade_events where post_id is null and seen_at >= ? order by id",
-                               (self._since(),))
-        return [{**dict(row), "url": sheets[row["sheet_id"]]["url"], "title": titles.get(row["sheet_id"]),
-                 "course": short_course(sheets[row["sheet_id"]]["label"], titles.get(row["sheet_id"]), row["sheet_id"])}
-                for row in rows if row["sheet_id"] in sheets]
-
-    def posted(self, event_ids: list[int], msg_id: int) -> None:
-        with self.db:
-            self.db.executemany("update grade_events set post_id = ? where id = ?",
-                                [(msg_id, event_id) for event_id in event_ids])
 
     # --- the API, the status and the Mini App -----------------------------------------------------
 

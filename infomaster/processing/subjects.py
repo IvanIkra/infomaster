@@ -4,7 +4,7 @@ A source names a course its own way: «Математический анализ
 Each cleaned name gets a short English `title` (the timetable, Tablo's Classes column) and an `abbr` of up to six
 characters (the prefix of deadline labels, the key of the merge, processing/merge.py). Haiku names new courses in one
 call that also shows the whole dictionary, so the same course in Russian and in English, or under a short form like
-«ВвП», gets the same answer (§10.1). Every prompt that names courses (the batches, the summaries) gets the whole
+«ВвП», gets the same answer (§10.1). Every prompt that names courses (the batches) gets the whole
 dictionary as `dictionary_lines()` gives it: one line per course with all the names it goes by.
 
 Entries set by hand in the Mini App are `manual`: Haiku never overwrites them, and deleting one lets Haiku name the

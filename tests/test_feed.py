@@ -2,12 +2,11 @@ import asyncio
 import datetime as dt
 
 import pytest
-from conftest import Press, labels
 
 from infomaster import clock
 from infomaster.collectors.inbox import Inbox
 from infomaster.outputs import feed as feed_module
-from infomaster.outputs.feed import BUTTON, Feed, split
+from infomaster.outputs.feed import Feed, remember, split
 from infomaster.processing.batches import Changes
 from infomaster.processing.news import News
 from infomaster.settings import Settings
@@ -31,33 +30,48 @@ def add_news(feed, full, importance=3, msg_id=1, ago=dt.timedelta(hours=1)) -> i
                               "importance": importance}, feed.now())
 
 
-async def test_board_and_alerts(feed):
+async def test_board_and_no_alerts(feed):
     forum = feed.forum
     await feed.publish(Changes())
     assert forum.texts("news") == ["<b>Новости</b>\n\nЖивых новостей нет."] and forum.pinned == [101]
 
     first = add_news(feed, "Alg seminar moved to Thu", importance=5, msg_id=7)
     await feed.publish(Changes(news=[first]))
-    board, alert = forum.messages[101][1], forum.messages[102][1]
+    board = forum.messages[101][1]
     assert board == ('<b>Новости</b>\n\n💬 <b>Alg seminar moved to Thu</b> · '
                      '<a href="https://t.me/c/1234567890/7">Матан &lt;2026&gt;</a>')
-    assert alert.startswith("🔔 Alg seminar moved to Thu\n")
-    assert labels(forum.buttons[102]) == [[("Скрыть", f"nw:hide:{first}".encode())]]
-    assert forum.buttons[101] is None  # the list has no buttons
+    assert list(forum.messages) == [101] and forum.edited == [101]  # importance 5: no message of its own (D55)
+    assert forum.buttons[101] is None and forum.notified == set()  # the list has no buttons and notifies no one
 
-    await feed.publish(Changes())  # nothing changed: no edits, the alert stays
-    assert forum.edited == [101] and 102 in forum.messages
+    await feed.publish(Changes())  # nothing changed: no edits
+    assert forum.edited == [101]
 
     second = add_news(feed, "Moscow up to +19 today", importance=2, ago=dt.timedelta(minutes=5))
     await feed.publish(Changes(news=[second]))
-    assert 102 not in forum.messages  # the rebuild deleted the alert
     assert forum.texts("news")[0].split("\n")[2:] == [board.split("\n")[2], "💬 Moscow up to +19 today · "
                                                      '<a href="https://t.me/c/1234567890/1">Матан &lt;2026&gt;</a>']
-    assert len(forum.texts("news")) == 1  # importance 2: no alert
+    assert len(forum.texts("news")) == 1
 
-    feed.now.moment += dt.timedelta(hours=24)  # both are past the 24 hours
+    with feed.db:
+        feed.news.hide(second)  # hidden: off the list
     await feed.publish(Changes())
-    assert forum.texts("news") == ["<b>Новости</b>\n\nЖивых новостей нет."]
+    assert "+19" not in forum.texts("news")[0]
+
+    feed.now.moment += dt.timedelta(hours=24)  # past the 24 hours
+    await feed.publish(Changes())
+    assert forum.texts("news") == ["<b>Новости</b>\n\nЖивых новостей нет."] and forum.notified == set()
+
+
+async def test_alerts_of_an_older_version_are_deleted(feed):
+    """The short messages an older version sent for important news go at the next rebuild."""
+    forum = feed.forum
+    item = add_news(feed, "Alg seminar moved to Thu", importance=5)
+    old = await forum.post("news", "🔔 Alg seminar moved to Thu", html=True)
+    remember(feed.db, "news", old, "news_alert", item, feed.now())
+    await feed.publish(Changes())
+    assert old in forum.deleted and old not in forum.messages
+    assert feed.db.execute("select count(*) from bot_posts where kind = 'news_alert'").fetchone()[0] == 0
+    assert len(forum.texts("news")) == 1
 
 
 async def test_long_board_takes_several_messages(feed, monkeypatch):
@@ -87,7 +101,7 @@ async def test_board_deleted_by_hand_starts_anew(feed):
 
 
 async def test_concurrent_publishes_build_one_board(feed):
-    """The batches publish while the owner hides an item: one board, one pin, the new alert kept."""
+    """Two runs publish at once: one board, one pin."""
     forum, post = feed.forum, feed.forum.post
 
     async def slow_post(*args, **kwargs):
@@ -95,54 +109,10 @@ async def test_concurrent_publishes_build_one_board(feed):
         return await post(*args, **kwargs)
 
     forum.post = slow_post
-    alert = add_news(feed, "Alg seminar moved to Thu", importance=5)
-    other = add_news(feed, "Moscow up to +19 today", importance=2, msg_id=2)
-    await asyncio.gather(feed.publish(Changes(news=[alert])), feed.publish(Changes()),
-                         feed.on_button(Press(BUTTON, f"nw:hide:{other}".encode())))
-    board = [text for text in forum.texts("news") if text.startswith("<b>Новости</b>")]
-    assert len(board) == 1 and forum.pinned == [101] and "+19" not in board[0]
-    assert any(text.startswith("🔔 Alg seminar moved to Thu") for text in forum.texts("news"))
-
-
-async def test_hiding_an_alert(feed):
-    forum = feed.forum
-    shown = add_news(feed, "Alg seminar moved to Thu", importance=5, msg_id=7)
-    kept = add_news(feed, "Calc KR on Friday", importance=4, msg_id=8, ago=dt.timedelta(minutes=5))
-    await feed.publish(Changes(news=[shown, kept]))
-    assert len(forum.texts("news")) == 3  # the list and two alerts
-
-    stranger = Press(BUTTON, f"nw:hide:{shown}".encode(), sender_id=7)
-    await feed.on_button(stranger)
-    assert stranger.answers == [("Нет доступа", True)] and not feed.news.get(shown)["hidden"]
-
-    press = Press(BUTTON, f"nw:hide:{shown}".encode())
-    await feed.on_button(press)
-    assert press.answers == [("Скрыто: в списке новостей её больше нет", False)] and feed.news.get(shown)["hidden"]
-    link = '<a href="https://t.me/c/1234567890/8">Матан &lt;2026&gt;</a>'
-    assert forum.texts("news") == [f"<b>Новости</b>\n\n💬 Calc KR on Friday · {link}",
-                                   f"🔔 Calc KR on Friday\n{link}"]  # the other alert stays
-    assert feed.news.live(feed.now(), 24) == [feed.news.get(kept)]  # later /api/news reads the same
-
-    with feed.db:  # its message edited: the new item replaces the hidden one and stays hidden
-        newer = feed.news.add({"source": "tg", "chat_id": CHANNEL, "msg_ids": [7], "study": True,
-                               "posted_at": clock.local_iso(feed.now()), "full": "Alg seminar on Fri",
-                               "short": "Alg seminar Fri", "importance": 5}, feed.now())
-        feed.news.replace(shown, newer)
-    await feed.publish(Changes(news=[newer]))
-    assert all("Alg seminar" not in text for text in forum.texts("news"))
-
-    gone = Press(BUTTON, f"nw:hide:{shown}".encode())  # an alert of a replaced item
-    await feed.on_button(gone)
-    assert gone.answers[0][1] is True and gone.edits == [None]
-
-
-async def test_hiding_an_alert_whose_item_is_past(feed):
-    """The item left the list already: the list stays, the alert goes."""
-    item = add_news(feed, "Alg seminar moved to Thu", importance=5)
-    await feed.publish(Changes(news=[item]))
-    feed.now.moment += dt.timedelta(hours=25)
-    await feed.on_button(Press(BUTTON, f"nw:hide:{item}".encode()))
-    assert len(feed.forum.texts("news")) == 1 and feed.forum.texts("news")[0].endswith("Живых новостей нет.")
+    first = add_news(feed, "Alg seminar moved to Thu", importance=5)
+    add_news(feed, "Moscow up to +19 today", importance=2, msg_id=2)
+    await asyncio.gather(feed.publish(Changes(news=[first])), feed.publish(Changes()))
+    assert len(forum.texts("news")) == 1 and forum.pinned == [101]
 
 
 def test_old_news_table_gets_hidden(tmp_path):
@@ -181,7 +151,4 @@ async def test_english_forum(feed):
     first = add_news(feed, "Alg seminar moved to Thu", importance=5, msg_id=7)
     await feed.publish(Changes(news=[first]))
     assert forum.messages[101][1].startswith("<b>News</b>\n\n💬 <b>Alg seminar moved to Thu</b>")
-    assert labels(forum.buttons[102]) == [[("Hide", f"nw:hide:{first}".encode())]]
-    press = Press(BUTTON, f"nw:hide:{first}".encode(), message_id=102)
-    await feed.on_button(press)
-    assert press.answers == [("Hidden: it is off the news list", False)]
+    assert list(forum.messages) == [101]

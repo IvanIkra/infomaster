@@ -17,7 +17,7 @@ create table if not exists settings (
 create table if not exists llm_runs (   -- every LLM call, also a failed one, kept for good (§7)
     id integer primary key,
     at text not null,           -- UTC, ISO 8601
-    task text not null,         -- batch, pdf, image, summary, subjects, grades, hseapp_labels
+    task text not null,         -- batch, pdf, image, subjects, grades, hseapp_labels; summary in old rows (D55)
     chat_id integer,            -- chat the input came from, if any
     model text not null,
     ok integer not null,
@@ -228,7 +228,7 @@ create table if not exists grade_items (        -- the current grade of every wo
     gone integer not null default 0  -- not in the sheet now (a hidden tab, a cleared cell): back with the same grade,
                                      -- it is no new grade
 );
-create table if not exists grade_events (       -- new and changed grades: the «Оценки» topic and the API's window
+create table if not exists grade_events (       -- new and changed grades: the API's window
     id integer primary key,
     key text not null,
     sheet_id text not null,
@@ -239,7 +239,7 @@ create table if not exists grade_events (       -- new and changed grades: the �
     bonus real,
     previous real,              -- the grade before, null for a first one
     seen_at text not null,
-    post_id integer             -- the bot's message in «Оценки»; null while it waits
+    post_id integer             -- the bot's message in the «Grades» topic, removed (D55): kept for old rows
 );
 create index if not exists grade_events_seen on grade_events(seen_at);
 create table if not exists own_grades (         -- the owner's grades (D44): added by hand, or a sheet's changed

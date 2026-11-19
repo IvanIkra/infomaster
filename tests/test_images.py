@@ -1,5 +1,5 @@
 """Images (D12): the image of a message fetched for its batch, read by Haiku within the daily number and the budget,
-what was read in the batch's prompt and in the summaries; the daily number on the Mini App's «Чаты»."""
+what was read in the batch's prompt; the daily number on the Mini App's «Чаты»."""
 
 import datetime as dt
 from types import SimpleNamespace
@@ -17,7 +17,6 @@ from infomaster.outputs import miniapp
 from infomaster.processing.batches import Batches, Changes
 from infomaster.processing.images import Images
 from infomaster.processing.news import News
-from infomaster.processing.summaries import Summaries
 from infomaster.settings import ChatSettings, Settings
 
 CHAT = -1001234567890
@@ -290,7 +289,7 @@ async def test_a_file_the_twin_cannot_download_now_waits(batches, llm, files):
     assert llm.tasks()[1:] == ["image", "image", "batch"] and pending(batches) == []
 
 
-# --- the client and the summaries -------------------------------------------------------------------
+# --- the client ------------------------------------------------------------------------------------
 
 async def test_client_sends_images_and_reserves_for_them(budget, journal, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
@@ -312,18 +311,6 @@ async def test_client_sends_images_and_reserves_for_them(budget, journal, monkey
     assert image["type"] == "image" and image["source"]["media_type"] == "image/png" and text["text"] == "prompt"
     assert reserved[0] >= IMAGE_TOKENS * 0.10 / 1e6  # the image is in the reserve
     assert journal.runs()[0]["task"] == "image"
-
-
-async def test_summaries_take_what_was_read(store, schedule, files, now, batches, images, llm):
-    send(batches, 1, JPEG)
-    send(batches, 2, PNG)  # never read: a summary does not read images itself
-    llm.readings = [TIMETABLE]
-    await read(batches, images, 1)
-    summaries = Summaries(batches.chat_settings, batches.inbox, None, now=now)
-    assert [m["msg_id"] for m in summaries.collect(CHAT, None).chosen] == []  # without the files: photos alone
-    summaries.files = files
-    collected = summaries.collect(CHAT, None)
-    assert [m["msg_id"] for m in collected.chosen] == [1] and collected.chosen[0]["image"] == TIMETABLE
 
 
 # --- the Mini App -------------------------------------------------------------------------------

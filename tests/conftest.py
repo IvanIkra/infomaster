@@ -6,7 +6,7 @@ import pytest
 from infomaster import clock
 from infomaster.collectors.inbox import Inbox
 from infomaster.collectors.ruz import Ruz
-from infomaster.i18n import say, tr
+from infomaster.i18n import Alert, say, tr
 from infomaster.llm.budget import Budget
 from infomaster.llm.journal import Journal
 from infomaster.processing.deadlines import Deadlines
@@ -74,6 +74,7 @@ class FakeForum:
         self.files: dict[int, tuple[bytes, str]] = {}  # msg_id -> (the file's bytes, its name)
         self.replies: dict[int, int] = {}              # msg_id -> the message it answers
         self.pinned, self.edited, self.deleted = [], [], []
+        self.notified: set[int] = set()  # the posts sent with a notification (D55): the rest go silently
         self.next_id = 100
         self.tasks: list[asyncio.Task] = []
 
@@ -85,10 +86,13 @@ class FakeForum:
     def message_url(self, chat_id, msg_id):
         return f"https://t.me/example_bot?start=m-{chat_id}-{msg_id}" if self.pages and chat_id is not None else None
 
-    async def post(self, topic, text, buttons=None, *, html=False, reply_to=None):
+    async def post(self, topic, text, buttons=None, *, html=False, reply_to=None, notify=False):
         assert html
+        loud = notify or isinstance(text, Alert)
         text = say(text, self.lang)
         self.next_id += 1
+        if loud:
+            self.notified.add(self.next_id)
         self.messages[self.next_id] = (topic, text)
         self.buttons[self.next_id] = buttons
         if reply_to is not None:

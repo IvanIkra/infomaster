@@ -110,15 +110,6 @@ class Files:
             return None
         return await self._fetch(message, meta, "image")
 
-    def readings(self, chat_id: int, msg_ids: list[int]) -> dict[int, dict]:
-        """What Haiku read on the images of these messages, by msg_id; never a new call (the summaries, §6.6)."""
-        if not msg_ids:
-            return {}
-        marks = ", ".join("?" * len(msg_ids))
-        rows = self.db.execute(f"select msg_id, reading from files where source = 'tg' and chat_id = ? and kind = "
-                               f"'image' and reading != '' and msg_id in ({marks})", (chat_id, *msg_ids))
-        return {row["msg_id"]: json.loads(row["reading"]) for row in rows}
-
     def read_as(self, row: dict) -> str | None:
         """The reading of the same image in another message (a forward, a repost): it is not read twice."""
         found = self.db.execute("select reading from files where sha256 = ? and kind = 'image' and reading != '' "

@@ -6,10 +6,10 @@ caption in the first version's message (the post stays where it is, with its rep
 updated», with what changed when the chat's PDFs are read. If that message is gone, the version is posted anew. The
 captions are in the forum's language (D41), and so are the summary and the changes the model wrote for them.
 
-The sheets are posted after every batch run, oldest first; one that fails stays waiting for the next run. The owner's
-joining of two sheets in the Mini App goes through here too, under the same lock: the newer sheet's own post is
-deleted, and the older one's message takes its file. So does the owner's change of a sheet, which edits the caption of
-its message, and an own sheet (D44): posted at once, deleted with its messages.
+The sheets are posted silently (D55) after every batch run, oldest first; one that fails stays waiting for the next
+run. The owner's joining of two sheets in the Mini App goes through here too, under the same lock: the newer sheet's
+own post is deleted, and the older one's message takes its file. So does the owner's change of a sheet, which edits
+the caption of its message, and an own sheet (D44): posted at once, deleted with its messages.
 """
 
 import asyncio

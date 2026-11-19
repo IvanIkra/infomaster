@@ -9,8 +9,8 @@ message that told it.
   cancelled, removed, back again. The first poll that brings classes is no news, nor is the first one after the link
   changed: the System topic only hears how many came.
 
-Past things are left out. What the bot posted is kept in `bot_posts`. Texts and buttons are in the forum's language
-(D41); the titles are the dictionary's, English.
+Everything here is posted silently (D55). Past things are left out. What the bot posted is kept in `bot_posts`. Texts
+and buttons are in the forum's language (D41); the titles are the dictionary's, English.
 """
 
 import datetime as dt

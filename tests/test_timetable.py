@@ -58,6 +58,7 @@ async def test_new_event(timetable, forum):
         [("Скрыть", f"ev:hide:{event_id}".encode())]]
     row = timetable.db.execute("select * from bot_posts").fetchone()
     assert (row["topic"], row["kind"], row["ref"], row["msg_id"]) == ("schedule", "event", event_id, msg_id)
+    assert forum.notified == set()  # the timetable is posted silently (D55)
 
 
 async def test_moves_cancels_and_withdrawals(timetable, forum):

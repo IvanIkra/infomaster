@@ -12,7 +12,7 @@ infomaster runs on a server next to Tablo. It:
 
 - **reads** study and other chats and channels through a separate Telegram account (the twin), plus the
   `@edu.hse.ru` mailbox, HSE App X, RUZ and grade sheets;
-- **computes everything itself**: LLM parsing, the course dictionary, merging deadlines, new grades, summaries;
+- **computes everything itself**: LLM parsing, the course dictionary, merging deadlines, new grades;
 - **serves the results** to three places: a Telegram forum (through the bot), a Mini App for the settings and an API
   for Tablo.
 
@@ -79,7 +79,7 @@ settings ◄──────────────────────�
 ```
 collectors/   telegram, mail, hseapp, ruz, grades       — collection only, store raw data
 processing/   batches, pdf, subjects, deadlines, grades,
-              schedule, summaries                        — everything that computes
+              schedule, images                           — everything that computes
 llm/          client, budget, journal                    — the single entry to Haiku: limit + journal
 outputs/      forum (bot), miniapp, api, ical_feed
 settings/     storing and validating settings
@@ -109,10 +109,9 @@ The rule: collectors never call the LLM, and processing never goes to the networ
 | `people` | empty | important senders (the class representative, teachers) |
 | `images` | no | read images (D12) |
 | `pdf_content` | no | read whole PDFs within the limit (D14) |
-| `summary` | no | include in the daily summary (D17) |
 | `urgent` | no | a pin, a PDF or a message from the people list starts processing at once (D19) |
 | `batch_hours` | the common N | an individual processing interval |
-| `note` | empty | for the batches and the summaries: the chat's course, who is who (D52) |
+| `note` | empty | for the batches: the chat's course, who is who (D52) |
 
 **Stage 9 details (images, D12):**
 
@@ -133,7 +132,6 @@ The rule: collectors never call the LLM, and processing never goes to the networ
   image goes into the batch only as "photo"; a message with nothing else to read is marked processed without a call.
   If the limit is exhausted entirely or Haiku is unavailable, processing of the chat stops, and messages with images
   wait with the rest. A model refusal or an API 400 for an image is remembered: it is not tried again.
-- Summaries (§6.6) use what processing has already read and do not read images themselves.
 
 ### 5.2 Other sources
 
@@ -167,7 +165,7 @@ The logic moves over from Tablo unchanged:
 ### 6.1 Batch parsing
 
 - **When.** On a schedule at fixed hours of the day, every `batch_hours` (3 by default, a chat may have its own).
-  Plus at once on the "urgent" trigger. The last scheduled run happens before the daily summary (D19–D20).
+  Plus at once on the "urgent" trigger.
 - **How.** One call per chat: the new messages since the last run, up to a size limit (a long batch is split into
   several calls). The prompt also carries the chat name, the course dictionary, live news, upcoming deadlines and
   events from chats, so that the model can point out a replacement or a move, as in §6.4.
@@ -196,11 +194,11 @@ App (D3).
 
 Stage 4 details: the title budget is 13 characters (what Tablo's column really holds: "Intro to Prog"); Haiku's
 answer can also be deleted in the Mini App, and then the course is named again. RUZ courses pass through the
-dictionary after every poll, and the courses of deadlines and events after every batch run. The parsing model and
-the summaries see the whole dictionary, one line per course: `abbr`, `title` and every name it goes by. So a course is
+dictionary after every poll, and the courses of deadlines and events after every batch run. The parsing model
+sees the whole dictionary, one line per course: `abbr`, `title` and every name it goes by. So a course is
 known under any name (a short form like «ВвП», a nickname, a translation): the parsing model names it as in the
 dictionary, and the deadline label and event title start with its `abbr`; it invents its own abbreviation only for a
-course not in the dictionary; a summary names a course by its `title`. Naming a new name, Haiku also sees the whole
+course not in the dictionary. Naming a new name, Haiku also sees the whole
 dictionary and gives a short form of a known course that course's `title` and `abbr`. A short form Haiku misses can
 be added in the Mini App as a manual entry with the course's `title` and `abbr`. `deadlines.course` keeps the source's name; `abbr` comes from the dictionary at merge time (stage 5).
 A Haiku error stays visible (`ruz.subjects_error`, the Mini App) while at least one of the names it failed on waits
@@ -277,8 +275,10 @@ for a translation; a manual entry or the course disappearing from the source cle
   the first RUZ poll (in stage 4 midterms of the first poll arrived as messages), and changes made by the owner (HA,
   the Mini App, buttons).
 - Under a deadline message is **Hide** (**Delete** for an own one: it is deleted, as in HA), and under a hidden one
-  **Restore**. Under a news notification is **Hide**: the item leaves the pin for good (and `/api/news`); an item
-  that replaced a hidden one (an edit of the same message) is hidden too.
+  **Restore**. Until the second round a news notification had **Hide** too (the item left the pin and `/api/news`
+  for good, and an item that replaced a hidden one was hidden too); the notifications went with D55, and with them
+  the only way to hide a news item. A hidden item stays hidden.
+- New and moved deadlines and the reminders notify; the pin and a withdrawn deadline do not (D55).
 - A change of `RUZ_ICAL_URL` (the link's hash differs from the stored one) makes the next poll with classes the first
   one: System reports the changed link, Timetable gets nothing, and the old classes' midterms are withdrawn silently.
 - A manual dictionary correction in the Mini App renames `<abbr> Midterm` at once, without waiting for a RUZ poll.
@@ -346,58 +346,25 @@ for a translation; a manual entry or the course disappearing from the source cle
 - A class changed from a chat has the change's source (`tg`) in `X-INFOMASTER-SOURCE` and a link to the message in
   `X-INFOMASTER-LINK`.
 
-### 6.6 Summaries
+### 6.6 Summaries (removed)
 
-- **Daily:** at 21:00 (configurable) for chats with `summary`, to the Summaries topic (D20).
-- **On demand:** `/summary [chat] [period]` (D17). Without a chat the bot shows buttons with the list of chats. The
-  command can also be a reply to a message forwarded from a chat.
-- They are built from the raw messages in `messages` and do not wait for a batch. A long period is first compressed
-  day by day, and the result is assembled from the daily digests.
-
-**Stage 7 details:**
-
-- Code: `processing/summaries.py` (which messages, the period, Haiku calls) and `outputs/summaries.py` (the Summaries
-  topic, the daily run, `/summary`).
-- "Since the last summary" means messages that have not yet been in any summary (`messages.summarized_at`) within the
-  last 7 days. Only a summary without a period sets the mark (the daily one or `/summary` without a period), and only
-  after publishing. A summary for a period (`3h`, `2d`, `20.10`, `20.10-22.10`; `3ч` and `2д` also work) marks
-  nothing: it is a look back. A date later than today means last year.
-- The model gets what batch parsing gets (§10): only readable messages, and for a chat with the `important` filter
-  only important ones and replies to them. A summary is a list of points in the forum's language or the one named in
-  `/summary` (D41), each with the `msg_id` of the message its "→" link leads to (private chats and basic groups have
-  no links). Up to 12 points. A period over 30k characters is split by day (a day that does not fit on its own goes
-  into several calls of up to 15 points each), and the result is assembled from the daily digests.
-- Daily: over enabled chats with `summary`, study chats first, one message per chat (a long one as several in a row);
-  chats with nothing important share one "Nothing important" line. A summary time missed while the service was down
-  is caught up at start; the very first start only remembers the day. The time is changed on the Summaries screen of
-  the Mini App (`summary_time`); there was no common settings screen yet.
-- Limit: the daily summary is an optional task (above 80 % it is skipped, Summaries gets a line, and the messages
-  wait for the next one). `/summary` works above 80 % too, but a summary that does not fit in what is left is refused
-  alone and does not stop other calls until midnight the way a mandatory task would (`asked` on the LLM call,
-  `DoesNotFit`); both are `summary` in the journal. A network failure keeps the messages for the next summary; an
-  answer the model cannot give (a refusal, a cut-off) skips them: the same input would fail again.
-- `/summary` is accepted only from the owner, in a private chat with the bot or in the forum; `/summary@other_bot`
-  is left alone. The bot answers in HTML (Telethon defaults to Markdown, and a chat name would break the markup). A
-  failure to post to the topic is reported in the reply to the command; in the daily summary it does not hold up the
-  other chats, and the chat's messages wait for the next one. A point longer than 500 characters is cut so that a
-  line always fits in a message. The chat is found by part of its name among the enabled ones (an exact match wins);
-  several matches give buttons, and none or no chat give buttons for all enabled chats (daily-summary and study ones
-  first, up to 30). A reply to a forwarded message: a channel (and an anonymous group admin) is visible in the
-  forward itself, while a person's message is looked up by its send time and text among the stored ones, so only
-  from enabled chats and at most 14 days old. The summary goes to the Summaries topic and the bot answers with a link
-  to it; if nothing is important, it answers with just a line.
-- "The last scheduled run before the summary" (D20) is not tied separately: summaries do not depend on batches.
+Stage 7 made a daily summary of chats for a Summaries topic and the `/summary` command. They were removed in the
+second round (stage 11, D55): what matters reaches the news and the deadlines anyway, and the summaries were one more
+thing to read. The code, the topic, the command, the Mini App screen, the `summary_time` setting and the chats'
+`summary` switch are gone. Old data stays where it is and is never read: the saved settings rows, the
+`messages.summarized_at` column and the `summary` rows of the LLM journal, which the Mini App still shows by task.
 
 ### 6.7 Grades
 
 Unchanged from §3: tab layout by Haiku with a cache, a 0–10 scale, a snapshot on the first poll, placeholder zeros,
-a journal of new grades. A new grade goes to the Grades topic and the API.
+a journal of new grades. New grades go to the API and the Mini App's Study tab; since the second round the forum
+gets none (D55).
 
 **Stage 8 details:**
 
 - Code: `collectors/grades.py` (downloading the xlsx, the sheet title, the top of the tab and the own row,
-  `TabView`), `processing/grades.py` (the Haiku layout with a cache, the scale, new grades, settings),
-  `outputs/grades.py` (the Grades topic). The label budget (23 characters for "course task") and the layout rules are
+  `TabView`), `processing/grades.py` (the Haiku layout with a cache, the scale, new grades, settings). The label
+  budget (23 characters for "course task") and the layout rules are
   as in Tablo.
 - **Haiku picks the header.** Tablo guessed where the header ends itself (up to 6 rows above the first row that looks
   like a capitalised full name), and a sheet with students written in lower case or with an "average" row above them
@@ -434,13 +401,10 @@ a journal of new grades. A new grade goes to the Grades topic and the API.
   are refused when the sheet is added (in the Mini App's language); a file that turns out not to be `.xlsx` by its
   `Content-Disposition` is an error in the sheet's status. Code: `settings.grade_sheet_id` and `dropbox_file` (the
   link), `collectors/grades.download_url` (the download).
-- The Grades topic: after a poll, one message per sheet (the heading is the sheet title linking to it and a course
-  hashtag), a line per task: the label, the grade 0–10 (as on Tablo's screen), the bonus, the sheet's points in
-  brackets if its scale is not 0–10, and the previous grade for a changed one. Unsent ones (a Telegram failure) wait
-  for the next poll while within `grades_window_days`; a long message is split into several, and each marks its own
-  grades as sent, so a failure in the middle repeats nothing. The first read of a sheet is a line in System
-  ("connected: tabs…, grades…"); a sheet that cannot be read for 12 h is one line in System, and one more when it is
-  read again.
+- The forum: stage 8 posted new grades to a Grades topic, one message per sheet; the second round removed it
+  (D55), and `grade_events.post_id` is left from it. The first read of a sheet is a silent line in System
+  ("connected: tabs…, grades…"); a sheet that cannot be read for 12 h is one line in System with a notification, and
+  one more, silent, when it is read again.
 - `GET /api/grades` (internal port, Bearer) is level C of §11.5: `{"items": [{key, label, value, bonus, seen_at}],
   "window_days"}`, the last event within the window for every task, newest first. In `GET /api/status` → `grades`:
   `configured`, `sheets` by sheet id (`title`, `ok_at`, `error`, `tabs`, `items`, `unread`; neither links nor names),
@@ -449,8 +413,8 @@ a journal of new grades. A new grade goes to the Grades topic and the API.
 ## 7. LLM: the journal and the daily limit
 
 **The journal (D22).** Every call, failed ones included, is written to `llm_runs`: the time (UTC), the task (`batch`,
-`pdf`, `image`, `summary`, `subjects`, `grades`, `hseapp_labels`), the chat, the model, tokens (input, output,
-cache), the cost, the duration, the error. The Mini App shows spending for today, the week and the month, broken down
+`pdf`, `image`, `subjects`, `grades`, `hseapp_labels`; old rows may have `summary`, D55), the chat, the model,
+tokens (input, output, cache), the cost, the duration, the error. The Mini App shows spending for today, the week and the month, broken down
 by task and chat.
 
 **The limit (D21).** A daily dollar limit for all calls together. Days are counted in Moscow time; prices are set in
@@ -459,10 +423,10 @@ the settings.
 - **Before a call** the budget reserves the worst case: an input estimate from the text length plus `max_tokens` for
   the output. If the reserve does not fit in what is left, the call is not made. After the answer the reserve is
   replaced by the real cost.
-- **80 % of the limit.** Optional tasks are switched off: images, whole-PDF reading, the daily summary. A warning
-  goes to the System topic.
+- **80 % of the limit.** Optional tasks are switched off: images and whole-PDF reading. A warning goes to the
+  System topic, silently (D55).
 - **100 %.** All calls stop until midnight. Messages pile up in the queue and are processed the next day. The bot
-  reports this in System. A button raises the limit for today.
+  reports this in System with a notification: new deadlines stop too. A button raises the limit for today.
 - **Working through the queue after a pause** (D30):
   1. Order: study chats → mail → non-study chats and channels.
   2. Non-study messages older than `ttl_hours` (24 h) are marked processed without calling the model: their news
@@ -513,7 +477,7 @@ The API serves the full current state, with no cursors (D10). There is no "refre
   for now, not by the font (§2.1).
 - `GET /api/status` needs Bearer, like all of `/api/*` (in Tablo the status was open). Keys are per source:
   `telegram`, `batches` (batch parsing: freshness of the news), `ruz`, `hseapp` (with `login_needed`), `mail`,
-  `sheets`, `summaries`, `grades`, `images`, plus `llm` (`spent_usd`, `limit_usd`, `raised_usd`, `level`). There is
+  `sheets`, `grades`, `images`, plus `llm` (`spent_usd`, `limit_usd`, `raised_usd`, `level`). There is
   no separate `news` key as in Tablo: `batches` plays its role.
 - There are no write routes (`POST/PATCH/DELETE /api/deadlines` as in Tablo): own and hidden deadlines are managed in
   the Mini App and with the forum buttons. infomaster is not connected to HA (D34): no to-do lists, no
@@ -531,15 +495,21 @@ The API serves the full current state, with no cursors (D10). There is no "refre
 
 Topics of the forum group:
 
-| Topic | What arrives |
-|---|---|
-| Timetable | new events, moves and cancellations |
-| Deadlines | a pin with the list (edited) + new and moved deadlines |
-| News | one message that the bot edits (see below) |
-| Sheets | PDFs with a caption, updates as replies to the old message |
-| Grades | new grades |
-| Summaries | daily and on demand |
-| System | source errors, "HSE App X login needed", the LLM budget |
+| Topic | What arrives | Notifies |
+|---|---|---|
+| Timetable | new events, moves and cancellations | no |
+| Deadlines | a pin with the list (edited) + new, moved and withdrawn deadlines + the reminders (D47) | new and moved deadlines, the reminders |
+| News | one message that the bot edits (see below) | no |
+| Sheets | PDFs with a caption, updates as replies to the old message | no |
+| System | source errors, "HSE App X login needed", the LLM budget, and lines about what went well | source failures and the spent LLM limit |
+
+**Quiet by default** (D55). Only deadlines notify: a new or moved deadline, a reminder, and a failure of a source in
+System (a source unavailable for 12 hours, a login needed, a grade sheet that cannot be read) or the spent LLM limit,
+since new deadlines stop then. Everything else is sent with `silent=True`: the timetable, the sheets, a withdrawn
+deadline, the lines of System about a recovery, a login or a connected sheet, the 80 % warning, the start of the
+service. Pins never notify. A collector marks a failure by making its line an `Alert` (`i18n.py`) instead of a
+`Phrase`. The Grades and Summaries topics of the first round are gone: grades are in the Mini App and Tablo, and
+the summaries were removed (§6.6). Topics created before stay in the forum and get nothing new.
 
 **The News message** (D23). A pinned message that the bot rebuilds after every run. The data is the same that
 `GET /api/news` serves Tablo: one `news` table and the same rules (§6.6):
@@ -553,12 +523,12 @@ Topics of the forum group:
 - every item has a source icon and a link to the original message: `t.me/<channel>/<id>` or `t.me/c/<id>/<msg>`.
   Letters have no link; the subject stands in its place.
 
-**Notifications about what matters.** Editing a message does not notify, so for every new item with `importance` 4 or
-5 the bot sends a short separate message to the topic. At the next rebuild it deletes it: by then the item is in the
-common list.
+Editing the list does not notify, and nothing else goes to News: the first round also sent a short message for
+every new item of `importance` 4 or 5 and deleted it at the next rebuild; the second round removed them (D55), and
+those left from before are deleted at the next rebuild.
 
-Every bot message keeps a link to its original. News, deadlines and events have a hide button, and hiding works the
-same way as hiding from HA did.
+Every bot message keeps a link to its original. Deadlines and events have a hide button, and hiding works the same
+way as hiding from HA did. News has none since D55: its button was under the removed notifications.
 
 ### 8.4 Mini App
 
@@ -586,8 +556,8 @@ forum (`?screen=…`, `start_param`) open the right tab or screen.
   grade sheets. A grade sheet has its own screen: the name, the course before the grades, a check (when it was read,
   by which name, how many grades, "read now"), and the tabs with their layout: which column is which task, what the
   header says, the number in the own row and the 0–10 grade, all columns of the own row; a tab's layout can be
-  corrected (the own one overrides Haiku's answer) and handed back to Haiku. Processing: batches and news, the daily
-  summary (time, chats), whole PDFs, images per day, the course dictionary. **LLM spending** (§7, D40) is the only
+  corrected (the own one overrides Haiku's answer) and handed back to Haiku. Processing: batches and news, deadline
+  reminders, whole PDFs, images per day, the course dictionary. **LLM spending** (§7, D40) is the only
   place spending is visible: three period cards, a 30-day chart with the limit line, the period's tasks and chats,
   the limit and a raise for today, model prices. The languages of the Mini App and the forum. `.env` holds only
   secrets.
@@ -601,7 +571,7 @@ Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Ta
 | `kv` | collector state, HSE App X tokens, layout and label caches |
 | `settings`, `chat_settings` | common and per-chat settings |
 | `chats` | all chats of the account: id, title, type, last read id |
-| `messages` | raw messages and letters: source, chat, author, time, text, files, `parsed_at`, `summarized_at` |
+| `messages` | raw messages and letters: source, chat, author, time, text, files, `parsed_at` (`summarized_at` is left from the summaries, D55) |
 | `files` | downloaded PDFs and images: message, kind, hash, path, the page count and first-page text of a PDF, the reading of an image, the error |
 | `subjects` | the dictionary (§2.2) |
 | `news` | parsed news, `replaced_by` |
@@ -663,7 +633,7 @@ Every stage delivers something that works.
 5. **Deadlines in full.** HSE App X (login through the Mini App), mail, the §5.5 merge, own and hidden ones, the pin
    in the Deadlines topic.
 6. **Problem sheets.** PDFs, the first page, reading within the limit, versions.
-7. **Summaries.** Daily and `/summary`, the Summaries screen in the Mini App.
+7. **Summaries.** Daily and `/summary`, the Summaries screen in the Mini App. Removed in stage 11 (D55).
 8. **Grades.** The port of §3.
 9. **Images.** Reading images with limits.
 10. **API for Tablo** and the one-step switch of Tablo (D35) following "Handed over to Tablo" in
@@ -678,7 +648,7 @@ The service was meant to take work off the student, but it sends too much and ha
 second round makes it quiet by default and lets Claude in when the owner wants it. infomaster keeps working on its
 own; Claude is an optional door, not the brain (D53).
 
-11. **Quiet.** Only deadlines notify: new and moved deadlines, the reminders of D47, and source failures. Grades,
+11. **Quiet** (done, D55). Only deadlines notify: new and moved deadlines, the reminders of D47, and source failures. Grades,
     news, sheets and the timetable arrive silently or not at all: grades are a section in Tablo and the Mini App,
     news is a small block in Tablo, and the separate "important news" messages go. Summaries (stage 7) are removed
     entirely: what matters reaches the news and the deadlines anyway.

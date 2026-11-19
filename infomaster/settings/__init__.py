@@ -2,7 +2,8 @@
 
 General settings arrive with the stages that use them. Chat settings are all here from the start, so the Mini App can
 set a chat up once; the twin uses `enabled`, the batches `study`, `filter`, `people`, `urgent`, `batch_hours` and
-`images` and `note`, the sheets `pdf_content`, the summaries `summary` (and `filter`, `people` and `note`).
+`images` and `note`, the sheets `pdf_content`. A saved setting no longer listed here (the summaries' `summary_time`
+and `summary`, removed with them, D55) stays in its table and is never read.
 """
 
 import copy
@@ -204,7 +205,6 @@ SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "pdf_tokens": (30_000, _whole(1_000, 200_000, "a number of tokens")),
     # Images read a Moscow day in chats with «Картинки» (D12); inside the LLM limit, off above its 80 % (§7).
     "images_daily": (30, _whole(0, 500, "a number of images")),
-    "summary_time": ("21:00", _clock_time),   # the daily summary, Moscow time (D20)
     # Deadline reminders in «Дедлайны» (D47): on the eve, what is due tomorrow; in the morning, what is due today.
     "deadline_reminders": (True, _flag),
     "reminder_eve": ("20:00", _clock_time),
@@ -213,10 +213,10 @@ SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "grades_student": ("", _student),
     "grades_sheets": ([], _grade_sheets),
     "grades_window_days": (7, _whole(1, 60, "a number of days")),  # a grade is new this long: the API for Tablo
-    # What the owner reads (D41): the bot's posts and the models' summaries for them, and the Mini App.
+    # What the owner reads (D41): the bot's posts and what the models write for them, and the Mini App.
     "forum_language": ("en", _language),
     "miniapp_language": ("en", _language),
-    # What the student tells the batches and the summaries about themselves (D52): group, subgroup, English group,
+    # What the student tells the batches about themselves (D52): group, subgroup, English group,
     # electives, so that what is meant for others does not count.
     "about_me": ("", _text(ABOUT_ME_CHARS)),
 }
@@ -247,10 +247,9 @@ CHAT_SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "people": ([], _people),
     "images": (False, _flag),
     "pdf_content": (False, _flag),
-    "summary": (False, _flag),
     "urgent": (False, _flag),
     "batch_hours": (None, _batch_hours),
-    "note": ("", _text(CHAT_NOTE_CHARS)),  # for the batches and the summaries: its course, who is who (D52)
+    "note": ("", _text(CHAT_NOTE_CHARS)),  # for the batches: its course, who is who (D52)
 }
 
 

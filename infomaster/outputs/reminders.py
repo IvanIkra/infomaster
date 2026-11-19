@@ -4,7 +4,7 @@ Twice a day, Moscow time: on the eve (`reminder_eve`, 20:00 by default) the dead
 (`reminder_day`, 09:00) those due today. One message holds all of a day's deadlines, as the pinned list shows them
 (processing/merge.py: hidden and done ones are not there), each with its own button: «Hide» hides it as the buttons
 under the topic's other messages do (an own deadline, «Delete», is deleted), «Restore» brings it back. Nothing due:
-no message. `deadline_reminders` off: no messages at all.
+no message. `deadline_reminders` off: no messages at all. A reminder notifies, as new and moved deadlines do (D55).
 
 Each slot is sent once: kv "deadlines.reminded" keeps the day of the last one sent. The very first start takes the
 slots that have come as sent, so a new install floods nothing; a slot missed while the service was down is sent when
@@ -115,7 +115,7 @@ class DeadlineReminders:
             lines.append(f"{line} · {where}")
         refs = [d.ref for d in due_then]
         text = split(HEADERS[name].get(lang), lines, MESSAGE_LIMIT)[0]  # a day's deadlines fit one message
-        msg_id = await self.forum.post(TOPIC, text, buttons=self._buttons(refs), html=True)
+        msg_id = await self.forum.post(TOPIC, text, buttons=self._buttons(refs), html=True, notify=True)  # D55
         remember(self.db, TOPIC, msg_id, "deadline_reminder", None, self.now(), key=json.dumps(refs))
         return msg_id
 

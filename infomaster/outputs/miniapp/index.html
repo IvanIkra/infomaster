@@ -456,7 +456,6 @@
       ["study", L("Study", "Учебный"), L("news rank, deadlines", "ранг новостей, дедлайны")],
       ["urgent", L("Urgent", "Срочно"), L("a pin, a PDF or a message of an important person: parsed at once",
                                           "закреп, PDF или сообщение важного человека — разбор сразу")],
-      ["summary", L("Summary", "Сводка"), L("in the daily summary", "включать в ежедневную сводку")],
       ["images", L("Images", "Картинки"), L("Haiku reads photos and screenshots, within the images a day",
                                             "фото и скриншоты читает Haiku, в пределах числа картинок в день")],
       ["pdf_content", L("Whole PDF", "PDF целиком"),
@@ -552,7 +551,6 @@
       grades: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
       mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m21 7-9 6-9-6"/>',
       book: '<path d="M4 19.5V5a2 2 0 0 1 2-2h14v16H6.5A2.5 2.5 0 0 0 4 21.5 2.5 2.5 0 0 0 6.5 24"/><path d="M8 7h8"/>',
-      summary: '<path d="M4 6h16M4 12h16M4 18h10"/>',
       sheet: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
       clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
       bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
@@ -1353,7 +1351,7 @@
         section(null, [sheet ? field(L("Gradebook", "Таблица"), el("span", {className: "grow"}, bookName(sheet)))
           : field(L("Course", "Предмет"), course), field(L("What", "За что"), label),
           field(L("Grade", "Оценка"), value)],
-          L("On the 0–10 scale, as in Tablo and in the «Grades» topic.", "По шкале 0–10, как в Tablo и в теме «Оценки».")),
+          L("On the 0–10 scale, as in Tablo.", "По шкале 0–10, как в Tablo.")),
         primary(L("Save", "Сохранить"), save)];
     }
 
@@ -1382,9 +1380,9 @@
       return [el("h1", {className: "title"}, bookName(book)),
         book.error ? notice(L("Cannot be read: ", "Не читается: ") + book.error) : null,
         section(null, [field(L("Name", "Название"), name), field(L("Course", "Курс"), label)],
-          L(`The name is for this app; the course goes in front of every grade in Tablo and in the «Grades» topic, up `
+          L(`The name is for this app; the course goes in front of every grade in Tablo, up `
             + `to ${book.label_chars} characters: «${book.course} HW 1».`, `Название — для этого приложения; курс стоит `
-            + `перед каждой оценкой в Tablo и в теме «Оценки», до ${book.label_chars} символов: «${book.course} HW 1».`)),
+            + `перед каждой оценкой в Tablo, до ${book.label_chars} символов: «${book.course} HW 1».`)),
         section(L("Check", "Проверка"), [
           fact(L("Read", "Прочитана"), book.ok_at ? when(book.ok_at) : L("not yet", "ещё нет")),
           fact(L("Looked up by", "Строка ищется по"), book.student || null),
@@ -1643,8 +1641,8 @@
     }
 
     async function settingsPage() {
-      const [list, general, hse, llm, summaries, grades, agenda, found, reminders] = await Promise.all([get("api/chats"),
-        maybe("api/general"), maybe("api/hseapp"), maybe("api/llm"), maybe("api/summaries"), maybe("api/grades"),
+      const [list, general, hse, llm, grades, agenda, found, reminders] = await Promise.all([get("api/chats"),
+        maybe("api/general"), maybe("api/hseapp"), maybe("api/llm"), maybe("api/grades"),
         maybe("api/agenda"), problems(), maybe("api/reminders")]);
       const on = list.chats.filter((chat) => chat.settings.enabled).length;
       const bad = (text) => el("span", {className: "late"}, text);
@@ -1672,8 +1670,6 @@
       parts.push(section(L("Processing", "Обработка"), [
         general ? row({title: L("Batches and news", "Пачки и новости"), lead: tile("clock", "#f09a37"),
           value: L(`every ${general.batch_hours} h`, `раз в ${general.batch_hours} ч`), go: () => push(generalPage)}) : null,
-        summaries ? row({title: L("Daily summary", "Ежедневная сводка"), lead: tile("summary", "#e0605a"),
-          value: summaries.time, go: () => push(summariesPage)}) : null,
         reminders ? row({title: L("Deadline reminders", "Напоминания о дедлайнах"), lead: tile("deadlines", "#3e88f7"),
           value: reminders.enabled ? `${reminders.eve} · ${reminders.day}` : L("off", "выкл."),
           go: () => push(remindersPage)}) : null,
@@ -1698,8 +1694,8 @@
           })}),
           row({title: L("Forum", "Форум"), control: selectOf(Object.entries(LANGUAGE_NAMES), general.forum_language,
             (value) => act("api/general", "PATCH", {forum_language: value}))}),
-        ], L("The forum: the bot's messages, buttons and answers, the summaries and the sheets' descriptions; news and "
-          + "deadline titles stay English, as Tablo gets them.", "Форум — сообщения, кнопки и ответы бота, сводки и "
+        ], L("The forum: the bot's messages, buttons and answers and the sheets' descriptions; news and "
+          + "deadline titles stay English, as Tablo gets them.", "Форум — сообщения, кнопки и ответы бота и "
           + "описания листочков; новости и названия дедлайнов остаются английскими, как в Tablo.")));
       }
       parts.push(el("p", {className: "foot", style: "margin-top: 22px"}, L("The secrets (tokens, the mail password, "
@@ -1821,8 +1817,8 @@
         section(L("Note for the model", "Заметка для модели"), [proseInput(s.note, {maxLength: 300,
           placeholder: L("The Calculus chat; the seminar teacher writes here",
             "Чат по матану; сюда пишет семинарист")}, (value) => change({note: value}))],
-          L("The batches and the summaries see it: the chat's course, who is who.",
-            "Это видят разбор пачек и сводки: предмет чата, кто есть кто.")),
+          L("The batches see it: the chat's course, who is who.",
+            "Это видит разбор пачек: предмет чата, кто есть кто.")),
         section(L("Important people", "Важные люди"), people.length ? people : [row({title: L("Nobody has written yet",
           "Пока никто не писал"), className: "faded"})],
           L("For «important only» and «Urgent»: the group head, the teachers.",
@@ -2078,8 +2074,8 @@
           }
           return row({title: name, wrap: true, sub, go: () => openBook(sheet.id)});
         }), data.sheets.length ? L("Every 30 minutes the service finds your row by the name; Haiku finds the header "
-          + "itself. A new or changed grade comes to the «Grades» topic.", "Раз в 30 минут сервис ищет вашу строку по "
-          + "ФИО; шапку Haiku находит сама. Новая или изменённая оценка приходит в тему «Оценки».") : null),
+          + "itself. The grades are here, in Study, and in Tablo.", "Раз в 30 минут сервис ищет вашу строку по "
+          + "ФИО; шапку Haiku находит сама. Оценки — здесь, в «Учёбе», и в Tablo.") : null),
         section(L("Add a gradebook", "Добавить таблицу"), [row({title: url}), row({title: label}),
           button(L("Add", "Добавить"), async () => {
             if (await act("api/grades", "PATCH", {sheets: [...sheetsOf(), {url: draft.url, label: draft.label}]})) {
@@ -2095,25 +2091,7 @@
           + `${data.label_chars} символов (пусто — начало названия таблицы). Первое чтение — снимок, без сообщений.`))];
     }
 
-    // --- summaries, sheets, batches ------------------------------------------------------------------
-
-    async function summariesPage() {
-      const data = await get("api/summaries");
-      const time = el("input", {type: "time", value: data.time, step: 60});
-      time.onchange = () => act("api/summaries", "PATCH", {time: time.value});
-      const okAt = data.status.ok_at;
-      return [el("h1", {className: "title"}, L("Summaries", "Сводки")),
-        data.status.error ? notice(L("The last summary: ", "Последняя сводка: ") + data.status.error) : null,
-        section(null, [row({title: L("Daily, at", "Ежедневно, в"), sub: L("Moscow time", "по Москве"), control: time})],
-          (okAt ? L(`The last one was made on ${okAt.slice(8, 10)}.${okAt.slice(5, 7)} at ${okAt.slice(11, 16)}. `,
-            `Последняя собрана ${okAt.slice(8, 10)}.${okAt.slice(5, 7)} в ${okAt.slice(11, 16)}. `) : "")
-          + L("Any enabled chat can be summed up on demand: /summary [chat] [3h | 2d | 20.10-22.10] [en | ru].",
-            "Сводку любого включённого чата можно попросить: /summary [чат] [3h | 2d | 20.10-22.10] [en | ru].")),
-        section(L("Chats in the summary", "Чаты в сводке"), data.chats.length ? data.chats.map((item) =>
-          row({title: item.title, go: () => push(() => chatPage(item.id))})) : [row({title: L("None yet",
-          "Пока ни одного"), className: "faded"})], L("A chat is in the summary when «Summary» is on in its settings.",
-          "Чат попадает в сводку, если в его настройках включена «Сводка»."))];
-    }
+    // --- reminders, sheets, batches ------------------------------------------------------------------
 
     async function remindersPage() {
       const data = await get("api/reminders");
@@ -2163,8 +2141,8 @@
           placeholder: L("Group 3, subgroup 2, English B2 group 5, minor: Data Science",
             "Группа 3, подгруппа 2, английский B2 — группа 5, майнор: анализ данных")},
           (value) => act("api/general", "PATCH", {about_me: value}))],
-          L("The batches and the summaries see it: what is meant for other groups counts for little.",
-            "Это видят разбор пачек и сводки: то, что для других групп, идёт как неважное."))];
+          L("The batches see it: what is meant for other groups counts for little.",
+            "Это видит разбор пачек: то, что для других групп, идёт как неважное."))];
     }
 
     // --- the dictionary ------------------------------------------------------------------------------
@@ -2239,6 +2217,7 @@
 
     // --- LLM spending ---------------------------------------------------------------------------------
 
+    // "summary": journal rows from before the summaries were removed.
     const TASKS = () => L({batch: "Batch parsing", image: "Images", pdf: "Whole PDF", summary: "Summaries",
                            subjects: "Dictionary", grades: "Grades", hseapp_labels: "HSE App X labels"},
                           {batch: "Разбор пачек", image: "Картинки", pdf: "PDF целиком", summary: "Сводки",
@@ -2299,8 +2278,8 @@
         parts.push(notice(data.level === "hard"
           ? L("Today's limit is spent: calls wait until midnight, messages wait in the queue.",
             "Лимит на сегодня исчерпан: вызовы стоят до полуночи, сообщения ждут в очереди.")
-          : L("Over 80 % of the limit: images, whole PDFs and the daily summary are off until midnight.",
-            "Больше 80 % лимита: картинки, PDF целиком и ежедневная сводка отключены до полуночи.")));
+          : L("Over 80 % of the limit: images and whole PDFs are off until midnight.",
+            "Больше 80 % лимита: картинки и PDF целиком отключены до полуночи.")));
       }
       const share = Math.round(data.spent_usd / data.limit_usd * 100);
       const notes = {today: L(`${share} % of the limit`, `${share} % лимита`), week: runs(data.periods.week.runs),
@@ -2341,9 +2320,9 @@
         button(L(`Raise today's limit to ${raised}`, `Поднять лимит на сегодня до ${raised}`), async () => {
           if (await askYes(L(`Raise today's limit to ${raised}? Until midnight.`,
             `Поднять лимит на сегодня до ${raised}? До полуночи.`))) act("api/llm/raise", "POST", {}, "api/llm");
-        })], L("Every call of Haiku, the failed ones too; a day is Moscow's. Above 80 % of the limit images, whole PDFs "
-        + "and the daily summary are off; at 100 % calls wait until midnight.", "Все вызовы Haiku, неудачные тоже; сутки "
-        + "— по Москве. Выше 80 % лимита отключаются картинки, PDF целиком и ежедневная сводка; на 100 % вызовы стоят "
+        })], L("Every call of Haiku, the failed ones too; a day is Moscow's. Above 80 % of the limit images and whole "
+        + "PDFs are off; at 100 % calls wait until midnight.", "Все вызовы Haiku, неудачные тоже; сутки "
+        + "— по Москве. Выше 80 % лимита отключаются картинки и PDF целиком; на 100 % вызовы стоят "
         + "до полуночи.") + (data.raised_usd ? " " + L(`Raised by ${usd(data.raised_usd)} today already.`,
         `Сегодня уже поднят на ${usd(data.raised_usd)}.`) : "")));
       if (general) {
@@ -2361,7 +2340,7 @@
     const ROOTS = {deadlines: deadlinesPage, schedule: schedulePage, study: studyPage, settings: settingsPage};
     // The screens a link may ask for (a button under a post in the forum): the tab, then what to open in it.
     const SCREENS = {chats: ["settings", chatsPage], schedule: ["schedule"], deadlines: ["deadlines"],
-                     sheets: ["study", "sheets"], grades: ["study", "grades"], summaries: ["settings", summariesPage],
+                     sheets: ["study", "sheets"], grades: ["study", "grades"],
                      reminders: ["settings", remindersPage],
                      subjects: ["settings", subjectsPage], hseapp: ["settings", hsePage], llm: ["settings", llmPage],
                      general: ["settings", generalPage], settings: ["settings"]};

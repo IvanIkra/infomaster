@@ -54,6 +54,7 @@ async def test_the_eve_and_the_morning(reminders, forum, now):
         "🏠 <b>Dentist</b> · свой"])
     assert labels(forum.buttons[msg_id]) == [[("Скрыть: Calc HW 5", b"dr:hide:0")],
                                              [("Удалить: Dentist", b"dr:hide:1")]]
+    assert forum.notified == {msg_id}  # a reminder notifies (D55)
     await reminders.tick()
     assert len(forum.messages) == 1  # once per slot
 

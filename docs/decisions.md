@@ -227,6 +227,20 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   exactly like Google's export. Its id is `dropbox-<id of the link>`, its title the file name without the extension
   (or the name in `Content-Disposition`). Folder links and files that are not `.xlsx` are refused when the sheet is
   added; a deleted or private link gives the usual "not a workbook" error. Only public share links, no Dropbox API.
+- **D55. Only deadlines notify; the summaries and the Grades topic are gone, 19.11.2026.** This changes §6.6, §6.7,
+  §8.3, §8.4, D17, D20, D23 and D50, and is stage 11 of §11.1 (D53). The forum was one more thing to check: grades,
+  important news, the timetable and the sheets all notified, and the summaries went unread. Now a post notifies only
+  for a new or moved deadline, a deadline reminder (D47), a source failure in System (a source unavailable for 12
+  hours, a login needed, a grade sheet that cannot be read) and the spent LLM limit, since new deadlines stop then. A
+  collector marks such a line as an `Alert`. Everything else is sent silently: the timetable, the sheets, a withdrawn
+  deadline, the System lines about a recovery, a login or a connected sheet, the 80 % warning; pins never notify. The
+  Grades topic is removed: grades are in the Mini App's Study tab and in `GET /api/grades` for Tablo. The News topic
+  keeps only its pinned list: the separate messages for items of importance 4–5 are gone, those left from before are
+  deleted at the next rebuild, and with them went the only way to hide a news item. The summaries of stage 7 are
+  removed entirely: the Summaries topic, the daily summary, `/summary`, the Mini App screen, the `summary_time`
+  setting, the chats' `summary` switch and the `summary` LLM task, so D50's list of links loses the summaries'
+  points. Old data stays and is never read: settings rows, `messages.summarized_at`, `grade_events.post_id`, and the
+  `summary` rows of the LLM journal, which the Mini App still shows.
 
 ## Open questions
 

@@ -9,6 +9,8 @@ from telethon.tl import types
 from infomaster.app import Service
 from infomaster.collectors.ruz import parse
 from infomaster.config import Env
+from infomaster.i18n import Alert, Phrase
+from infomaster.llm.budget import Level, Notice
 from infomaster.outputs import api
 from infomaster.outputs import forum as forum_module
 from infomaster.processing.batches import Changes
@@ -69,7 +71,7 @@ async def test_after_poll(tmp_path, forum, namer, now, aiohttp_client):
 async def sources_reach_the_ports(service, aiohttp_client):
     """run() hands the service's sources to both ports: the Mini App's «Расписание» reads "ruz" by name, its
     «HSE App X» reads "hseapp"."""
-    assert set(service.sources) == {"telegram", "batches", "ruz", "hseapp", "mail", "sheets", "summaries", "grades",
+    assert set(service.sources) == {"telegram", "batches", "ruz", "hseapp", "mail", "sheets", "grades",
                                    "images"}
     assert service.sources["ruz"]() == service._ruz_status()
     client = await aiohttp_client(api.create_app(service.env, service.budget, service.sources, service.calendar,
@@ -121,7 +123,7 @@ async def test_deadlines_wiring(tmp_path, forum, now):
         assert service.hseapp_deadlines.on_change == service._hseapp_changed
         assert service.merged.on_change == service.deadline_topic.changed
         handlers = [callback for callback, _ in service.forum.client.list_event_handlers()]
-        assert service.deadline_topic.on_button in handlers and service.feed.on_button in handlers
+        assert service.deadline_topic.on_button in handlers and service.reminders.on_button in handlers
         await service.deadline_topic.refresh()
 
         def lists(*items):
@@ -232,3 +234,35 @@ async def test_watch_follows_the_twins_login_and_logout():
         client=None, changed=asyncio.Event())), stop))
     stop.set()
     await asyncio.wait_for(watch, 1)
+
+
+async def test_the_forum_is_quiet_but_for_what_asks_to_notify(tmp_path):
+    """D55: a post is silent unless its caller asks or it is an Alert (a source's failure); files are silent too.
+    The spent LLM limit notifies, the 80 % warning does not."""
+    service = Service(env(), tmp_path)
+    try:
+        forum, sent = service.forum, []
+
+        async def send(peer, *args, **kwargs):
+            sent.append(kwargs["silent"])
+            return SimpleNamespace(id=len(sent))
+
+        async def topic(key):
+            return 7
+
+        forum.client = SimpleNamespace(send_message=send, send_file=send)
+        forum._topic = topic
+        await forum.post("news", "<b>News</b>", html=True)
+        await forum.post("deadlines", "🆕 Calc HW 5", html=True, notify=True)
+        await forum.post("system", Phrase("RUZ is available again.", "РУЗ снова доступен."))
+        await forum.post("system", Alert("RUZ is unavailable.", "РУЗ недоступен."))
+        await forum.post_file("sheets", tmp_path / "list3.pdf", "list3.pdf", "Sheet 3")
+        assert sent == [True, False, True, False, True]
+
+        sent.clear()
+        forum.on_budget(Notice(Level.SOFT, 0.4, 0.5))
+        forum.on_budget(Notice(Level.HARD, 0.5, 0.5))
+        await asyncio.gather(*forum._tasks)
+        assert sent == [True, False]
+    finally:
+        service.store.close()
