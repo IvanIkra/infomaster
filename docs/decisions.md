@@ -241,6 +241,17 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   setting, the chats' `summary` switch and the `summary` LLM task, so D50's list of links loses the summaries'
   points. Old data stays and is never read: settings rows, `messages.summarized_at`, `grade_events.post_id`, and the
   `summary` rows of the LLM journal, which the Mini App still shows.
+- **D56. A sheet without a due date is due at the next seminar, 19.11.2026.** This changes §6.3 and §6.4 and is the
+  first half of stage 12 of §11.1. Many sheets give no date and are simply due at the next seminar, so they were
+  missing from the deadlines. Now such a sheet gets an assumed date: the first seminar or practical class of its
+  course (matched through the dictionary) that starts after its message, within 21 days, as the feeds show the
+  timetable, cancelled classes skipped. A course without seminars takes its next class of any kind, but not an interim
+  assessment or an exam. The date is a deadline of its own (`tg`, the sheet's message, `<abbr> sheet <n>`,
+  `assumed`), marked "≈ … (assumed)" in the caption, the Deadlines pin, its messages and reminders and the Mini App;
+  `GET /api/deadlines` has `assumed`. Like a Midterm, it follows its class until the class starts: it moves with it,
+  and is withdrawn when no class is left. A real date replaces it and clears the mark: the sheet's pages, a later
+  message (the batch model sees the deadline marked "assumed" and moves it), or the owner in the Mini App. A newer
+  version takes the deadline over. Sheets from before this change keep no date.
 
 ## Open questions
 

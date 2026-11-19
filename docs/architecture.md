@@ -683,7 +683,7 @@ own; Claude is an optional door, not the brain (D53).
     news, sheets and the timetable arrive silently or not at all: grades are a section in Tablo and the Mini App,
     news is a small block in Tablo, and the separate "important news" messages go. Summaries (stage 7) are removed
     entirely: what matters reaches the news and the deadlines anyway.
-12. **Sheets.** A sheet without a due date is due before the next seminar of its course in RUZ, marked as
+12. **Sheets** (the due date done, D56). A sheet without a due date is due before the next seminar of its course in RUZ, marked as
     assumed. Find out on live data why about half of the sheets are missed.
 13. **MCP connector.** infomaster serves a remote MCP server on the public port, added to claude.ai as a custom
     connector (it works on the Pro plan and in the phone app). Tools read deadlines, the timetable, grades, news,
