@@ -19,6 +19,8 @@ from .collectors.telegram import Twin
 from .config import Env
 from .connector import Connector
 from .i18n import Phrase
+from .library import Library
+from .library import links as library_links
 from .llm.budget import Budget
 from .llm.client import Haiku
 from .llm.journal import Journal
@@ -109,6 +111,10 @@ class Service:
                         "hseapp": self._hseapp_status, "mail": self.mail.status, "sheets": self.sheets.status,
                         "grades": self._grades_status,
                         "images": self.images.status}
+        # The library (D58): raw material of the courses and the knowledge base Claude makes of it; files by links.
+        self.library = Library(self.store, data_dir)
+        self.library.same_course = self.schedule.same_course
+        self.library_links = library_links.Links(self.store, self.library, env.public_url)
         # The MCP connector for claude.ai (§8.5, D57): its sign-in code comes from the bot to the owner's chat.
         self.connector = Connector(env, self.store, self.news, send_code=self._to_owner,
                                    lang=lambda: self.settings.get("miniapp_language"))
@@ -231,6 +237,7 @@ class Service:
                                               self.grades, self.news, self.settings),
                                self.env.internal_port)):
                 if port == self.env.public_port:
+                    library_links.add_routes(app, self.library_links)  # before the connector: its tools use them
                     self.connector.attach(app)  # the MCP connector shares the Mini App's port (§8.5)
                 runner = web.AppRunner(app, access_log=None)
                 await runner.setup()
@@ -306,6 +313,8 @@ class Service:
                     log.info("removed %d raw messages older than 14 days", removed)
                 if removed := self.files.prune(clock.now_utc()):
                     log.info("removed %d downloaded files older than 14 days", removed)
+                if removed := self.library.prune():
+                    log.info("removed %d library drafts and removed items", removed)
             except Exception:
                 log.exception("pruning raw messages failed")
             await asyncio.sleep(PRUNE_EVERY)

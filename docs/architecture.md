@@ -442,6 +442,31 @@ gets none (D55).
   `configured`, `sheets` by sheet id (`title`, `ok_at`, `error`, `tabs`, `items`, `unread`; neither links nor names),
   `llm`, `new`.
 
+### 6.8 The library: raw material and the knowledge base
+
+Stage 14 of §11.1 (D58), `infomaster/library/`. Kept for good under `data/library/`, apart from the 14 days of §9.
+
+**Raw material** (`materials`). An item is a file (a photo of the board, a recording, slides, a sheet, any file), a
+text (notes typed or pasted, a transcript) or a link (remembered, never fetched). It has a course, named as the
+timetable names it (Schedule.same_course maps a chat's name to it), and a RUZ class, or neither: then it is in the
+*inbox*, and Claude sorts it. An item that comes with a time finds its class: the course's last class that started
+by 20 minutes after it, within a week. It is `new` until a published version of the knowledge base names it, then
+`processed`. A transcript hangs on its recording (`parent`). A removed item is out of every list and comes back
+with an undo for 30 days. The same bytes are stored once (`raw/<sha256[:2]>/<sha256>.<ext>`). A file arrives at a
+`.part` path and is moved into place when complete; an item made for an upload link is a draft (`uploading`) until
+its bytes come, and a draft older than a day is dropped.
+
+**The knowledge base** (`knowledge`, `knowledge_versions`). Per course: a `book` (the whole course in one LaTeX
+document), a `lecture` or a `seminar` per class (a seminar is its sheet's topics and new notions; its problems are
+not solved), and a `cheatsheet` for Claude (notation, formatting, the topics covered so far; Markdown, no PDF).
+A new version is a draft first: its source and its PDF are uploaded, then it is published and gets the next number.
+Every version is kept; only the newest can be taken back (an undo). The server never runs TeX: the PDF comes built.
+
+**Links** (`library/links.py`). A file goes in or out by a signed link that names one file and one direction:
+`GET /library/<token>/<name>` (24 hours), `PUT /library/<token>` (6 hours), on the public port, outside the Mini
+App's initData check (the signature is the check). The key is kept in `kv`, so links survive a restart. Claude Code
+uses them with `curl`; the Mini App opens a PDF by one.
+
 ## 7. LLM: the journal and the daily limit
 
 **The journal (D22).** Every call, failed ones included, is written to `llm_runs`: the time (UTC), the task (`batch`,
@@ -775,7 +800,7 @@ own; Claude is an optional door, not the brain (D53).
     marked destructive so the client asks first, and every change made through the connector goes to a journal
     with an undo in the Mini App: Claude reads chat messages written by strangers. Built as §8.5 (D57), without
     the knowledge base and uploads, which come with stage 14.
-14. **Raw material and the knowledge base.** Two stores per course. *Raw*: an inbox (Haiku was not sure of the
+14. **Raw material and the knowledge base** (§6.8, D58). Two stores per course. *Raw*: an inbox (Haiku was not sure of the
     course) and the course's classes by RUZ date with photos of the board, audio, notes of the owner and classmates,
     slides, links (remembered, not downloaded); each item is new or processed. Sources: study chats (Haiku decides
     during batch parsing), files forwarded to the bot, uploads. *Knowledge base*: the whole course as one LaTeX book,

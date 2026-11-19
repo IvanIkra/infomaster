@@ -264,6 +264,18 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   messages strangers wrote. Secrets, the twin's and HSE App X's logins, the LLM limit and the model prices stay the
   owner's alone.
 
+- **D58. The library: raw material and a knowledge base apart, files moved by signed links, 20.11.2026.** This adds
+  §6.8 and is stage 14 of §11.1. Raw material (photos of the board, recordings, notes of the owner and classmates,
+  slides, sheets, links, texts) is kept for good, per course and per RUZ class; an item whose course is not known
+  waits in the inbox, and Claude sorts it, not the owner. Links are remembered, never fetched. The knowledge base is
+  what Claude makes of it: a book per course, a document per lecture and seminar, and a cheat sheet for Claude
+  (notation, formatting, topics covered); every version is kept, as its source (`.tex`, Markdown for the cheat
+  sheet) and a PDF. The owner reads only the knowledge base; the raw store is material for Claude. Processing is
+  manual, from Claude Code on the owner's machine: it transcribes audio and builds the PDF there, because the server
+  has neither the processor time nor TeX. Files never travel inside a tool's call (a recording is hundreds of
+  megabytes): a tool gives a signed link that expires, and the file goes by `curl`. No backups: the owner accepted
+  losing the library with the disk.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.
