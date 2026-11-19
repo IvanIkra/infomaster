@@ -221,14 +221,15 @@ for a translation; a manual entry or the course disappearing from the source cle
 
 **Sheets that are no PDF of a chat (D59).** A study chat's message or a letter without a PDF of its own may link to
 one: the first such link (at most three are tried) is downloaded before the batch (`collectors/links.py`) and its
-first page goes to the model like a sent PDF's, with the link it came from. Followed: Dropbox (`dl=1`), Google Drive
-files, Google documents and presentations (their PDF export), public Yandex Disk files (by the public API; a folder
-is skipped), plain URLs of a PDF. Not tried: pages behind a login (Google Classroom, Smart LMS). What comes must
-start as a PDF does. A link that cannot be read now is tried at the next runs, three times in all. A letter's first
-PDF attachment is kept when the letter arrives (`files` row of source `mail`), so its batch finds it; a sheet of a
-letter belongs to the mailbox (`chat_id` 0) and names the letter as its source. A message the model cannot answer for
-is tried at the next two runs of its chat before it is skipped, and the System topic's line about it names its PDF,
-so the owner can add the sheet by hand.
+first page goes to the model like a sent PDF's, with the link it came from. Followed: Dropbox (by
+`dl.dropboxusercontent.com`: some resolvers block `www.dropbox.com`), Google Drive files, Google documents and
+presentations (their PDF export), public Yandex Disk files (by the public API; a folder is skipped), plain URLs of a
+PDF. Not tried: pages behind a login (Google Classroom, Smart LMS). What comes must start as a PDF does. A link that
+cannot be read now is tried at the next runs, three times in all. A letter's first PDF attachment is kept when the
+letter arrives (`files` row of source `mail`), so its batch finds it; a sheet of a letter belongs to the mailbox
+(`chat_id` 0) and names the letter as its source. A message the model cannot answer for is tried at the next two runs
+of its chat before it is skipped, and the System topic's line about it names its PDF, so the owner can add the sheet
+by hand.
 
 **Stage 6 details:**
 
@@ -437,8 +438,9 @@ gets none (D55).
   `grades_sheets` is either a Google Sheet or a Dropbox share link to a file:
   `https://www.dropbox.com/scl/fi/<id>/<name>.xlsx?rlkey=…&dl=0`, the older
   `https://www.dropbox.com/s/<id>/<name>.xlsx?dl=0`, or the same paths on `dl.dropboxusercontent.com`. The sheet's id
-  is `dropbox-<id>` (the same file on both hosts is one sheet). The file is downloaded from the link itself with
-  `dl=1` (`rlkey` and the other parameters kept, redirects followed); the title is the file name without the
+  is `dropbox-<id>` (the same file on both hosts is one sheet). The file is downloaded by the link's path on
+  `dl.dropboxusercontent.com` with `dl=1` (`rlkey` and the other parameters kept, redirects followed): some resolvers
+  block `www.dropbox.com`, and `dropbox.com` redirects there. The title is the file name without the
   extension, URL-decoded, or the name in `Content-Disposition` when the answer has one (a renamed file). Everything
   after the download is the same as for a Google Sheet; a deleted or private link answers with an HTML page, which is
   a "not a workbook" error. A folder link (`/scl/fo/`, `/sh/`), a file that is not `.xlsx` and any other Dropbox link

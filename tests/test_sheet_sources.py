@@ -31,7 +31,7 @@ def test_document_links():
                                      "https://drive.google.com/file/d/1AbCdEfGhIjK/view?usp=sharing"]  # three at most
     assert document_links("https://example.org/hw/list3.pdf») и всё") == ["https://example.org/hw/list3.pdf"]
     assert document_links("https://edu.hse.ru/mod/forum/discuss.php?d=1") == []
-    assert direct(DROPBOX) == "https://www.dropbox.com/scl/fi/abc123/Sheet-3.pdf?rlkey=k9&dl=1"
+    assert direct(DROPBOX) == "https://dl.dropboxusercontent.com/scl/fi/abc123/Sheet-3.pdf?rlkey=k9&dl=1"
     assert direct("https://drive.google.com/file/d/1AbCdEfGhIjK/view") == \
         "https://drive.google.com/uc?export=download&id=1AbCdEfGhIjK"
     assert direct("https://docs.google.com/document/d/1AbCdEfGhIjK/edit") == \

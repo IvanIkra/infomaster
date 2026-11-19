@@ -55,13 +55,17 @@ def sheet_id(url: str) -> str:
     return grade_sheet_id(url)
 
 
+DROPBOX_CONTENT = "dl.dropboxusercontent.com"
+
+
 def is_dropbox(sid: str) -> bool:
     return sid.startswith(DROPBOX_PREFIX)
 
 
 def download_url(url: str) -> str:
-    """Where a sheet's xlsx comes from: Google's export, or the Dropbox link itself with dl=1 (rlkey and the other
-    parameters kept; Dropbox redirects to the file)."""
+    """Where a sheet's xlsx comes from: Google's export, or the Dropbox link's file on Dropbox's content host with
+    dl=1 (rlkey and the other parameters kept). Some resolvers block www.dropbox.com, and dropbox.com redirects there:
+    dl.dropboxusercontent.com serves the same shared file directly."""
     sid = sheet_id(url)
     if not is_dropbox(sid):
         return EXPORT_URL.format(id=sid)
@@ -69,7 +73,7 @@ def download_url(url: str) -> str:
     query = parse_qsl(parts.query, keep_blank_values=True)
     query = [(key, "1" if key == "dl" else value) for key, value in query] + \
         ([] if any(key == "dl" for key, _ in query) else [("dl", "1")])
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
+    return urlunsplit(("https", DROPBOX_CONTENT, parts.path, urlencode(query), ""))
 
 
 def file_title(name: str) -> str | None:

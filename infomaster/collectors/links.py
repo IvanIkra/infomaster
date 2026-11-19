@@ -4,7 +4,8 @@ Teachers post a task as a Dropbox link in a Smart LMS letter, a Google Drive or 
 URL of a PDF. A batch of a study chat or of the mailbox asks for the PDF behind the first such link of a message that
 has no file of its own (collectors/files.py), and the model then sees its first page as it sees a sent PDF.
 
-Only public links are followed, each by the address its service gives for a download: Dropbox with `dl=1`, a Drive
+Only public links are followed, each by the address its service gives for a download: Dropbox by its content host
+(dl.dropboxusercontent.com: some resolvers block www.dropbox.com), a Drive
 file by `uc?export=download`, a Google document or presentation by its PDF export, a Yandex Disk file by the public
 API (a folder is not a sheet and is skipped). Pages behind a login (Google Classroom, Smart LMS itself) cannot be
 read and are not tried. What comes must start as a PDF does; anything else is no sheet.
@@ -26,6 +27,7 @@ EXPORTS = {"document": "/document/d/{id}/export?format=pdf", "presentation": "/p
            "spreadsheets": "/spreadsheets/d/{id}/export?format=pdf"}
 LOGIN_HOSTS = ("accounts.google.com", "classroom.google.com", "edu.hse.ru", "lms.hse.ru", "smartedu.hse.ru")
 MAX_LINKS = 3                   # links of one message tried
+DROPBOX_CONTENT = "dl.dropboxusercontent.com"  # serves a shared file without www.dropbox.com
 
 
 class LinkError(RuntimeError):
@@ -63,9 +65,9 @@ def direct(url: str) -> str:
     """The address a PDF is downloaded from. A Yandex Disk link stays as it is: it needs the API (`fetch`)."""
     parts = urlsplit(url)
     host = parts.netloc.lower().removeprefix("www.")
-    if host.endswith("dropbox.com"):
+    if host.endswith("dropbox.com"):  # its content host: www.dropbox.com is blocked by some resolvers
         query = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True) if key != "dl"]
-        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode([*query, ("dl", "1")]), ""))
+        return urlunsplit(("https", DROPBOX_CONTENT, parts.path, urlencode([*query, ("dl", "1")]), ""))
     if host == "drive.google.com":
         found = DRIVE_FILE.match(parts.path)
         file_id = found[1] if found else dict(parse_qsl(parts.query)).get("id", "")

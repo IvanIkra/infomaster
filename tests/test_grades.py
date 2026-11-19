@@ -438,8 +438,8 @@ async def test_poll_reports_errors_without_raising(settings, grades, monkeypatch
 
 def test_dropbox_links():
     assert collector.download_url(SCL) == \
-        "https://www.dropbox.com/scl/fi/a1b2c3d4e5/DM%20grades%202026.xlsx?rlkey=k9x8y7&st=s1&dl=1"
-    assert collector.download_url(OLD) == "https://www.dropbox.com/s/q7w8e9r0/Calculus.xlsx?dl=1"
+        "https://dl.dropboxusercontent.com/scl/fi/a1b2c3d4e5/DM%20grades%202026.xlsx?rlkey=k9x8y7&st=s1&dl=1"
+    assert collector.download_url(OLD) == "https://dl.dropboxusercontent.com/s/q7w8e9r0/Calculus.xlsx?dl=1"
     assert collector.download_url(DIRECT) == "https://dl.dropboxusercontent.com/scl/fi/z5y4x3/Algebra.xlsx?rlkey=r1&dl=1"
     assert collector.download_url(URL) == collector.EXPORT_URL.format(id="abc123")
     assert [collector.sheet_id(url) for url in (SCL, OLD, DIRECT, URL)] == [
@@ -463,7 +463,8 @@ def test_dropbox_links():
 
 @pytest.fixture
 async def dropbox(aiohttp_server, monkeypatch):
-    """Dropbox: a share link redirects to the file; `state["data"]` is what comes, `state["disposition"]` its header."""
+    """Dropbox's content host: a share link redirects to the file; `state["data"]` is what comes,
+    `state["disposition"]` its header."""
     state = {"data": workbook(), "disposition": None, "asked": []}
 
     async def link(request):
@@ -482,7 +483,8 @@ async def dropbox(aiohttp_server, monkeypatch):
     server = await aiohttp_server(app)
     real = collector.download_url
     monkeypatch.setattr(collector, "download_url",
-                        lambda url: real(url).replace("https://www.dropbox.com", f"http://{server.host}:{server.port}"))
+                        lambda url: real(url).replace("https://dl.dropboxusercontent.com",
+                                                      f"http://{server.host}:{server.port}"))
     return state
 
 
