@@ -62,6 +62,9 @@ def attention(ctx: Context, statuses: dict) -> list[str]:
     for sid, sheet in ((statuses.get("grades") or {}).get("sheets") or {}).items():
         if sheet.get("error"):
             found.append(f"A gradebook is not read ({sheet.get('title') or sid}): {sheet['error']}")
+    for url, page in ((statuses.get("wiki") or {}).get("pages") or {}).items():
+        if page.get("error"):
+            found.append(f"A course wiki page is not read ({page.get('title') or url}): {page['error']}")
     if (images := statuses.get("images") or {}).get("error"):
         found.append(f"Reading images failed: {images['error']}")
     level = ctx.app[miniapp.BUDGET_KEY].status().get("level")
@@ -482,7 +485,7 @@ async def setting_change(ctx: Context, names: dict[str, str], args: dict, handle
 
 
 GENERAL_NAMES = {name: name for name in ("batch_hours", "news_ttl_hours", "forum_language", "miniapp_language",
-                                         "about_me")}
+                                         "about_me", "wiki_pages")}
 
 
 async def update_general_settings(ctx: Context, args: dict) -> Output:
@@ -827,13 +830,16 @@ def register(registry: Registry, app) -> None:
     registry.op("_restore_course", restore_course)
     if has[miniapp.SETTINGS_KEY]:
         write("update_general_settings", "Change general settings",
-              "Batches every N hours, how long news lives, the languages of the forum and the Mini App (en, ru), and "
-              "what the student tells the models about themselves (group, subgroup, electives).",
+              "Batches every N hours, how long news lives, the languages of the forum and the Mini App (en, ru), "
+              "what the student tells the models about themselves (group, subgroup, electives), and the course wiki "
+              "pages whose new sheets and homework come as notices in the mailbox (the whole list, addresses).",
               {"batch_hours": {"type": "integer", "enum": list(BATCH_HOURS)},
                "news_ttl_hours": {"type": "integer", "minimum": 1, "maximum": 168},
                "forum_language": {"type": "string", "enum": ["en", "ru"]},
                "miniapp_language": {"type": "string", "enum": ["en", "ru"]},
-               "about_me": {"type": "string", "maxLength": 500}}, update_general_settings, idempotent=True)
+               "about_me": {"type": "string", "maxLength": 500},
+               "wiki_pages": {"type": "array", "items": {"type": "string"}}}, update_general_settings,
+              idempotent=True)
         write("update_images", "Change images read a day",
               "How many images a day Haiku reads in chats with images on; 0 reads none.",
               {"daily": {"type": "integer", "minimum": 0, "maximum": 500}}, update_images, ("daily",),

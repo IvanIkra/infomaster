@@ -22,9 +22,9 @@ Tablo, a home dashboard; both integrations are optional.
   de-duplicated and can be hidden; the same list goes to the forum, the Mini App and the API.
 - **Timetable.** Classes from the RUZ iCal feed plus events and class changes found in chats, published as
   `main.ics` (where one has to be) and `optional.ics` (where one may go), ready for Apple or Google Calendar.
-- **Problem sheets.** PDFs from chats, letters' PDF attachments and public links (Dropbox, Google Drive, Yandex
-  Disk) are downloaded on demand, read within a page limit and versioned; a new version edits the old forum message
-  and says what changed.
+- **Problem sheets.** PDFs from chats, letters' PDF attachments, public links (Dropbox, Google Drive, Yandex Disk)
+  and course wiki pages are downloaded on demand, read within a page limit and versioned; a new version edits the old
+  forum message and says what changed.
 - **Grades.** Teachers' Google Sheets and Dropbox .xlsx links are read as xlsx; Haiku maps each tab's header once (cached with the header),
   grades are normalised to a 0–10 scale; the new and changed ones are in the Mini App and the API.
 - **Quiet by default.** In the forum only new and moved deadlines, deadline reminders and source failures notify;
@@ -149,13 +149,13 @@ next to Tablo.
 
 The second round (§11.1) has begun. Stage 11, "Quiet", is done: only deadlines, their reminders and source failures
 notify; grades no longer go to the forum, the separate messages about important news are gone, and the summaries of
-stage 7 are removed. A sheet without a due date is due at the next seminar, and sheets behind links and in letters
-are found (stage 12), grade sheets may be Dropbox links (stage 15, first half), and the MCP connector (stage 13) is
-done and covered by tests; it is connected to claude.ai. Setting it up: [docs/setup.md](docs/setup.md), "Claude
-connector". The library (stage 14, D58) keeps raw material per course and class (from study chats, sheets, files sent
-to the bot and Mini App uploads) and the knowledge base Claude makes of it (LaTeX and PDF per class, a book and a
-cheat sheet per course, every version kept); files move by signed links. It is covered by tests, not yet tried on
-live data.
+stage 7 are removed. A sheet without a due date is due at the next seminar, and sheets behind links, in letters and
+on course wiki pages are found (stages 12 and 15), grade sheets may be Dropbox links (stage 15, first half), and the
+MCP connector (stage 13) is done and covered by tests; it is connected to claude.ai. Setting it up:
+[docs/setup.md](docs/setup.md), "Claude connector". The library (stage 14, D58) keeps raw material per course and
+class (from study chats, sheets, files sent to the bot and Mini App uploads) and the knowledge base Claude makes of
+it (LaTeX and PDF per class, a book and a cheat sheet per course, every version kept); files move by signed links. It
+is covered by tests, not yet tried on live data.
 
 Not yet verified on live Telegram, Haiku and Google Sheets: problem sheets, grades, images, the reworked Mini App,
 the language switch, the silent posts of stage 11 and the assumed due dates. Text length is checked in characters rather than by the rendered

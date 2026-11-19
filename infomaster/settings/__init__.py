@@ -163,6 +163,22 @@ def _grade_sheets(value: Any) -> list[dict]:
     return sheets
 
 
+WIKI_PAGES = 10
+
+
+def _wiki_pages(value: Any) -> list[str]:
+    """Addresses of course pages of a MediaWiki (D60): http(s), each once."""
+    if not isinstance(value, list) or len(value) > WIKI_PAGES or not all(isinstance(v, str) for v in value):
+        raise SettingsError(f"expected a list of at most {WIKI_PAGES} page addresses")
+    pages = []
+    for url in (v.strip() for v in value):
+        if not re.match(r"^https?://[^/\s]+/\S+$", url):
+            raise SettingsError(f"not a wiki page's address: {url!r}")
+        if url not in pages:
+            pages.append(url)
+    return pages
+
+
 ABOUT_ME_CHARS = 500  # what the student tells the models about themselves
 CHAT_NOTE_CHARS = 300
 
@@ -219,6 +235,8 @@ SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     # What the student tells the batches about themselves (D52): group, subgroup, English group,
     # electives, so that what is meant for others does not count.
     "about_me": ("", _text(ABOUT_ME_CHARS)),
+    # Course pages of the faculty's wiki (D60): their new sheets and homework come as notices in the mailbox.
+    "wiki_pages": ([], _wiki_pages),
 }
 
 

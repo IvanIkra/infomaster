@@ -2537,7 +2537,13 @@
             "Группа 3, подгруппа 2, английский B2 — группа 5, майнор: анализ данных")},
           (value) => act("api/general", "PATCH", {about_me: value}))],
           L("The batches see it: what is meant for other groups counts for little.",
-            "Это видит разбор пачек: то, что для других групп, идёт как неважное."))];
+            "Это видит разбор пачек: то, что для других групп, идёт как неважное.")),
+        section(L("Course wiki pages", "Страницы вики курсов"), [proseInput((data.wiki_pages || []).join("\n"),
+          {placeholder: "https://wiki.cs.hse.ru/…"},
+          (value) => act("api/general", "PATCH", {wiki_pages: value.split("\n").map((s) => s.trim())
+            .filter(Boolean)}))],
+          L("One address a line. New sheets and homework on these pages come as letters «Wiki · …».",
+            "По адресу в строке. Новые листки и ДЗ с этих страниц приходят письмами «Wiki · …»."))];
     }
 
     // --- the dictionary ------------------------------------------------------------------------------
@@ -2756,7 +2762,7 @@
       document.documentElement.lang = lang;
       drawTabbar();
       const event = /^ev-[0-9a-f]{12}$/.test(screen || "") ? screen.slice(3) : null;  // a link in the calendar
-      const told = /^m-(-?\d+)-(\d+)$/.exec(screen || "");  // a source message's page (D50)
+      const told = /^m-(-?\d+)-(-?\d+)$/.exec(screen || "");  // a source message's page (D50); a wiki notice's is < 0
       const [tab, inner] = event ? ["schedule"] : told ? ["deadlines", () => messagePage(told[1], told[2])]
         : SCREENS[screen] || ["deadlines"];
       nav.tab = tab;

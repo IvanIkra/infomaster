@@ -137,7 +137,9 @@ MAILBOX_CHAT = {"id": MAILBOX, "title": "University mailbox", "kind": "mail", "u
 MAILBOX_SETTINGS = {**{name: default for name, (default, _) in CHAT_SPECS.items()}, "enabled": True, "study": True}
 MAILBOX_HEADER = ("Chat: the student's university mailbox (@edu.hse.ru, study): letters of teachers, the study office, "
                   "university services and group mailing lists, each with its sender and subject; every letter counts "
-                  "as study")
+                  "as study. Letters from \"Course wiki\" are notices of a course's wiki page: a new or changed sheet "
+                  "or homework with its link and, from a table, its row (due dates by group: take the student's "
+                  "group only)")
 
 
 @dataclass

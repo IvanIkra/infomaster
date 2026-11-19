@@ -285,6 +285,14 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   chat that is not study after a pause of the twin, a download Telegram refused once, and an answer of the model that
   failed once. Downloads and answers are tried three times before they are given up.
 
+- **D60. A course wiki is read as notices in the mailbox, 20.11.2026.** This adds a source to §5.2 and finishes stage
+  15 of §11.1. The discrete mathematics course posts its sheets and homework only on its wiki page, with due dates by
+  group in a table. Instead of a parser of its own for every course, a new or changed item of the page becomes a
+  letter from "Course wiki" with the link and the table row, and the batches read it like any letter: the PDF behind
+  the link is fetched (D59), the model finds the sheet and takes the due date of the student's group from `about_me`
+  (D52). So the group is configured nowhere new, and the sheets, deadlines, library and forum need no change. Pages
+  are listed in the `wiki_pages` setting (Mini App, «Batches and news»; the connector).
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

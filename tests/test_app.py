@@ -72,7 +72,7 @@ async def sources_reach_the_ports(service, aiohttp_client):
     """run() hands the service's sources to both ports: the Mini App's «Расписание» reads "ruz" by name, its
     «HSE App X» reads "hseapp"."""
     assert set(service.sources) == {"telegram", "batches", "ruz", "hseapp", "mail", "sheets", "grades",
-                                   "images"}
+                                   "images", "wiki"}
     assert service.sources["ruz"]() == service._ruz_status()
     client = await aiohttp_client(api.create_app(service.env, service.budget, service.sources, service.calendar,
                                                  service.merged))

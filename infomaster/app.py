@@ -17,6 +17,7 @@ from .collectors.links import fetch as fetch_linked_pdf
 from .collectors.mail import Mail
 from .collectors.ruz import Diff, Ruz
 from .collectors.telegram import Twin
+from .collectors.wiki import Wiki
 from .config import Env
 from .connector import Connector
 from .i18n import Phrase
@@ -102,6 +103,8 @@ class Service:
         self.hseapp_deadlines = HseAppDeadlines(self.store, self.subjects, self.llm)
         self.mail = Mail(env, self.store, self.settings, self.inbox)
         self.mail.files = self.files  # a letter's PDF attachment is kept when it comes (D59)
+        # Course wiki pages (D60): their new sheets and homework come as notices in the mailbox.
+        self.wiki = Wiki(self.store, self.settings, self.inbox)
         # The one list of deadlines (§5.5): the API for Tablo and HA, the «Дедлайны» topic and the Mini App read it.
         self.merged = DeadlineList(self.store, self.deadlines, self.hseapp_deadlines, self.subjects)
         self.deadline_topic = DeadlineTopic(self.forum, self.store, self.inbox, self.merged, env.owner_id)
@@ -113,7 +116,7 @@ class Service:
         # «HSE App X» one "hseapp", the «Чаты» one "images").
         self.sources = {"telegram": self.twin.status, "batches": self.batches.status, "ruz": self._ruz_status,
                         "hseapp": self._hseapp_status, "mail": self.mail.status, "sheets": self.sheets.status,
-                        "grades": self._grades_status,
+                        "grades": self._grades_status, "wiki": self.wiki.status,
                         "images": self.images.status}
         # The library (D58): raw material of the courses and the knowledge base Claude makes of it; files by links.
         self.library = Library(self.store, data_dir)
@@ -134,6 +137,7 @@ class Service:
         self.batches.notify = self._to_system
         self.batches.mail = self.mail.configured
         self.mail.notify = self._to_system
+        self.wiki.notify = self._to_system
         self.ruz.on_poll = self._after_poll
         self.ruz.notify = self._to_system
         self.schedule.on_midterms = self._publish_midterms
@@ -267,6 +271,7 @@ class Service:
             tasks.append(asyncio.create_task(self.ruz.run()))
             tasks.append(asyncio.create_task(self.hseapp.run()))
             tasks.append(asyncio.create_task(self.mail.run()))
+            tasks.append(asyncio.create_task(self.wiki.run()))
             tasks.append(asyncio.create_task(self.deadline_topic.run()))
             tasks.append(asyncio.create_task(self.reminders.run()))
             tasks.append(asyncio.create_task(self.grade_sheets.run()))

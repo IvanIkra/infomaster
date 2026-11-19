@@ -144,6 +144,18 @@ The logic moves over from Tablo unchanged:
 | HSE App X | §5.1 | the login page moves to the Mini App, the callback goes through Funnel |
 | RUZ iCal | §4.1–4.2 | the data becomes part of our feed (§6.5) instead of being served as is |
 | Google Sheets | §3 | unchanged; Dropbox links to `.xlsx` files are read the same way (§6.7) |
+| Course wiki | — | new (D60): course pages of a MediaWiki, listed in `wiki_pages` |
+
+**Course wikis (D60).** Some courses post sheets and homework only on their wiki page (the faculty's MediaWiki): a
+list of links to PDFs on Google Drive and a table of due dates by group. Every 3 hours the page's wikitext is read
+through the wiki's API (`action=parse`), only when its revision changed (`collectors/wiki.py`). Its items are the links
+to files outside HTML comments, each with its section and, in a table, its row under the column heads. A new item, or
+one whose row changed, becomes a notice in the mailbox: a letter from "Course wiki", subject "Wiki · page: item", with
+the link and the row; its msg_id is negative, counting down, so it never meets a letter's UID. The batches read it as
+a letter: the PDF behind the link is fetched (D59), the model decides whether it is a sheet and takes the due date of
+the student's group, which it knows from `about_me` (D52). The first read is a baseline: only the last item of each
+section of tasks becomes a notice. A page failing for a day is told to the System topic once. The wiki refuses
+curl's user agent; the service sends its own.
 
 **Stage 5 details (HSE App X):**
 
@@ -872,7 +884,8 @@ own; Claude is an optional door, not the brain (D53).
     solved), and a cheat sheet for Claude (notation, formatting, topics covered); every version is kept. Processing
     is manual, from Claude Code on the owner's machine through the connector: it sorts the inbox, transcribes audio,
     writes the LaTeX, builds the PDF and uploads both. The server neither transcribes nor runs TeX.
-15. **New sources.** Homework from the discrete mathematics wiki; grade sheets shared as Dropbox links.
+15. **New sources** (done, D54, D60). Sheets and homework from course wiki pages; grade sheets shared as Dropbox
+    links.
 16. **An app instead of the forum.** The Mini App becomes a home-screen web app with its own login and Web Push
     for deadlines, reminders and failures. Then the forum is switched off; the bot stays to receive forwarded files.
 

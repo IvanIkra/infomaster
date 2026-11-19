@@ -80,7 +80,7 @@ REMINDERS_KEY = web.AppKey("reminders", DeadlineReminders)
 GRADES_KEY = web.AppKey("grades", Grades)
 TWIN_KEY = web.AppKey("twin", Twin)
 GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "forum_language", "miniapp_language",
-           "about_me")  # of no other screen
+           "about_me", "wiki_pages")  # of no other screen
 GRADE_SETTINGS = {"student": "grades_student", "sheets": "grades_sheets", "window_days": "grades_window_days"}
 PDF_LIMITS = ("pdf_pages", "pdf_tokens")
 TITLE_LIMIT = 200  # characters of an own deadline's title
@@ -795,8 +795,8 @@ async def general(request: web.Request) -> web.Response:
 
 
 async def update_general(request: web.Request) -> web.Response:
-    """Any of batch_hours, news_ttl_hours, llm_prices, the two languages and about_me; all are checked before any
-    is saved."""
+    """Any of batch_hours, news_ttl_hours, llm_prices, the two languages, about_me and wiki_pages; all are checked
+    before any is saved."""
     values = await _json(request)
     if not values or set(values) - set(GENERAL):
         raise web.HTTPBadRequest(text=f"expected some of {', '.join(GENERAL)}")
