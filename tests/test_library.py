@@ -200,3 +200,29 @@ async def test_links(library, http):
     response = await client.get(links.version(published, "pdf").removeprefix("https://example.test"))
     assert await response.read() == b"%PDF-book"
     assert "Calculus v1.pdf" in response.headers["Content-Disposition"]
+
+
+async def test_a_renamed_course_is_one_course(library):
+    """RUZ's feed went from Russian to English: the old classes keep the old name, and both are one course."""
+    add_class(library.store, "calc-0", "Математический анализ", "2026-10-07T09:30:00", "Семинар")
+    subjects = {"Математический анализ": "Calculus", "Calculus": "Calculus", "Матан": "Calculus"}
+    library.same_course = lambda a, b: bool(a and b and subjects.get(a, a) == subjects.get(b, b))
+    assert library.course("Математический анализ") == "Calculus" and library.course("Матан") == "Calculus"
+    assert sorted(library.names("Матан")) == ["Calculus", "Математический анализ"]
+    item = library.add("text", source="miniapp", text="old notes", course="Математический анализ", class_uid="calc-0")
+    assert library.get(item)["course"] == "Calculus"
+    assert "calc-0" in [c["uid"] for c in library.classes("Calculus")]
+    assert [c["course"] for c in library.courses()].count("Calculus") == 1
+    assert "Математический анализ" not in [c["course"] for c in library.courses()]
+    assert library.find_class("Матан", dt.datetime(2026, 10, 7, 10, 0, tzinfo=clock.TZ))["uid"] == "calc-0"
+    draft = library.draft("Математический анализ", "seminar", class_uid="calc-0")
+    assert draft["course"] == "Calculus"
+
+
+def test_a_sheet_finds_its_seminar(library):
+    """A sheet sent the night before its seminar belongs to that seminar, not to the lecture before it."""
+    add_class(library.store, "calc-lec", "Calculus", "2026-11-17T14:40:00", "Лекция")
+    night = dt.datetime(2026, 11, 19, 0, 25, tzinfo=clock.TZ)
+    assert library.find_class("Calculus", night, seminar=True)["uid"] == "calc-2"
+    assert library.find_class("Calculus", night)["uid"] == "calc-lec"
+    assert library.find_class("Algebra", night, seminar=True)["uid"] == "alg-1"  # no seminar: the last class

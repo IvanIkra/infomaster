@@ -177,18 +177,27 @@ class Library:
     # --- courses and classes -------------------------------------------------------------------
 
     def course(self, name: str | None) -> str | None:
-        """The timetable's name of a course, if it has one; the name as given otherwise; None for none."""
+        """The timetable's name of a course, if it has one; the name as given otherwise; None for none. A course RUZ
+        renamed (its feed went from Russian to English) has several names in `classes`: the newest one wins."""
         name = (name or "").strip()
         if not name:
             return None
+        found = [row["subject"] for row in self.db.execute(
+            "select subject, max(start) last from classes group by subject order by last desc")
+            if row["subject"] == name or self.same_course(name, row["subject"])]
+        return found[0] if found else name
+
+    def names(self, course: str | None) -> list[str]:
+        """Every name of the course in the timetable: its classes under an old name are its classes too."""
+        course = self.course(course)
+        if course is None:
+            return []
         subjects = [row["subject"] for row in self.db.execute("select distinct subject from classes")]
-        if name in subjects:
-            return name
-        return next((subject for subject in subjects if self.same_course(name, subject)), name)
+        return [subject for subject in subjects if self.course(subject) == course] or [course]
 
     def courses(self) -> list[dict]:
         """Every course of the timetable and of the library, with the counts of its material and documents."""
-        names = {row["subject"] for row in
+        names = {self.course(row["subject"]) for row in
                  self.db.execute("select distinct subject from classes where gone_at is null")}
         names |= {row["course"] for row in self.db.execute(
             "select distinct course from materials where course is not null and removed_at is null")}
@@ -211,8 +220,11 @@ class Library:
         """The course's classes of RUZ that have started (by `until`, now by default), the last first, each with its
         kind (lecture, seminar or "") and its counts of material."""
         until_iso = clock.local_iso(until or self.now())
-        rows = self.db.execute("select uid, subject, start, end, kind, cancelled from classes where subject = ? "
-                               "and gone_at is null and start <= ? order by start desc", (course, until_iso))
+        names = self.names(course)
+        course = self.course(course)
+        rows = self.db.execute("select uid, subject, start, end, kind, cancelled from classes where subject in "
+                               f"({', '.join('?' * len(names))}) and gone_at is null and start <= ? "
+                               "order by start desc", (*names, until_iso))
         counts = {row["class_uid"]: dict(row) for row in self.db.execute(
             "select class_uid, count(*) items, sum(status = 'new') new from materials where course = ? and "
             "removed_at is null and status != 'uploading' and class_uid is not null group by class_uid", (course,))}
@@ -228,18 +240,30 @@ class Library:
         if not uid:
             return None
         row = self.db.execute("select uid, subject, start, end, kind from classes where uid = ?", (uid,)).fetchone()
-        return None if row is None else {**dict(row), "kind": class_kind(row["kind"]), "ruz_kind": row["kind"]}
+        return None if row is None else {**dict(row), "subject": self.course(row["subject"]),
+                                         "kind": class_kind(row["kind"]), "ruz_kind": row["kind"]}
 
-    def find_class(self, course: str | None, at: dt.datetime) -> dict | None:
+    def find_class(self, course: str | None, at: dt.datetime, seminar: bool = False) -> dict | None:
         """The class an item sent at `at` belongs to: the course's last class that started by a little after `at`,
-        within a week. None for an unknown course or a course without classes then."""
-        course = self.course(course)
-        if course is None:
+        within a week. With `seminar`, the course's seminar nearest to `at` either way, within a week: a sheet comes
+        the night before its seminar or a day after it. None for an unknown course or a course without classes then."""
+        names = self.names(course)
+        if not names:
             return None
+        if seminar:
+            rows = self.db.execute(
+                f"select uid, start, kind from classes where subject in ({', '.join('?' * len(names))}) and "
+                "gone_at is null and cancelled = 0 and start <= ? and start >= ? and length(start) > 10",
+                (*names, clock.local_iso(at + CLASS_AFTER), clock.local_iso(at - CLASS_AFTER)))
+            moment = at.astimezone(clock.TZ).replace(tzinfo=None)
+            seminars = [row for row in rows if class_kind(row["kind"]) == "seminar"]
+            if seminars:
+                nearest = min(seminars, key=lambda row: abs(dt.datetime.fromisoformat(row["start"]) - moment))
+                return self.class_of(nearest["uid"])
         row = self.db.execute(
-            "select uid from classes where subject = ? and gone_at is null and cancelled = 0 and start <= ? and "
-            "start >= ? and length(start) > 10 order by start desc limit 1",
-            (course, clock.local_iso(at + CLASS_BEFORE), clock.local_iso(at - CLASS_AFTER))).fetchone()
+            f"select uid from classes where subject in ({', '.join('?' * len(names))}) and gone_at is null and "
+            "cancelled = 0 and start <= ? and start >= ? and length(start) > 10 order by start desc limit 1",
+            (*names, clock.local_iso(at + CLASS_BEFORE), clock.local_iso(at - CLASS_AFTER))).fetchone()
         return self.class_of(row["uid"]) if row else None
 
     # --- materials -----------------------------------------------------------------------------

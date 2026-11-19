@@ -320,7 +320,7 @@ class Sheets:
         return sheet
 
     async def _shelve(self, sheet: dict) -> int | None:
-        """The sheet's PDF into the library (D58), kind `sheet`, at the class it was handed out at; once per file, so
+        """The sheet's PDF into the library (D58), kind `sheet`, at its seminar (the nearest one); once per file, so
         a new version in the same message is taken too. Its item's id, or None when it is there already."""
         if self.library.from_origin("sheet", sheet["chat_id"], sheet["msg_id"], sheet["sha256"]) is not None:
             return None
@@ -328,7 +328,7 @@ class Sheets:
         if path is None:
             return None
         sent = dt.datetime.fromisoformat(sheet["sent_at"]).replace(tzinfo=clock.TZ) if sheet["sent_at"] else None
-        found = self.library.find_class(sheet["course"], sent) if sheet["course"] and sent else None
+        found = self.library.find_class(sheet["course"], sent, seminar=True) if sheet["course"] and sent else None
         author = "owner" if sheet["chat_id"] == OWN_CHAT else \
             (self.inbox.message(sheet["chat_id"], sheet["msg_id"]) or {}).get("sender_name") or ""
 
