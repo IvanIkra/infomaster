@@ -1,10 +1,11 @@
 """The «Sheets» topic, «Листочки» in Russian (§6.3, §8.3, D14): every sheet as its file, with a caption.
 
-The caption: the course (its English title) and the number, the due date, the message it came from with a link, the
-course's hashtag (#Calc), and with `pdf_content` the model's summary. A newer version replaces the file and the
-caption in the first version's message (the post stays where it is, with its replies) and answers it «Sheet
-updated», with what changed when the chat's PDFs are read. If that message is gone, the version is posted anew. The
-captions are in the forum's language (D41), and so are the summary and the changes the model wrote for them.
+The caption: the course (its English title) and the number, the due date (marked when it is only assumed, the next
+seminar, §6.3), the message it came from with a link, the course's hashtag (#Calc), and with `pdf_content` the
+model's summary. A newer version replaces the file and the caption in the first version's message (the post stays
+where it is, with its replies) and answers it «Sheet updated», with what changed when the chat's PDFs are read. If
+that message is gone, the version is posted anew. The captions are in the forum's language (D41), and so are the
+summary and the changes the model wrote for them.
 
 The sheets are posted silently (D55) after every batch run, oldest first; one that fails stays waiting for the next
 run. The owner's joining of two sheets in the Mini App goes through here too, under the same lock: the newer sheet's
@@ -47,7 +48,8 @@ class SheetTopic:
         self._lock = asyncio.Lock()
 
     async def publish(self) -> None:
-        """After every batch run: the sheets waiting for the forum."""
+        """After every batch run and RUZ poll: the sheets waiting for the forum, and the captions of those whose
+        assumed date followed the timetable (§6.3)."""
         async with self._lock:
             for waiting in self.sheets.waiting():
                 try:
@@ -56,6 +58,15 @@ class SheetTopic:
                         await self._post(sheet)
                 except Exception:
                     log.exception("posting sheet %d failed, it waits for the next run", waiting["id"])
+            stale, self.sheets.stale = self.sheets.stale, set()
+            for sheet_id in sorted(stale):
+                sheet = self.sheets.get(sheet_id)
+                first = self.sheets.first(sheet) if sheet is not None else None
+                if first is not None and first["post_id"] is not None:
+                    try:
+                        await self.forum.edit(first["post_id"], self.caption(sheet, first), html=True)
+                    except Exception:
+                        log.exception("the caption of sheet %d was not updated", sheet_id)
 
     async def join(self, sheet_id: int, previous_id: int) -> None:
         """The Mini App: a sheet posted as new is a newer version of another. ValueError when it cannot be."""
@@ -132,7 +143,11 @@ class SheetTopic:
             what += t(" · sheet ", " · листок ") + html.escape(sheet["number"])
         version = t(f" (version {sheet['version']})", f" (версия {sheet['version']})")
         lines = [f"📄 <b>{what}</b>" + (version if sheet["version"] > 1 else "")]
-        if sheet["due"]:
+        if sheet["due"] and sheet["due_assumed"]:  # the next seminar (§6.3)
+            at = f" {sheet['due_at'][11:16]}" if sheet["due_at"] else ""
+            lines.append(t("Due: ≈ ", "Срок: ≈ ") + day(sheet["due"], self.forum.lang) + at
+                         + t(" (assumed: the next seminar)", " (предположительно: следующий семинар)"))
+        elif sheet["due"]:
             lines.append(t("Due: ", "Срок: ") + day(sheet["due"], self.forum.lang))
         tag = hashtag(subjects.abbr(sheet["course"]))
         lines.append(" · ".join(part for part in (self._source(sheet), tag) if part))

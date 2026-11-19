@@ -245,6 +245,34 @@ for a translation; a manual entry or the course disappearing from the source cle
 - The reading limits are the common settings `pdf_pages` and `pdf_tokens`, edited on the Sheets screen (there was no
   common settings screen yet).
 
+**The assumed due date (stage 12, §11.1):**
+
+- A sheet often gives no due date. Then it is due before the next seminar of its course: the first class of the
+  course in the timetable as the feeds show it (RUZ with the chats' and the owner's corrections, cancelled classes
+  skipped) that starts after the sheet's message (an own sheet: its upload) and within 21 days, and whose type is
+  *Seminar* (seminars, practical classes, tutorials: `type_of`). A course with no seminar in the timetable at all takes
+  its next class of any kind except an interim assessment or an exam. The course is matched as elsewhere: the same
+  name, or the same `title` or `abbr` in the dictionary («Математический анализ» of a chat is *Calculus* of RUZ).
+  Nothing found: no date, as before.
+- The date is the class's day (deadlines are dates); the sheet also keeps the class's start (`sheets.due_at`) and
+  shows it. The sheet is marked `due_assumed`, and its date becomes a deadline of its own: source `tg`, the sheet's
+  message, `sheet_id`, `assumed`, the label `<abbr> sheet <number>` (renamed once the dictionary knows the course).
+  Both are marked "≈ … (assumed)" in the forum's or the Mini App's language: the caption in the Sheets topic, the
+  Deadlines pin, its messages and reminders, the deadline's row and card and the sheet's card in the Mini App;
+  `GET /api/deadlines` has `assumed`.
+- The assumed date follows the timetable while the class has not started: it is synced with the Midterms after every
+  RUZ poll, batch run, correction by the owner and manual dictionary change (`Schedule.followers`). A moved class
+  moves the deadline (a move in the Deadlines topic), a cancelled one gives the next seminar, none left withdraws it;
+  the caption is edited. A deadline the owner hid stays as it is.
+- A real date wins, and the mark goes: the first page or the message (the batch gives the sheet's `due`), the sheet's
+  pages (`pdf_content`), a later message (the batch model sees the deadline marked "assumed" and moves it, or gives
+  the same work with a date), or the owner (the sheet's due date in the Mini App, or the date of the deadline itself:
+  with the same title and list it stays the chat's deadline and moves; otherwise it becomes an own copy as usual).
+  Clearing the sheet's date in the Mini App leaves it without one.
+- A new version of a sheet takes the older one's assumed deadline over (its message, so deleting the older message
+  does not withdraw it), and its own date is found the same way, from the new message's time. Deleting the message
+  withdraws the deadline, and the sheet stops assuming. Sheets saved before stage 12 are not assumed.
+
 ### 6.4 Deadlines
 
 - **Sources in order of reliability:** `hseapp` → `ical` (midterms) → `mail` → `tg` (chats, channels, PDFs) →
@@ -284,6 +312,9 @@ for a translation; a manual entry or the course disappearing from the source cle
 - A manual dictionary correction in the Mini App renames `<abbr> Midterm` at once, without waiting for a RUZ poll.
 - The pin is rebuilt after every batch run, RUZ and HSE App X poll, owner action, and at midnight ("today" and
   "tomorrow" shift).
+- A sheet without a due date has an assumed one, its course's next seminar (§6.3, stage 12): a `tg` row with
+  `assumed` set, marked "≈ … (assumed)" in the pin, the messages, the reminders and the Mini App, and `assumed: true`
+  in `GET /api/deadlines`. It follows its class like a Midterm and gives way to a real date.
 
 ### 6.5 Timetable and the iCal feed
 
@@ -460,7 +491,7 @@ Where possible the answers repeat the format of Tablo's current API (§8), so th
 | Method and path | What it serves |
 |---|---|
 | `GET /calendar/<secret>/main.ics`, `optional.ics`, `tablo.ics` | the feeds (§6.5) |
-| `GET /api/deadlines` | the final list after merging and hiding, in screen order (§5.6), in Tablo's current format |
+| `GET /api/deadlines` | the final list after merging and hiding, in screen order (§5.6), in Tablo's current format, plus `assumed` (§6.3) |
 | `GET /api/news` | live news: `id`, `source`, `study`, `posted_at`, `full`, `short`, `importance` (replaced items are not served) |
 | `GET /api/grades` | new grades within the window: `key`, `label`, `value`, `bonus`, `seen_at`, newest first |
 | `GET /api/status` | per source: `ok_at`, `error`, plus `hseapp.login_needed`, today's LLM spending and the limit |

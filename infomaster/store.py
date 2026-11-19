@@ -96,7 +96,8 @@ create table if not exists deadlines (  -- deadlines from the chats, mail and RU
     moved_by integer,           -- the deadline with the new date
     gone_at text,
     created_at text not null,
-    sheet_id integer            -- read in the pages of a sheet: an edit of its message does not withdraw it
+    sheet_id integer,           -- read in the pages of a sheet: an edit of its message does not withdraw it
+    assumed integer not null default 0  -- a sheet's due date the service assumed: its course's next seminar (§6.3)
 );
 create index if not exists deadlines_due on deadlines(due);
 create table if not exists own_deadlines (     -- the owner's own, from HA's to-do lists or the Mini App (§5.4, D8)
@@ -197,6 +198,9 @@ create table if not exists sheets (     -- листочки (§6.3, D14): kept f
     course text,                -- as the model names it, a name of the dictionary
     number text not null default '',
     due text,                   -- YYYY-MM-DD
+    due_assumed integer not null default 0,  -- none was given: `due` is the next seminar's, if any (§6.3)
+    due_at text,                -- of an assumed date: the start of that seminar
+    sent_at text,               -- the message's time (an own sheet's upload): the next seminar comes after it
     status text not null,       -- new: waits for the forum; posted; failed (the file was lost)
     error text,
     text text,                  -- its pages read locally, for the diff of a newer version; null until prepared
@@ -263,6 +267,10 @@ UPGRADES = (
     ("files", "kind", "text not null default 'pdf'"),
     ("events", "copy_of", "text"),  # an own copy of a chat's event: the uid of the one it stands in for (D49)
     ("files", "reading", "text"),
+    ("deadlines", "assumed", "integer not null default 0"),  # an assumed due date of a sheet (§6.3)
+    ("sheets", "due_assumed", "integer not null default 0"),
+    ("sheets", "due_at", "text"),
+    ("sheets", "sent_at", "text"),
 )
 
 

@@ -120,6 +120,10 @@ class Service:
         self.hseapp.notify = self._hseapp_notice
         self.hseapp_deadlines.on_change = self._hseapp_changed
         self.merged.on_change = self.deadline_topic.changed
+        # A sheet without a due date is due before its course's next seminar, and follows the timetable (§6.3).
+        self.sheets.schedule = self.schedule
+        self.sheets.on_change = self.deadline_topic.changed
+        self.schedule.followers.append(self.sheets.follow)
         self.grade_sheets.on_sheet = self.grades.apply
         self.grade_sheets.notify = self._to_system
         self.grades.wake = self.grade_sheets.wake
@@ -168,11 +172,19 @@ class Service:
             await self.timetable.publish_ruz(diff)
         except Exception:
             log.exception("posting the RUZ changes failed")
+        try:
+            await self.sheet_topic.publish()  # assumed due dates that followed their seminars (§6.3)
+        except Exception:
+            log.exception("updating the sheets failed")
         await self._refresh_deadlines()  # renamed Midterms too: they only edit the list
 
     async def _publish_midterms(self, midterms: MidtermChanges) -> None:
         """Schedule.on_midterms: the owner's hiding of a correction moved a Midterm. The news list is the batches' to
-        rebuild, so this task never races them over it."""
+        rebuild, so this task never races them over it. The sheets whose assumed date moved get their captions."""
+        try:
+            await self.sheet_topic.publish()
+        except Exception:
+            log.exception("updating the sheets failed")
         await self._refresh_deadlines()
 
     async def _hseapp_changed(self, first: bool) -> None:
@@ -183,7 +195,7 @@ class Service:
 
     def _dictionary_changed(self) -> None:
         """Subjects.on_manual: the Midterms take the new abbr now, not at the next RUZ poll; the list follows."""
-        self.schedule.sync_midterms()
+        self.schedule.sync_deadlines()
         self.forum.spawn(self._refresh_deadlines())
 
     async def _refresh_deadlines(self) -> None:

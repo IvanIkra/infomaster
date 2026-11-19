@@ -4,8 +4,9 @@ list of them all (§5.5).
 
 A deadline is in force until a later one moves it (`moved_by`) or its messages are deleted or edited into something
 else (`gone_at`); a Midterm follows its class. Only deadlines from chats and mail are shown to the batch model and
-moved by it: the others are moved by their own source (§6.5). Writing methods do not commit: call them inside
-`with store.db`.
+moved by it: the others are moved by their own source (§6.5). A sheet without a due date gets one assumed, the next
+seminar of its course (`assumed`, processing/sheets.py): a real date moves it. Writing methods do not commit: call them
+inside `with store.db`.
 """
 
 import datetime as dt
@@ -79,13 +80,24 @@ class Deadlines:
         return [_decode(row) for row in rows]
 
     def add(self, deadline: dict, at: dt.datetime) -> int:
-        """`deadline`: source, chat_id, msg_ids, course, label, due; sheet_id for one read in a sheet's pages."""
+        """`deadline`: source, chat_id, msg_ids, course, label, due; sheet_id for one read in a sheet's pages or
+        assumed for it (`assumed`)."""
         cursor = self.db.execute(
-            "insert into deadlines(source, chat_id, msg_ids, course, label, due, created_at, sheet_id) "
-            "values(?, ?, ?, ?, ?, ?, ?, ?)",
+            "insert into deadlines(source, chat_id, msg_ids, course, label, due, created_at, sheet_id, assumed) "
+            "values(?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (deadline["source"], deadline["chat_id"], json.dumps(deadline["msg_ids"]), deadline["course"] or None,
-             deadline["label"], deadline["due"], clock.local_iso(at), deadline.get("sheet_id")))
+             deadline["label"], deadline["due"], clock.local_iso(at), deadline.get("sheet_id"),
+             int(bool(deadline.get("assumed")))))
         return cursor.lastrowid
+
+    def of_sheet(self, sheet_id: int) -> list[dict]:
+        """Every row of a sheet, read in its pages or assumed for it, in force or not, oldest first."""
+        rows = self.db.execute("select * from deadlines where sheet_id = ? order by id", (sheet_id,))
+        return [_decode(row) for row in rows]
+
+    def confirm(self, deadline_id: int) -> None:
+        """An assumed date told for real (the same work on the same date): no longer assumed."""
+        self.db.execute("update deadlines set assumed = 0 where id = ?", (deadline_id,))
 
     def move(self, old_id: int, new_id: int) -> bool:
         cursor = self.db.execute("update deadlines set moved_by = ? where id = ? and moved_by is null "

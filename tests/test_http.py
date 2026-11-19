@@ -390,7 +390,8 @@ async def test_deadlines_api(aiohttp_client, budget, schedule, merged):
     items = (await resp.json())["items"]
     assert [(i["title"], i["source"], i["overdue"]) for i in items] == [
         ("Calc HW 3", "mail", False), ("Prog HW 1", "hseapp", True)]
-    assert set(items[0]) == {"uid", "title", "due", "category", "source", "overdue"} and items[0]["category"] == "study"
+    assert set(items[0]) == {"uid", "title", "due", "category", "source", "overdue", "assumed"}
+    assert items[0]["category"] == "study" and items[0]["assumed"] is False
 
     body = {"title": "Dentist", "due": (today + dt.timedelta(days=5)).isoformat(), "category": "personal"}
     assert (await client.post("/api/deadlines", json=body, headers=AUTH)).status == 405
@@ -410,8 +411,9 @@ async def test_miniapp_deadlines(aiohttp_client, budget, journal, store, schedul
     assert body["hseapp"] == {"login_needed": True, "error": None} and body["today"] == "2026-10-20"
     item, essay = body["items"]
     assert item == {"uid": merged.items()[0]["uid"], "title": "Calc HW 3", "due": "2026-10-21", "category": "study",
-                    "source": "tg", "course": "Математический анализ", "overdue": False, "from": "Матан",
-                    "link": None, "message": {"chat": -1001, "msg": 1}}  # its chat and message (D44, D50)
+                    "source": "tg", "course": "Математический анализ", "overdue": False, "assumed": False,
+                    "from": "Матан", "link": None,
+                    "message": {"chat": -1001, "msg": 1}}  # its chat and message (D44, D50)
     assert (essay["from"], essay["link"]) == ("letter", None) and essay["message"] is not None
     with merged.db:
         merged.deadlines.drop([letter], merged.now())

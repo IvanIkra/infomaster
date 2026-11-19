@@ -118,7 +118,8 @@ in it, in the log or in the status). State is in `GET /api/status` (`mail`: `con
 `letters`).
 
 **Internal API** (Bearer token) for Tablo, answers shaped like Tablo's own (§8): `GET /api/deadlines` returns
-`{"items": [{uid, title, due, category, source, overdue}]}`, read-only: own and hidden deadlines are managed in the
+`{"items": [{uid, title, due, category, source, overdue, assumed}]}` (`assumed`: a sheet's date taken from its
+course's next seminar), read-only: own and hidden deadlines are managed in the
 Mini App and with the forum buttons. Live news for Tablo is `GET /api/news`:
 `{"items": [{id, source, study, posted_at, full, short, importance}], "ttl_hours"}` in rank order, the same items as
 the News pin (without replaced, withdrawn and hidden ones).
@@ -126,8 +127,9 @@ the News pin (without replaced, withdrawn and hidden ones).
 **Problem sheets.** The twin downloads a PDF from an enabled chat when batch processing reaches its message (files
 over 50 MB are skipped); the first page is read on the spot, and a scan goes to the model as an image. Batch
 processing decides whether a PDF is a sheet (homework, problems, a variant), and the bot posts the file to the Sheets
-topic with a caption: course and number, due date, a link to the message and a course hashtag (#Calc). The same file
-a second time is not a new sheet. A new version (the same chat and course and the same number or almost the same file
+topic with a caption: course and number, due date, a link to the message and a course hashtag (#Calc). A sheet
+without a due date is due before the next seminar of its course in RUZ, marked "≈ … (assumed)" until a real date comes
+(architecture.md, §6.3). The same file a second time is not a new sheet. A new version (the same chat and course and the same number or almost the same file
 name, the old sheet at most 30 days old; or the same message with the file replaced) replaces the file in the old
 message, and a "sheet updated" reply follows. With **Whole PDF** in the chat settings Haiku reads the sheet (up to 10
 pages and 30k tokens, set under **Settings → Whole PDF**): a summary goes in the caption, deadlines from all pages go
