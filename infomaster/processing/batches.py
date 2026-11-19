@@ -48,6 +48,12 @@ Images (D12): in a chat with «Картинки» on, the image of a message is 
 Haiku in a call of its own (processing/images.py), within the daily number of images and while optional tasks run. The
 model of the batch sees what was read on it: what it shows and its text.
 
+Materials (D58, §6.8): in a study chat the model also says which messages carry course material (a photo of the
+board, notes, slides, a recording, a link to one); only there is the field in the schema. A photo, a recording or a
+voice message without text goes to the model there too when the library is on, so it can be told; elsewhere such a
+message is skipped as before. The materials are queued in the batch's transaction and taken into the library after
+the run, outside it (library/feed.py): a file is downloaded then, never while the messages are being parsed.
+
 Context: before the new messages of a chat the model sees up to `CONTEXT_MESSAGES` earlier, parsed ones of the same
 chat and forum topic, from `CONTEXT_AGE` before the first new one, each cut to `CONTEXT_CHARS`: what a short reply or
 «перенесли на пятницу» refers to. They give no items; a new message that replies to one of them says so instead of
@@ -71,6 +77,7 @@ from .. import clock
 from ..collectors.files import Files, NotNow, image_file
 from ..collectors.inbox import MAILBOX, Inbox, message_link
 from ..i18n import Phrase
+from ..library.feed import MATERIAL_KINDS, ChatMaterials, material_file
 from ..llm.budget import BudgetExceeded
 from ..llm.client import BadAnswer, Document, Haiku, LLMError
 from ..settings import CHAT_SPECS, ChatSettings, Settings
@@ -198,7 +205,8 @@ Every item:
 - news: full (at most 2 lines of the column), short (1 line), importance 1-5, replaces;
 - deadlines: concrete study tasks with a date, or [];
 - events: things to attend at a set time, or [];
-- sheets: PDFs of its messages that are sheets, or [].
+- sheets: PDFs of its messages that are sheets, or [];
+- materials (a study chat only): its messages that carry course material, or [].
 
 Style of full and short:
 - Telegraphic English, no articles, digits instead of words, the essential fact first.
@@ -273,6 +281,13 @@ grading formula, an order, a form or a list of students. Judge by the file name,
 deadlines as usual.
 A message with a sheet usually also gets news ("Calc sheet 3 posted, due Oct 29").
 
+Materials: course material for a class: a photo of the board or of notes, notes as a file or a text, slides, a \
+lecture recording (audio, video, voice), a link to a recording, slides or notes. Not sheets, announcements, memes or \
+chatter. Each message of an album is an entry of its own.
+- msg_id; course: as for deadlines, "" when unsure; kind: photo, notes, slides, audio, video, link, text or file;
+- title: short English with the course abbreviation ("Calc lecture board", "Alg seminar notes").
+Material alone needs no news: full and short "".
+
 Examples:
 (study, posted Sat 2026-10-17 18:50) "1. Матанализ • КР-1 22.10 7 пара/23.10 1 пара. 2. Алгебра • Кр-1 7.11 18:10. \
 • ИДЗ-1 (ДД 07.11. 18:10) 3. СОП https://www.hse.ru/evaluation/ (дд 25.10 23:59)"
@@ -303,6 +318,8 @@ start "2026-11-05", end "", room "S301", kind "consultation", required false, mo
 29.10" -> full "Calc sheet 3 (series) posted, due Thu Oct 29", short "Calc sheet 3 → Oct 29", importance 5, deadlines: \
 {course "Математический анализ", label "Calc sheet 3", due "2026-10-29"}, sheets: {msg_id 1301, course \
 "Математический анализ", number "3", due "2026-10-29"}
+(study) 1401 "Доска с лекции по матану" with a photo, 1402 album with 1401, a photo -> full "", short "", \
+materials: {msg_id 1401, course "Математический анализ", kind "photo", title "Calc lecture board"}, the same for 1402
 "69 БПЛА, летевших на Москву, были уничтожены за прошедшую ночь" -> full "69 drones downed near Moscow overnight", \
 short "69 drones downed overnight", importance 2; then, with that item current as n3, "За неделю в сторону \
 Московского региона летели 2730 беспилотников" -> replaces n3, full "69 drones downed overnight, 2730 this week", \
@@ -354,6 +371,19 @@ SCHEMA = {
     "required": ["items"],
     "additionalProperties": False,
 }
+MATERIAL_SCHEMA = {
+    "type": "object",
+    "properties": {"msg_id": {"type": "integer"}, "course": {"type": "string"},
+                   "kind": {"type": "string", "enum": list(MATERIAL_KINDS)}, "title": {"type": "string"}},
+    "required": ["msg_id", "course", "kind", "title"],
+    "additionalProperties": False,
+}
+# A study chat's: its items also tell the materials (D58). Other chats are not asked, so they cost nothing.
+_ITEM = SCHEMA["properties"]["items"]["items"]
+STUDY_SCHEMA = {**SCHEMA, "properties": {"items": {"type": "array", "items": {
+    **_ITEM, "properties": {**_ITEM["properties"], "materials": {"type": "array", "items": MATERIAL_SCHEMA}},
+    "required": [*_ITEM["required"], "materials"]}}}}
+MATERIAL_TITLE_CHARS = 120
 
 
 # --- which messages go to the model ---------------------------------------------------
@@ -456,9 +486,23 @@ def _importance(value) -> int:
     return min(5, max(1, value)) if isinstance(value, int) and not isinstance(value, bool) else 3
 
 
-def check(answer: dict, msg_ids: set[int], pdfs: set[int] = frozenset()) -> list[dict]:
+def _materials(raw_item: dict, msg_ids: set[int], sheets: list[dict]) -> list[dict]:
+    """The materials of an answer's item: one per message of the batch, none of a message that is a sheet."""
+    taken = {sheet["msg_id"] for sheet in sheets}
+    found = {}
+    for raw in raw_item.get("materials") or []:
+        msg_id = raw.get("msg_id")
+        if msg_id not in msg_ids or msg_id in taken:
+            continue
+        kind = raw.get("kind") if raw.get("kind") in MATERIAL_KINDS else "file"
+        found[msg_id] = {"msg_id": msg_id, "course": " ".join(str(raw.get("course") or "").split()), "kind": kind,
+                         "title": " ".join(str(raw.get("title") or "").split())[:MATERIAL_TITLE_CHARS]}
+    return list(found.values())
+
+
+def check(answer: dict, msg_ids: set[int], pdfs: set[int] = frozenset(), materials: bool = False) -> list[dict]:
     """Items of the answer that can be used: known messages, some news, a deadline with a valid date, an event with a
-    valid time or a sheet of a message with a PDF read (`pdfs`)."""
+    valid time, a sheet of a message with a PDF read (`pdfs`) or, when asked for (`materials`), course material."""
     items = []
     for raw in answer.get("items") or []:
         ids = list(dict.fromkeys(i for i in raw.get("msg_ids") or [] if i in msg_ids))
@@ -479,8 +523,10 @@ def check(answer: dict, msg_ids: set[int], pdfs: set[int] = frozenset()) -> list
             "msg_id": raw_sheet["msg_id"], "course": (raw_sheet.get("course") or "").strip(),
             "number": " ".join(str(raw_sheet.get("number") or "").split())[:20], "due": _due(raw_sheet.get("due"))}
             for raw_sheet in raw.get("sheets") or [] if raw_sheet.get("msg_id") in pdfs}.values())
-        if news or deadlines or events or sheets:
-            items.append({"msg_ids": ids, "news": news, "deadlines": deadlines, "events": events, "sheets": sheets})
+        found = _materials(raw, msg_ids, sheets) if materials else []
+        if news or deadlines or events or sheets or found:
+            items.append({"msg_ids": ids, "news": news, "deadlines": deadlines, "events": events, "sheets": sheets,
+                          "materials": found})
     return items
 
 
@@ -571,6 +617,7 @@ class Batches:
         self.files: Files | None = None    # PDFs of the messages; without it the model reads their names only
         self.sheets: Sheets | None = None  # where the sheets the model finds go
         self.images: Images | None = None  # reads the images of chats with «Картинки»; without it they stay unread
+        self.materials: ChatMaterials | None = None  # the library's queue (D58); without it no materials are asked for
         self.ok_at: str | None = None
         self.error: str | None = None
         self._urgent: dict[int, Burst] = {}
@@ -659,6 +706,8 @@ class Batches:
                 await self.publish(changes)
             except Exception:
                 log.exception("publishing the batch results failed")
+        if self.materials is not None:  # this run's materials, and any the twin could not download before
+            self.materials.kick()
         return changes
 
     def _boxes(self) -> set[int]:
@@ -717,8 +766,12 @@ class Batches:
         if waiting := [m["msg_id"] for m in chosen if m["later"]]:
             log.info("messages %s of %s wait for their files: the twin cannot download now", waiting, chat_id)
             chosen = [m for m in chosen if not m["later"]]
-        skipped += [m for m in chosen if not (readable(m) or m["image"])]  # a photo alone that was not read
-        chosen = [m for m in chosen if readable(m) or m["image"]]
+        materials = self._materials_on(chat, settings)
+
+        def worth(m: dict) -> bool:  # a photo alone that was not read is not, unless it may be material
+            return readable(m) or bool(m["image"]) or (materials and material_file(m) is not None)
+        skipped += [m for m in chosen if not worth(m)]
+        chosen = [m for m in chosen if worth(m)]
         if skipped:
             with self.db:
                 self.inbox.mark_parsed(chat_id, [m["msg_id"] for m in skipped], self.now(), chat["source"])
@@ -732,14 +785,23 @@ class Batches:
         chat = self.inbox.chat(chat_id)
         return ({**chat, "source": "tg"} if chat is not None else None), self.chat_settings.all(chat_id)
 
+    def _materials_on(self, chat: dict, settings: dict) -> bool:
+        """The model is asked for materials (D58): a study chat of the twin, with the library on."""
+        return self.materials is not None and settings["study"] and chat["source"] == "tg"
+
+    def _schema(self, chat: dict, settings: dict) -> dict:
+        return STUDY_SCHEMA if self._materials_on(chat, settings) else SCHEMA
+
     def _select(self, chat_id: int, settings: dict, pending: list[dict]) -> tuple[list[dict], list[dict]]:
         oldest = clock.local_iso(self.now() - dt.timedelta(hours=self.settings.get("news_ttl_hours")))
         people = set(settings["people"])
         by_id = {m["msg_id"]: m for m in pending}
         chosen, skipped = [], []
         images = settings["images"] and self.images is not None and self.files is not None
+        materials = self.materials is not None and settings["study"] and chat_id != MAILBOX
         for message in pending:
-            keep = (readable(message) or (images and image_file(message) is not None)) and \
+            keep = (readable(message) or (images and image_file(message) is not None)
+                    or (materials and material_file(message) is not None)) and \
                 (settings["study"] or message["at"] >= oldest)
             if keep and settings["filter"] == "important":
                 keep = important(message, people) or replies_to_important(self.inbox, chat_id, message, by_id, people)
@@ -801,8 +863,9 @@ class Batches:
                           self.subjects.all())
         documents = self._scans(chunk)  # before the prompt: a scan that cannot be attached is not referred to
         try:
-            answer = await self.llm.json("batch", SYSTEM, self._prompt(chat, settings, chunk, context), SCHEMA,
-                                         max_tokens=MAX_TOKENS, chat_id=chat["id"], documents=documents)
+            answer = await self.llm.json("batch", SYSTEM, self._prompt(chat, settings, chunk, context),
+                                         self._schema(chat, settings), max_tokens=MAX_TOKENS, chat_id=chat["id"],
+                                         documents=documents)
         except BadAnswer as e:
             if len(chunk) > 1:  # find the message that breaks it; the others go through
                 half = len(chunk) // 2
@@ -811,7 +874,7 @@ class Batches:
             else:
                 self._skip(chat, chunk[0], str(e))
             return
-        items = check(answer, {m["msg_id"] for m in chunk}, _pdfs(chunk))
+        items = check(answer, {m["msg_id"] for m in chunk}, _pdfs(chunk), self._materials_on(chat, settings))
         if any(too_long(item) for item in items):
             items = await self._retry(chat, settings, chunk, context, items)
         for item in items:
@@ -830,12 +893,13 @@ class Batches:
         again = [m for m in chunk if m["msg_id"] in again_ids]
         documents = self._scans(again)
         try:
-            answer = await self.llm.json("batch", SYSTEM, self._prompt(chat, settings, again, context, notes), SCHEMA,
-                                         max_tokens=MAX_TOKENS, chat_id=chat["id"], documents=documents)
+            answer = await self.llm.json("batch", SYSTEM, self._prompt(chat, settings, again, context, notes),
+                                         self._schema(chat, settings), max_tokens=MAX_TOKENS, chat_id=chat["id"],
+                                         documents=documents)
         except (BudgetExceeded, LLMError) as e:
             log.info("the retry for length failed, the first answer stays: %s", e)
             return items
-        retried = check(answer, again_ids, _pdfs(again))
+        retried = check(answer, again_ids, _pdfs(again), self._materials_on(chat, settings))
         if not retried:
             return items
         result = []
@@ -1062,7 +1126,10 @@ class Batches:
                     if self.sheets is not None and (sheet_id := self.sheets.add(chat_id, by_id[sheet["msg_id"]],
                                                                                 sheet, now)) is not None:
                         changes.sheets.append(sheet_id)
-            gone_news = [n for ids in old_news.values() for n in ids if n not in settled_news]
+            materials = [material for item in items for material in item["materials"]]
+            if materials and self._materials_on(chat, settings):
+                self.materials.queue(chat_id, materials, now)  # taken after the run: files are downloaded then
+            gone_news =[n for ids in old_news.values() for n in ids if n not in settled_news]
             gone_deadlines = [d for d in old_deadlines if d not in settled_deadlines]
             # A correction of a class the model was not shown (the chat is no longer a study one, the class is past)
             # could not be restated: it stays.
@@ -1078,9 +1145,10 @@ class Batches:
                 self.events.drop(gone_events, now)
                 changes.events_gone.extend(gone_events)
             self.inbox.mark_parsed(chat_id, list(by_id), started, source)
-        log.info("batch of %s: %d messages, %d news, %d deadlines, %d events, %d sheets", chat_id, len(chunk),
-                 sum(1 for item in items if item["news"]), sum(len(item["deadlines"]) for item in items),
-                 sum(len(item["events"]) for item in items), sum(len(item["sheets"]) for item in items))
+        log.info("batch of %s: %d messages, %d news, %d deadlines, %d events, %d sheets, %d materials", chat_id,
+                 len(chunk), sum(1 for item in items if item["news"]), sum(len(item["deadlines"]) for item in items),
+                 sum(len(item["events"]) for item in items), sum(len(item["sheets"]) for item in items),
+                 len(materials))
 
     def _save_event(self, chat: dict, ids: list[int], event: dict, n: int, context: Context, old_events: dict,
                     settled: set[int], now: dt.datetime, changes: Changes) -> None:

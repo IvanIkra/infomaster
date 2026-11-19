@@ -21,6 +21,7 @@ from .connector import Connector
 from .i18n import Phrase
 from .library import Library
 from .library import links as library_links
+from .library.feed import ChatMaterials, from_bot
 from .llm.budget import Budget
 from .llm.client import Haiku
 from .llm.journal import Journal
@@ -115,6 +116,13 @@ class Service:
         self.library = Library(self.store, data_dir)
         self.library.same_course = self.schedule.same_course
         self.library_links = library_links.Links(self.store, self.library, env.public_url)
+        # Its sources (§6.8): materials the batches find in study chats (files by the twin, after the run), every
+        # sheet's PDF, and what the owner sends the bot (files by the bot itself).
+        self.library_feed = ChatMaterials(self.store, self.library, self.inbox)
+        self.library_feed.download = self.twin.download
+        self.batches.materials = self.library_feed
+        self.sheets.library = self.library
+        self.forum.on_material = lambda message, download: from_bot(self.library, message, download)
         # The MCP connector for claude.ai (§8.5, D57): its sign-in code comes from the bot to the owner's chat.
         self.connector = Connector(env, self.store, self.news, send_code=self._to_owner,
                                    lang=lambda: self.settings.get("miniapp_language"))
