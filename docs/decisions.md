@@ -221,6 +221,12 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   service (Haiku through the API key for batch parsing, as before), and Claude on the owner's subscription is let in
   through an MCP connector when the owner wants it: questions, changes, homework help, turning raw lecture material
   into a LaTeX knowledge base. The plan is §11.1 of [architecture.md](architecture.md).
+- **D54. Grade sheets may be Dropbox links, 19.11.2026.** This changes §6.7. Some courses share the grade table as a
+  Dropbox link to an `.xlsx` file instead of a Google Sheet. Such a link (`/scl/fi/…`, the older `/s/…`, or
+  `dl.dropboxusercontent.com`) is downloaded with `dl=1`, the other parameters kept and redirects followed, and read
+  exactly like Google's export. Its id is `dropbox-<id of the link>`, its title the file name without the extension
+  (or the name in `Content-Disposition`). Folder links and files that are not `.xlsx` are refused when the sheet is
+  added; a deleted or private link gives the usual "not a workbook" error. Only public share links, no Dropbox API.
 
 ## Open questions
 

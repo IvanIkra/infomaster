@@ -24,7 +24,7 @@ Tablo, a home dashboard; both integrations are optional.
   `main.ics` (where one has to be) and `optional.ics` (where one may go), ready for Apple or Google Calendar.
 - **Problem sheets.** PDFs from chats are downloaded on demand, read within a page limit and versioned; a new
   version edits the old forum message and says what changed.
-- **Grades.** Teachers' Google Sheets are read as xlsx; Haiku maps each tab's header once (cached with the header),
+- **Grades.** Teachers' Google Sheets and Dropbox .xlsx links are read as xlsx; Haiku maps each tab's header once (cached with the header),
   grades are normalised to a 0–10 scale and only new or changed ones are announced.
 - **Daily summaries** of chats and the `/summary` command for any chat and period.
 - **Images.** Pictures in messages are read by Haiku within a daily count and the budget.
