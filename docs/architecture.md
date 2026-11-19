@@ -144,7 +144,7 @@ The logic moves over from Tablo unchanged:
 | IMAP mail | §6.2 | letters go to the common `messages` table (`source=mail`) and are processed together with the chats |
 | HSE App X | §5.1 | the login page moves to the Mini App, the callback goes through Funnel |
 | RUZ iCal | §4.1–4.2 | the data becomes part of our feed (§6.5) instead of being served as is |
-| Google Sheets | §3 | unchanged |
+| Google Sheets | §3 | unchanged; Dropbox links to `.xlsx` files are read the same way (§6.7) |
 
 **Stage 5 details (HSE App X):**
 
@@ -422,6 +422,18 @@ a journal of new grades. A new grade goes to the Grades topic and the API.
   the Mini App; a network failure or the limit is a sheet error, the grades stay, and the tab is laid out on the next
   poll. Removing a sheet or changing the name erases its grades: the next read is a snapshot again. A closed sheet (a
   login page instead of an xlsx) is a "not a workbook" error.
+- **Dropbox sheets (stage 15).** Some courses share the grade table as a Dropbox link to an `.xlsx` file. A link in
+  `grades_sheets` is either a Google Sheet or a Dropbox share link to a file:
+  `https://www.dropbox.com/scl/fi/<id>/<name>.xlsx?rlkey=…&dl=0`, the older
+  `https://www.dropbox.com/s/<id>/<name>.xlsx?dl=0`, or the same paths on `dl.dropboxusercontent.com`. The sheet's id
+  is `dropbox-<id>` (the same file on both hosts is one sheet). The file is downloaded from the link itself with
+  `dl=1` (`rlkey` and the other parameters kept, redirects followed); the title is the file name without the
+  extension, URL-decoded, or the name in `Content-Disposition` when the answer has one (a renamed file). Everything
+  after the download is the same as for a Google Sheet; a deleted or private link answers with an HTML page, which is
+  a "not a workbook" error. A folder link (`/scl/fo/`, `/sh/`), a file that is not `.xlsx` and any other Dropbox link
+  are refused when the sheet is added (in the Mini App's language); a file that turns out not to be `.xlsx` by its
+  `Content-Disposition` is an error in the sheet's status. Code: `settings.grade_sheet_id` and `dropbox_file` (the
+  link), `collectors/grades.download_url` (the download).
 - The Grades topic: after a poll, one message per sheet (the heading is the sheet title linking to it and a course
   hashtag), a line per task: the label, the grade 0–10 (as on Tablo's screen), the bonus, the sheet's points in
   brackets if its scale is not 0–10, and the previous grade for a changed one. Unsent ones (a Telegram failure) wait

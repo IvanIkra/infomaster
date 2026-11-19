@@ -21,6 +21,11 @@ from infomaster.settings import Settings, SettingsError
 
 URL = "https://docs.google.com/spreadsheets/d/abc123/edit#gid=0"
 OTHER = "https://docs.google.com/spreadsheets/d/zzz999/edit"
+# Dropbox share links (made up): a file since 2023, an older file link, the direct host, and a folder.
+SCL = "https://www.dropbox.com/scl/fi/a1b2c3d4e5/DM%20grades%202026.xlsx?rlkey=k9x8y7&st=s1&dl=0"
+OLD = "https://www.dropbox.com/s/q7w8e9r0/Calculus.xlsx?dl=0"
+DIRECT = "https://dl.dropboxusercontent.com/scl/fi/z5y4x3/Algebra.xlsx?rlkey=r1"
+FOLDER = "https://www.dropbox.com/scl/fo/f1e2d3/h4g5i6?rlkey=k1&dl=0"
 
 
 def workbook(hw_score=5.9, quiz=8, hidden_tab=True, inserted=False, me="Иванов Иван Сергеевич", classmate=10,
@@ -485,6 +490,90 @@ async def test_poll_reports_errors_without_raising(settings, grades, monkeypatch
     assert source.status() == {"configured": False, "sheets": {}}
 
 
+# --- Dropbox -----------------------------------------------------------------------------------------
+
+def test_dropbox_links():
+    assert collector.download_url(SCL) == \
+        "https://www.dropbox.com/scl/fi/a1b2c3d4e5/DM%20grades%202026.xlsx?rlkey=k9x8y7&st=s1&dl=1"
+    assert collector.download_url(OLD) == "https://www.dropbox.com/s/q7w8e9r0/Calculus.xlsx?dl=1"
+    assert collector.download_url(DIRECT) == "https://dl.dropboxusercontent.com/scl/fi/z5y4x3/Algebra.xlsx?rlkey=r1&dl=1"
+    assert collector.download_url(URL) == collector.EXPORT_URL.format(id="abc123")
+    assert [collector.sheet_id(url) for url in (SCL, OLD, DIRECT, URL)] == [
+        "dropbox-a1b2c3d4e5", "dropbox-q7w8e9r0", "dropbox-z5y4x3", "abc123"]
+    assert collector.file_title(collector.dropbox_file(SCL)[1]) == "DM grades 2026"
+    assert collector.file_title("Матан.v2.xlsx") == "Матан.v2"
+
+    check = g.SPECS["grades_sheets"][1]
+    assert check([{"url": SCL, "label": ""}, {"url": OLD, "label": "Calc"}, {"url": DIRECT, "label": ""}, {"url": URL}])
+    with pytest.raises(SettingsError, match="twice"):  # the same link on the direct host
+        check([{"url": SCL}, {"url": SCL.replace("www.dropbox.com", "dl.dropboxusercontent.com")}])
+    for folder in (FOLDER, "https://www.dropbox.com/sh/f1e2d3/AAAbbb?dl=0"):
+        with pytest.raises(SettingsError) as raised:
+            check([{"url": folder}])
+        assert "Dropbox folder" in str(raised.value) and "папку" in raised.value.args[0].ru
+    for wrong in ("https://www.dropbox.com/scl/fi/a1b2/grades.pdf?rlkey=k&dl=0", "https://www.dropbox.com/s/a1/old.xls",
+                  "https://www.dropbox.com/home/grades.xlsx", "http://www.dropbox.com/s/a1/grades.xlsx"):
+        with pytest.raises(SettingsError):
+            check([{"url": wrong}])
+
+
+@pytest.fixture
+async def dropbox(aiohttp_server, monkeypatch):
+    """Dropbox: a share link redirects to the file; `state["data"]` is what comes, `state["disposition"]` its header."""
+    state = {"data": workbook(), "disposition": None, "asked": []}
+
+    async def link(request):
+        state["asked"].append(dict(request.query))
+        raise web.HTTPFound(f"/content/{request.match_info['id']}")
+
+    async def content(request):
+        headers = {"Content-Disposition": state["disposition"]} if state["disposition"] else {}
+        if isinstance(state["data"], bytes) and state["data"].startswith(b"<html"):
+            return web.Response(body=state["data"], content_type="text/html", headers=headers)
+        return web.Response(body=state["data"], headers=headers)
+
+    app = web.Application()
+    app.router.add_get("/scl/fi/{id}/{name}", link)
+    app.router.add_get("/content/{id}", content)
+    server = await aiohttp_server(app)
+    real = collector.download_url
+    monkeypatch.setattr(collector, "download_url",
+                        lambda url: real(url).replace("https://www.dropbox.com", f"http://{server.host}:{server.port}"))
+    return state
+
+
+async def test_dropbox_sheet(dropbox, grades, settings, now):
+    settings.set("grades_sheets", [{"url": SCL, "label": ""}])
+    source = GradeSheets(settings, now=now)
+    source.on_sheet = grades.apply
+    sid = "dropbox-a1b2c3d4e5"
+
+    await source.poll()  # the baseline, as for a Google Sheet
+    status = source.status()["sheets"][sid]
+    assert (status["title"], status["error"], status["tabs"], status["items"]) == ("DM grades 2026", None, 2, 2)
+    assert dropbox["asked"] == [{"rlkey": "k9x8y7", "st": "s1", "dl": "1"}]
+    assert {item["label"] for item in grades.items(sid)} == {"DM grade HW 1A", "DM grade Quiz 1"}
+
+    # The file was renamed: Content-Disposition names it.
+    dropbox["disposition"] = "attachment; filename=\"x.xlsx\"; filename*=UTF-8''%D0%94%D0%9C%20final.xlsx"
+    dropbox["data"] = workbook(quiz=9)
+    now.moment += dt.timedelta(hours=1)
+    await source.poll()
+    assert source.status()["sheets"][sid]["title"] == "ДМ final" and len(grades.new()) == 1
+
+    # A deleted or private link gives an HTML page: not a workbook, the grades stay.
+    dropbox["data"], dropbox["disposition"] = b"<html><title>Dropbox - Error</title></html>", None
+    await source.poll()
+    assert "not a workbook" in source.status()["sheets"][sid]["error"] and grades.items(sid)
+
+    # The link now gives a file of another kind.
+    dropbox["data"], dropbox["disposition"] = workbook(), 'attachment; filename="grades.xls"'
+    await source.poll()
+    error = source.status()["sheets"][sid]["error"]
+    assert (error.en, error.ru) == ("the Dropbox file «grades.xls» is not an .xlsx workbook",
+                                    "файл Dropbox «grades.xls» — не книга .xlsx")
+
+
 # --- the ports ----------------------------------------------------------------------------------------
 
 async def test_api_and_miniapp(aiohttp_client, grades, settings, budget, journal, store, schedule, merged, now):
@@ -543,6 +632,15 @@ async def test_api_and_miniapp(aiohttp_client, grades, settings, budget, journal
     assert response.status == 200 and len((await response.json())["sheets"]) == 2 and woken == [1]
     response = await client.patch("/app/api/grades", headers=headers, json={"sheets": [{"url": "https://x.y/z"}]})
     assert response.status == 400 and "Google Sheet" in await response.text()
+    response = await client.patch("/app/api/grades", headers=headers, json={"sheets": [{"url": FOLDER}]})
+    assert response.status == 400 and "Dropbox folder" in await response.text()
+    settings.set("miniapp_language", "ru")
+    response = await client.patch("/app/api/grades", headers=headers, json={"sheets": [{"url": FOLDER}]})
+    assert response.status == 400 and "папку Dropbox" in await response.text()
+    settings.reset("miniapp_language")
+    response = await client.patch("/app/api/grades", headers=headers,
+                                  json={"sheets": [{"url": URL, "label": "DM"}, {"url": SCL, "label": ""}]})
+    assert [sheet["id"] for sheet in (await response.json())["sheets"]] == ["abc123", "dropbox-a1b2c3d4e5"]
     assert (await client.patch("/app/api/grades", headers=headers, json={"pdf_pages": 3})).status == 400
     response = await client.patch("/app/api/grades", headers=headers, json={"window_days": 14})
     assert (await response.json())["window_days"] == 14

@@ -1,13 +1,17 @@
-"""Teachers' Google Sheets with grades (§5.2, Tablo's §3.1, §3.3): the collector reads, the processing lays out.
+"""Teachers' grade sheets (§5.2, §6.7, Tablo's §3.1, §3.3): the collector reads, the processing lays out.
 
-The sheets are open to anyone with the link (the setting grades_sheets): each is downloaded as xlsx every 30 minutes,
-its title once from the HTML view. In every visible tab the student's own row is found by the name (grades_student);
-of a tab the top rows above it (at most TOP_ROWS) and that row are kept (TabView). Where the header ends among the top
+The sheets are open to anyone with the link (the setting grades_sheets): each is downloaded as xlsx every 30 minutes.
+A Google Sheet is exported as xlsx and its title is read once from the HTML view; a Dropbox link to an .xlsx file is
+downloaded as it is (dl=1) and its title is the file's name without the extension.
+
+In every visible tab the student's own row is found by the name (grades_student); of a tab the top rows above it (at
+most TOP_ROWS) and that row are kept (TabView). Where the header ends among the top
 rows is the model's to say, so the top rows go to it whole, other students' rows among them (§10); the own name does
 not. The layout by Haiku, the 0-10 scale and what counts as a new grade are processing/grades.py's: `on_sheet` gets a
 sheet read and says what came of it (Read).
 
-Failures count per sheet: the download, a file that is no workbook (a sheet closed to the link gives a login page),
+Failures count per sheet: the download, a file that is no workbook (a sheet closed to the link gives a login page,
+a deleted or private Dropbox link an HTML page),
 no own row in any tab (a wrong name, or the row is not there yet: the grades kept are not dropped for it), the layout
 (Haiku, the limit). A failed sheet keeps its grades as they were. A sheet failing for 12 hours is told to the System
 topic once, and once more when it reads again; the first read of a sheet is told there too.
@@ -21,6 +25,8 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import aiohttp
 
@@ -28,7 +34,7 @@ from .. import clock
 from ..i18n import Phrase, say
 from ..llm.budget import BudgetExceeded
 from ..llm.client import LLMError
-from ..settings import GOOGLE_SHEET, Settings
+from ..settings import DROPBOX_PREFIX, Settings, dropbox_file, grade_sheet_id, not_xlsx
 
 log = logging.getLogger(__name__)
 
@@ -44,10 +50,30 @@ NO_ROW = Phrase("the own row is on no tab: check the name in the Mini App, Setti
 
 
 def sheet_id(url: str) -> str:
-    found = GOOGLE_SHEET.search(url)
-    if found is None:
-        raise ValueError("not a Google Sheets link")
-    return found[1]
+    """A Google Sheet's id, or "dropbox-" and the id of a Dropbox link; SettingsError (a ValueError) for other links."""
+    return grade_sheet_id(url)
+
+
+def is_dropbox(sid: str) -> bool:
+    return sid.startswith(DROPBOX_PREFIX)
+
+
+def download_url(url: str) -> str:
+    """Where a sheet's xlsx comes from: Google's export, or the Dropbox link itself with dl=1 (rlkey and the other
+    parameters kept; Dropbox redirects to the file)."""
+    sid = sheet_id(url)
+    if not is_dropbox(sid):
+        return EXPORT_URL.format(id=sid)
+    parts = urlsplit(url.strip())
+    query = parse_qsl(parts.query, keep_blank_values=True)
+    query = [(key, "1" if key == "dl" else value) for key, value in query] + \
+        ([] if any(key == "dl" for key, _ in query) else [("dl", "1")])
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), ""))
+
+
+def file_title(name: str) -> str | None:
+    """A Dropbox sheet's title: its file name without the extension."""
+    return PurePosixPath(name).stem.strip() or None
 
 
 # --- reading a workbook ------------------------------------------------------------------
@@ -141,7 +167,7 @@ class Sheet:
     """One sheet read: what on_sheet gets."""
     id: str
     url: str
-    title: str | None       # as Google names it; None when the title could not be fetched
+    title: str | None       # as Google names it, or a Dropbox file's name; None when the title could not be fetched
     course: str             # the short name in front of the labels: the setting's label, else the title's start
     student: str
     views: list[TabView]
@@ -235,10 +261,18 @@ class GradeSheets:
         st = self.sheets[sid]
         st.label = sheet["label"]
         try:
-            async with session.get(EXPORT_URL.format(id=sid)) as response:
+            if is_dropbox(sid):  # named before the download, so that a failing sheet has its name too
+                st.title = st.title or file_title(dropbox_file(sheet["url"])[1])
+            async with session.get(download_url(sheet["url"])) as response:  # redirects are followed
                 response.raise_for_status()
                 data = await response.read()
-            if st.title is None:  # after the file: a sheet closed to the link has the title of a login page
+                disposition = response.content_disposition
+            if is_dropbox(sid):
+                if disposition is not None and (named := disposition.filename):  # the file may have been renamed
+                    if not named.lower().endswith(".xlsx"):
+                        raise ValueError(not_xlsx(named))
+                    st.title = file_title(named) or st.title
+            elif st.title is None:  # after the file: a sheet closed to the link has the title of a login page
                 st.title = await fetch_title(session, sid)
             views = await asyncio.to_thread(read_views, data, student)
             if not views:
@@ -249,7 +283,7 @@ class GradeSheets:
             self._failed(st, f"HTTP {e.status} {e.message}".strip())
             return
         except (aiohttp.ClientError, TimeoutError, ValueError, OSError) as e:
-            self._failed(st, NO_ROW if e.args[:1] == (NO_ROW,) else f"{type(e).__name__}: {e}")
+            self._failed(st, e.args[0] if e.args and isinstance(e.args[0], Phrase) else f"{type(e).__name__}: {e}")
             return
         except (LLMError, BudgetExceeded) as e:  # the layout; asked again at the next poll
             self._failed(st, str(e))
