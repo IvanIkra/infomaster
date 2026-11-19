@@ -3,7 +3,8 @@
 Reads give the screens' data: the merged deadlines, the timetable, the grades, the news, the stored messages, the
 sheets, the dictionary, the settings. Writes are the Mini App's actions, made through its handlers, each with the steps
 that undo it. Not here, on purpose (D57): the secrets of .env, the twin's and HSE App X's logins, the LLM limit and
-the model prices (raising the limit is the owner's alone), uploads (stage 14).
+the model prices (raising the limit is the owner's alone). The library's tools (stage 14: raw material, the inbox, the
+knowledge base, files moved by signed links) are in library.py.
 """
 
 import asyncio
