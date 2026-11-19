@@ -153,15 +153,18 @@ batch processing. Only a "since the last one" summary moves the start of the nex
 (`summaries`: `ok_at`, `error`, `done`, `time`).
 
 **Grades.** Teachers' Google Sheets are read every 30 minutes (and right after an edit under
-**Settings → Gradebooks** or on **Read now**). In every visible tab the service finds your row by full name; Haiku
+**Settings → Gradebooks** or on **Read now**). A sheet is added by its link: a Google Sheet open to anyone with the
+link, or a Dropbox share link to an `.xlsx` file (`https://www.dropbox.com/scl/fi/…`, the older
+`https://www.dropbox.com/s/…`, or `dl.dropboxusercontent.com`); a Dropbox sheet is named after its file. A Dropbox
+folder link or a file of another kind is refused when it is added. In every visible tab the service finds your row by full name; Haiku
 sees the top of the tab (up to 15 rows above yours, other students' included) and your row, finds the header itself
 and says which columns are graded tasks, their maximum and the bonus. The answer is cached with the header: while the
 header does not change, Haiku is not called, however other students' grades change. Grades are brought to a 0–10
 scale. The first read of a sheet is a snapshot: System reports the sheet as connected, without grade messages. After
 that every new or changed grade goes to the Grades topic, one message per sheet: the label (`DM HW 1A`), the grade,
 the bonus, the sheet's points and the previous grade (`DM HW 1A — 9 +1 (6.3 of 7; was 8.4)`). A zero for a task that
-did not exist before counts as "not graded yet". A sheet that cannot be read for 12 hours (closed, no own row, the
-LLM limit) gets one line in System, and one when it is read again; its grades stay meanwhile. Removing a sheet or
+did not exist before counts as "not graded yet". A sheet that cannot be read for 12 hours (closed, a deleted Dropbox
+link, no own row, the LLM limit) gets one line in System, and one when it is read again; its grades stay meanwhile. Removing a sheet or
 changing the name erases its grades: the next read is a snapshot again. Every sheet has its own Mini App screen:
 name, check and the tab layout, which can be corrected (yours overrides Haiku's answer); on the Study tab a grade can
 be changed (it holds until the sheet itself changes it) or your own added (D44). New grades of the last 7 days (the

@@ -10,8 +10,9 @@ import json
 import re
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
-from ..i18n import LANGUAGES
+from ..i18n import LANGUAGES, Phrase
 from ..store import Store
 
 
@@ -78,6 +79,17 @@ def _clock_time(value: Any) -> str:
 
 
 GOOGLE_SHEET = re.compile(r"/spreadsheets/d/([A-Za-z0-9_-]+)")  # the id of a Google Sheet in its link
+# A Dropbox share link to a file: /scl/fi/<id>/<name> (since 2023) or the older /s/<id>/<name>; a folder's is /scl/fo/
+# or /sh/. dl.dropboxusercontent.com serves the same paths.
+DROPBOX_HOSTS = frozenset({"www.dropbox.com", "dropbox.com", "dl.dropbox.com", "dl.dropboxusercontent.com"})
+DROPBOX_FILE = re.compile(r"/(?:scl/fi|s)/([A-Za-z0-9_-]+)/([^/]+)/?")
+DROPBOX_FOLDER = re.compile(r"/(?:scl/fo|sh)/")
+DROPBOX_PREFIX = "dropbox-"  # a Dropbox sheet's id: the prefix and the id of its link, apart from Google's ids
+NOT_A_SHEET = Phrase(
+    "expected a link to a Google Sheet (https://docs.google.com/spreadsheets/d/…) or a Dropbox link to an .xlsx file "
+    "(https://www.dropbox.com/scl/fi/…)",
+    "нужна ссылка на Google Таблицу (https://docs.google.com/spreadsheets/d/…) или ссылка Dropbox на файл .xlsx "
+    "(https://www.dropbox.com/scl/fi/…)")
 SHEET_NAME_CHARS = 60
 SHEET_LABEL_CHARS = 10  # the course in front of a grade's label: "DM HW 1A" (Tablo's budget of 23 is for both)
 
@@ -89,9 +101,44 @@ def _student(value: Any) -> str:
     return " ".join(value.split())
 
 
+def dropbox_file(url: str) -> tuple[str, str] | None:
+    """(the link's id, the file name) of a Dropbox share link to a file; None for a link that is not Dropbox's.
+    SettingsError for a folder, for a Dropbox link that is not a share link and for a file that is not .xlsx."""
+    parts = urlsplit(url.strip())
+    if parts.scheme != "https" or (parts.hostname or "").lower() not in DROPBOX_HOSTS:
+        return None
+    if DROPBOX_FOLDER.match(parts.path):
+        raise SettingsError(Phrase("this is a link to a Dropbox folder: share the .xlsx file itself",
+                                   "это ссылка на папку Dropbox: нужна ссылка на сам файл .xlsx"))
+    found = DROPBOX_FILE.fullmatch(parts.path)
+    if found is None:
+        raise SettingsError(NOT_A_SHEET)
+    name = unquote(found[2])
+    if not name.lower().endswith(".xlsx"):
+        raise SettingsError(not_xlsx(name))
+    return found[1], name
+
+
+def not_xlsx(name: str) -> Phrase:
+    return Phrase(f"the Dropbox file «{name}» is not an .xlsx workbook", f"файл Dropbox «{name}» — не книга .xlsx")
+
+
+def grade_sheet_id(url: str) -> str:
+    """The id a grade sheet is known by: a Google Sheet's id, or DROPBOX_PREFIX and the id of a Dropbox link.
+    SettingsError for any other link."""
+    url = url.strip()
+    if (file := dropbox_file(url)) is not None:
+        return DROPBOX_PREFIX + file[0]
+    found = GOOGLE_SHEET.search(url)
+    if not url.startswith("https://docs.google.com/") or found is None:
+        raise SettingsError(NOT_A_SHEET)
+    return found[1]
+
+
 def _grade_sheets(value: Any) -> list[dict]:
-    """[{url, label, name?}]: Google Sheets open to anyone with the link; label is the course's short name, "" for
-    the start of the sheet's title; name is the owner's for the Mini App (D44), kept only when given."""
+    """[{url, label, name?}]: Google Sheets open to anyone with the link, or Dropbox share links to .xlsx files;
+    label is the course's short name, "" for the start of the sheet's title; name is the owner's for the Mini App
+    (D44), kept only when given."""
     if not isinstance(value, list):
         raise SettingsError("expected a list of {url, label}")
     sheets, ids = [], set()
@@ -101,12 +148,10 @@ def _grade_sheets(value: Any) -> list[dict]:
                 not isinstance(sheet.get("name", ""), str):
             raise SettingsError("expected a list of {url, label}")
         url = sheet["url"].strip()
-        found = GOOGLE_SHEET.search(url)
-        if not url.startswith("https://docs.google.com/") or found is None:
-            raise SettingsError("expected a link to a Google Sheet: https://docs.google.com/spreadsheets/d/…")
-        if found[1] in ids:
+        sid = grade_sheet_id(url)
+        if sid in ids:
             raise SettingsError("the same sheet is listed twice")
-        ids.add(found[1])
+        ids.add(sid)
         label = " ".join(sheet.get("label", "").split())
         if len(label) > SHEET_LABEL_CHARS:
             raise SettingsError(f"a course label has at most {SHEET_LABEL_CHARS} characters, got {label!r}")

@@ -891,8 +891,8 @@ async def update_grades(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text="expected {student?, sheets?, window_days?}")
     try:
         request.app[GRADES_KEY].configure({GRADE_SETTINGS[key]: value for key, value in values.items()})
-    except SettingsError as e:
-        raise web.HTTPBadRequest(text=str(e)) from None
+    except SettingsError as e:  # a sheet's link: a Phrase
+        raise web.HTTPBadRequest(text=reason(e, language(request))) from None
     return respond(request, _grades_state(request))
 
 

@@ -1390,7 +1390,8 @@
           fact(L("Looked up by", "Строка ищется по"), book.student || null),
           fact(L("Grades found", "Найдено оценок"), String(book.items)),
           button(L("Read now", "Прочитать сейчас"), read),
-          button(L("Open in Google Sheets", "Открыть в Google Таблицах"), () => tg.openLink(book.url))],
+          button(book.id.startsWith("dropbox-") ? L("Open in Dropbox", "Открыть в Dropbox")
+            : L("Open in Google Sheets", "Открыть в Google Таблицах"), () => tg.openLink(book.url))],
           L("It is read every 30 minutes by itself.", "Сама таблица читается раз в 30 минут.")),
         section(L("Tabs", "Вкладки"), tabs.length ? tabs : [row({title: L("No tab with your row", "Нет вкладок с вашей строкой"),
           className: "faded"})], L("Tap a tab to see which columns are which works, and to correct it.",
@@ -2051,7 +2052,7 @@
         change({student: value});
       };
       const url = el("input", {className: "grow", value: draft.url, autocomplete: "off", spellcheck: false,
-        placeholder: "https://docs.google.com/spreadsheets/d/…"});
+        placeholder: L("Google Sheets or Dropbox link", "Ссылка Google Таблиц или Dropbox")});
       url.oninput = () => { draft.url = url.value; };
       const label = el("input", {className: "grow", value: draft.label, maxLength: data.label_chars, placeholder: "DM"});
       label.oninput = () => { draft.label = label.value; };
@@ -2086,9 +2087,11 @@
               redraw();
               rereadGrades();
             }
-          })], L(`A teacher's Google Sheets table open to anyone with the link, and the course in front of every grade, up to `
+          })], L(`A teacher's Google Sheets table open to anyone with the link, or a Dropbox link to an .xlsx file (not to `
+          + `a folder), and the course in front of every grade, up to `
           + `${data.label_chars} characters (empty: the start of the table's title). The first reading is a snapshot, `
-          + "without messages.", `Таблица преподавателя в Google, открытая по ссылке, и курс перед каждой оценкой, до `
+          + "without messages.", `Таблица преподавателя в Google, открытая по ссылке, или ссылка Dropbox на файл .xlsx `
+          + `(не на папку), и курс перед каждой оценкой, до `
           + `${data.label_chars} символов (пусто — начало названия таблицы). Первое чтение — снимок, без сообщений.`))];
     }
 
