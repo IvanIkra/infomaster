@@ -26,7 +26,7 @@ from .. import clock
 from ..config import Env
 from ..i18n import Alert, Phrase
 from ..settings import ChatSettings
-from .files import NotNow
+from .files import PDF_TYPES, NotNow
 from .inbox import RETENTION, Inbox
 
 log = logging.getLogger(__name__)
@@ -405,8 +405,9 @@ def message_files(message: Message) -> list[dict]:
         return []
     if message.photo:
         return [{"kind": "photo", "mime": "image/jpeg", "size": message.file.size}]  # its largest size
+    name, mime = message.file.name or "", (message.file.mime_type or "").lower()
     kind = next((k for k in ("sticker", "voice", "video_note", "gif", "video", "audio") if getattr(message, k)),
-                "pdf" if message.file.mime_type == "application/pdf" else "document")
+                "pdf" if mime in PDF_TYPES or name.lower().endswith(".pdf") else "document")
     return [{"kind": kind, "name": message.file.name, "mime": message.file.mime_type, "size": message.file.size}]
 
 

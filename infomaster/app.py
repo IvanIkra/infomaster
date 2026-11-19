@@ -13,6 +13,7 @@ from .collectors.files import Files
 from .collectors.grades import GradeSheets
 from .collectors.hseapp import CALLBACK_PATH, HseApp
 from .collectors.inbox import Inbox
+from .collectors.links import fetch as fetch_linked_pdf
 from .collectors.mail import Mail
 from .collectors.ruz import Diff, Ruz
 from .collectors.telegram import Twin
@@ -84,6 +85,7 @@ class Service:
         # PDFs come through the twin when a batch needs them; the sheets among them go to «Листочки» (§6.3).
         self.files = Files(self.store, data_dir)
         self.files.download = self.twin.download
+        self.files.fetch_url = fetch_linked_pdf  # PDFs behind links of study chats and letters (D59)
         self.sheets = Sheets(self.store, self.settings, self.chat_settings, self.inbox, self.files, self.deadlines,
                              self.subjects, self.llm)
         self.sheet_topic = SheetTopic(self.forum, self.store, self.inbox, self.sheets)
@@ -99,6 +101,7 @@ class Service:
         self.hseapp = HseApp(self.store, self.settings, callback_url=env.public_url + CALLBACK_PATH)
         self.hseapp_deadlines = HseAppDeadlines(self.store, self.subjects, self.llm)
         self.mail = Mail(env, self.store, self.settings, self.inbox)
+        self.mail.files = self.files  # a letter's PDF attachment is kept when it comes (D59)
         # The one list of deadlines (§5.5): the API for Tablo and HA, the «Дедлайны» topic and the Mini App read it.
         self.merged = DeadlineList(self.store, self.deadlines, self.hseapp_deadlines, self.subjects)
         self.deadline_topic = DeadlineTopic(self.forum, self.store, self.inbox, self.merged, env.owner_id)

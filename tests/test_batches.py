@@ -242,7 +242,15 @@ async def test_bad_answer_is_narrowed_down(batches):
     batches.llm.answers = [BadAnswer("answer was cut at max_tokens"), {"items": [item([1])]},
                            BadAnswer("request declined")]
     await parse_chat(batches)
-    assert len(batches.news.live(batches.now(), 24)) == 1 and batches.inbox.pending(CHAT) == []
+    assert len(batches.news.live(batches.now(), 24)) == 1
+    # The failing message is tried at the next runs of its chat, then skipped and told.
+    assert [m["msg_id"] for m in batches.inbox.pending(CHAT)] == [2] and batches.notices == []
+    batches.llm.answers = [BadAnswer("request declined")]
+    await parse_chat(batches)
+    assert [m["msg_id"] for m in batches.inbox.pending(CHAT)] == [2] and batches.notices == []
+    batches.llm.answers = [BadAnswer("request declined")]
+    await parse_chat(batches)
+    assert batches.inbox.pending(CHAT) == [] and batches.store.get_json("batches.failed") == {}
     assert "пропущено разбором: request declined" in batches.notices[0]
 
 

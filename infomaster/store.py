@@ -271,6 +271,8 @@ UPGRADES = (
     ("sheets", "due_assumed", "integer not null default 0"),
     ("sheets", "due_at", "text"),
     ("sheets", "sent_at", "text"),
+    ("files", "url", "text"),  # the link a PDF came from (D59); null for a message's own file
+    ("files", "tries", "integer not null default 0"),  # failed downloads: the file is given up after MAX_TRIES
 )
 
 

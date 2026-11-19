@@ -6,12 +6,13 @@ read. A letter is new when its UID is above the last one seen (kv "mail.state");
 UIDVALIDITY changed, takes only letters of the last `news_ttl_hours` (24 h). imaplib blocks, so a poll runs in a
 thread, 60 s per socket operation; one every 5 minutes.
 
-A letter becomes a message (source "mail") of the mailbox's pseudo chat (`MAILBOX`): the sender, the subject, the
-names of the attachments and the body without HTML, quoted replies and the signature, cleaned and cut at 8000
-characters. The batches parse it with the chats (processing/batches.py): every letter is study, and the mailbox comes
-after the study chats and before the others (D30). Its msg_id is the UID plus an offset that grows past every
-msg_id given before whenever UIDVALIDITY changes, so a rebuilt box never collides with letters kept from the old
-one. The letters and the state are saved in one transaction: a letter is stored once. One broken letter does not
+A letter becomes a message (source "mail") of the mailbox's pseudo chat (`MAILBOX`): the sender, the subject, the names
+of the attachments and the body without HTML, quoted replies and the signature, cleaned and cut at 8000 characters. Its
+first PDF attachment is kept by Files before the letter is stored, so the batch reading the letter finds it and the
+model may see a sheet in it (D59). The batches parse it with the chats (processing/batches.py): every letter is study,
+and the mailbox comes after the study chats and before the others (D30). Its msg_id is the UID plus an offset that grows
+past every msg_id given before whenever UIDVALIDITY changes, so a rebuilt box never collides with letters kept from the
+old one. The letters and the state are saved in one transaction: a letter is stored once. One broken letter does not
 stop the others.
 
 The password never leaves this module: an error is told without it. The System topic hears once when the box has
@@ -37,6 +38,7 @@ from ..config import Env
 from ..i18n import Alert, Phrase
 from ..settings import Settings
 from ..store import Store
+from .files import PDF_TYPES
 from .inbox import Inbox
 
 log = logging.getLogger(__name__)
@@ -160,6 +162,7 @@ class Letter:
     date: dt.datetime           # aware
     text: str
     files: tuple[str, ...] = ()
+    pdf: tuple[str, bytes] | None = None  # the first PDF attachment: (name, bytes), kept by Files (D59)
 
     def fields(self) -> dict:
         """The message the batches read: the text cut at MAX_BODY, the attachments by name."""
@@ -168,7 +171,7 @@ class Letter:
 
 
 def file_entry(name: str) -> dict:
-    """An attachment as the chats' files are listed: only the name; mail attachments are not downloaded."""
+    """An attachment as the chats' files are listed: only the name; the first PDF is kept by Files (D59)."""
     kind = "pdf" if name.lower().endswith(".pdf") else "document"
     return {"kind": kind, "name": name, "mime": None, "size": None}
 
@@ -188,9 +191,17 @@ def parse(raw: bytes, uid: int = 0, fallback_date: dt.datetime | None = None) ->
             date = date.replace(tzinfo=dt.UTC)
     except (TypeError, ValueError):
         date = fallback_date or clock.now_utc()
-    files = tuple(p.get_filename() for p in msg.iter_attachments() if p.get_filename())
+    attachments = [p for p in msg.iter_attachments() if p.get_filename()]
+    files = tuple(p.get_filename() for p in attachments)
+    first = next((p for p in attachments if p.get_content_type() in PDF_TYPES or
+                  p.get_filename().lower().endswith(".pdf")), None)
+    try:
+        data = first.get_content() if first is not None else None
+    except (KeyError, LookupError, ValueError):  # an attachment that cannot be decoded is left as a name
+        data = None
+    pdf = (first.get_filename(), data) if isinstance(data, bytes) and data else None
     return Letter(uid, " ".join(sender.split()), " ".join(str(msg.get("Subject", "")).split()), date,
-                  body_text(msg), files)
+                  body_text(msg), files, pdf)
 
 
 # --- IMAP -----------------------------------------------------------------------
@@ -241,6 +252,7 @@ class Mail:
         self.store, self.db, self.settings, self.inbox, self.now = store, store.db, settings, inbox, now
         self.fetcher: Callable = fetch  # replaced in tests
         self.notify: Callable[[Phrase], None] | None = None  # a line for the System topic
+        self.files = None  # collectors/files.Files: a letter's PDF attachment is kept there when it comes (D59)
         self.ok_at: str | None = None
         self.error: str | None = None if self.configured else NOT_SET
         self._failing_since: dt.datetime | None = None
@@ -279,7 +291,15 @@ class Mail:
             self._failed(self._hide(f"{type(e).__name__}: {e}"))
             return 0
         first = uidvalidity != state.get("uidvalidity") or state.get("last") is None
-        saved = self.take(state, uidvalidity, top, letters, first)
+        rows = self.read(state, uidvalidity, letters, first)
+        if self.files is not None:  # before the letters: a batch that reads a letter finds its PDF
+            for msg_id, letter in rows:
+                if letter.pdf is not None:
+                    try:
+                        await self.files.keep_attachment(msg_id, letter.date, *letter.pdf)
+                    except Exception:
+                        log.exception("mail: the attachment of letter %s not kept", msg_id)
+        saved = self.save(state, uidvalidity, top, rows)
         self._recovered()
         if saved:
             log.info("mail: %d new letters", saved)
@@ -288,6 +308,11 @@ class Mail:
     def take(self, state: dict, uidvalidity: int, top: int, letters: list[tuple[int, bytes]], first: bool) -> int:
         """Store the letters, on a first poll only those of the last day, and the new state in the same transaction.
         Returns how many were stored."""
+        return self.save(state, uidvalidity, top, self.read(state, uidvalidity, letters, first))
+
+    def read(self, state: dict, uidvalidity: int, letters: list[tuple[int, bytes]], first: bool
+             ) -> list[tuple[int, Letter]]:
+        """The letters to store, by msg_id: on a first poll only those of the last day."""
         base = self._base(state, uidvalidity)
         cutoff = self.now() - self._ttl()
         rows = []
@@ -299,10 +324,15 @@ class Mail:
                 continue
             if first and letter.date < cutoff:
                 continue
-            rows.append((base + uid, letter.fields()))
+            rows.append((base + uid, letter))
+        return rows
+
+    def save(self, state: dict, uidvalidity: int, top: int, rows: list[tuple[int, Letter]]) -> int:
+        """The letters and the new state in one transaction; how many were stored."""
+        base = self._base(state, uidvalidity)
         new_state = {"uidvalidity": uidvalidity, "last": top, "base": base}
         with self.db:
-            saved = sum(self.inbox.add_letter(msg_id, fields) for msg_id, fields in rows)
+            saved = sum(self.inbox.add_letter(msg_id, letter.fields()) for msg_id, letter in rows)
             self.db.execute("insert into kv(key, value) values(?, ?) "
                             "on conflict(key) do update set value = excluded.value",
                             (STATE_KEY, json.dumps(new_state)))

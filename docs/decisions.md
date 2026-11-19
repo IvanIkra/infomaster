@@ -276,6 +276,15 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   megabytes): a tool gives a signed link that expires, and the file goes by `curl`. No backups: the owner accepted
   losing the library with the disk.
 
+- **D59. Sheets behind links and in letters, 20.11.2026.** This changes §6.3 and finishes stage 12 of §11.1. On live
+  data (05.11–19.11) every PDF sent to a chat was found; the sheets missed never came as one. They came as a Dropbox
+  link in a Smart LMS letter, a public folder or file on Yandex Disk, or a Google Classroom assignment. Public links
+  of study chats and letters are now followed to the PDF behind them, and a letter's PDF attachment is kept when the
+  letter arrives. Classroom and Smart LMS pages need a login and are not tried: their deadlines still come from the
+  letter's text. Four places where a sheet could be lost are closed: a PDF sent with a generic type, an old PDF of a
+  chat that is not study after a pause of the twin, a download Telegram refused once, and an answer of the model that
+  failed once. Downloads and answers are tried three times before they are given up.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

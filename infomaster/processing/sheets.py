@@ -45,7 +45,7 @@ from collections.abc import Callable
 
 from .. import clock
 from ..collectors.files import OWN_CHAT, Files
-from ..collectors.inbox import Inbox
+from ..collectors.inbox import MAILBOX, Inbox
 from ..i18n import Phrase, tr
 from ..library import Library
 from ..llm.budget import CHARS_PER_TOKEN, PAGE_TOKENS, BudgetExceeded
@@ -116,6 +116,11 @@ CHANGES_SCHEMA = {
     "required": ["changes"],
     "additionalProperties": False,
 }
+
+
+def origin(sheet: dict) -> str:
+    """The source of a sheet's message: a letter's PDF (D59) is of the mailbox, any other of a chat."""
+    return "mail" if sheet["chat_id"] == MAILBOX else "tg"
 
 
 def number_key(number: str | None) -> str:
@@ -330,7 +335,7 @@ class Sheets:
         sent = dt.datetime.fromisoformat(sheet["sent_at"]).replace(tzinfo=clock.TZ) if sheet["sent_at"] else None
         found = self.library.find_class(sheet["course"], sent, seminar=True) if sheet["course"] and sent else None
         author = "owner" if sheet["chat_id"] == OWN_CHAT else \
-            (self.inbox.message(sheet["chat_id"], sheet["msg_id"]) or {}).get("sender_name") or ""
+            (self.inbox.message(sheet["chat_id"], sheet["msg_id"], origin(sheet)) or {}).get("sender_name") or ""
 
         async def copy(part) -> bool:
             await asyncio.to_thread(shutil.copyfile, path, part)
@@ -382,7 +387,7 @@ class Sheets:
         for deadline in deadlines:
             known = self.deadlines.find(deadline["label"], deadline["due"])
             if known is None:
-                self.deadlines.add({"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]],
+                self.deadlines.add({"source": origin(sheet), "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]],
                                     "course": sheet["course"], "label": deadline["label"], "due": deadline["due"],
                                     "sheet_id": sheet["id"]}, self.now())
             elif known["assumed"]:
@@ -452,7 +457,7 @@ class Sheets:
             else:
                 if told is None:
                     told = self.deadlines.get(self.deadlines.add(
-                        {"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": row["msg_ids"],
+                        {"source": origin(sheet), "chat_id": sheet["chat_id"], "msg_ids": row["msg_ids"],
                          "course": row["course"], "label": row["label"], "due": due, "sheet_id": sheet["id"]},
                         self.now()))
                     touched.add(told["id"])
@@ -516,8 +521,8 @@ class Sheets:
         due_at = entry.start.isoformat(timespec="seconds") if entry else None
         self._set_due(sheet, due, True, due_at)
         label = self._label(sheet)
-        new = {"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]], "course": sheet["course"],
-               "label": label, "due": due, "sheet_id": sheet["id"], "assumed": True}
+        new = {"source": origin(sheet), "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]],
+               "course": sheet["course"], "label": label, "due": due, "sheet_id": sheet["id"], "assumed": True}
         if due is None:
             if keep is not None:
                 self.deadlines.drop([keep["id"]], self.now())
@@ -540,8 +545,10 @@ class Sheets:
     def _context(self, sheet: dict) -> list[str]:
         chat = self.inbox.chat(sheet["chat_id"])
         abbr = self.subjects.abbr(sheet["course"])
+        where = "the university mailbox" if origin(sheet) == "mail" else \
+            f"\"{chat['title'] if chat else sheet['chat_id']}\""
         return [f"Posted: {dt.datetime.fromisoformat(sheet['created_at']):%a %Y-%m-%d}",
-                f"Chat: \"{chat['title'] if chat else sheet['chat_id']}\"",
+                f"Chat: {where}",
                 f"File: {sheet['name']}",
                 f"Course: {sheet['course'] or '(none)'}" + (f", abbreviation {abbr}" if abbr else ""),
                 f"Number: {sheet['number'] or '(none)'}"]
@@ -641,6 +648,8 @@ class Sheets:
             chain = self.versions(first) if first["status"] == "posted" else [first]
             latest = chain[-1]
             chat = self.inbox.chat(first["chat_id"])
+            if origin(first) == "mail":
+                chat = {"title": "✉ " + (self.inbox.subject([first["msg_id"]]) or "mail")}
             listed.append({
                 "id": latest["id"], "first": first["id"], "versions": len(chain), "status": first["status"],
                 "error": first["error"], "course": latest["course"],

@@ -219,15 +219,27 @@ for a translation; a manual entry or the course disappearing from the source cle
    and replies to it with "sheet updated" and a short description of the changes. For that the difference of the
    texts is computed locally, and only it goes to the model.
 
+**Sheets that are no PDF of a chat (D59).** A study chat's message or a letter without a PDF of its own may link to
+one: the first such link (at most three are tried) is downloaded before the batch (`collectors/links.py`) and its
+first page goes to the model like a sent PDF's, with the link it came from. Followed: Dropbox (`dl=1`), Google Drive
+files, Google documents and presentations (their PDF export), public Yandex Disk files (by the public API; a folder
+is skipped), plain URLs of a PDF. Not tried: pages behind a login (Google Classroom, Smart LMS). What comes must
+start as a PDF does. A link that cannot be read now is tried at the next runs, three times in all. A letter's first
+PDF attachment is kept when the letter arrives (`files` row of source `mail`), so its batch finds it; a sheet of a
+letter belongs to the mailbox (`chat_id` 0) and names the letter as its source. A message the model cannot answer for
+is tried at the next two runs of its chat before it is skipped, and the System topic's line about it names its PDF,
+so the owner can add the sheet by hand.
+
 **Stage 6 details:**
 
 - A PDF is downloaded not when the message arrives but when parsing reaches it (`collectors/files.py`): the file goes
   to `data/files/<sha256>.pdf`, and the `files` row remembers both the result and a failure of the file itself
   (deleted, broken, not an image), so parsing the same message again does not download the file again. A failure on
   the way (the twin not connected, the network, FloodWait, a Telegram server error) is not remembered: the message
-  stays in the queue until the next run, and the chat's other messages are parsed without it. A chat closed to the
-  twin is a failure of the file itself. Files over 50 MB are not downloaded. Mail attachments are not read at this
-  stage.
+  stays in the queue until the next run, and the chat's other messages are parsed without it. Any other failure (a
+  chat closed to the twin) is tried again at the next runs, three times in all (`files.tries`); a deleted or broken
+  file is given up at once. Files over 50 MB are not downloaded. A document whose type is not `application/pdf` but
+  whose name ends in `.pdf` counts as a PDF.
 - There is no page rendering (pypdf does not draw): a scan (fewer than 5 words on the first page) goes to the model
   as a PDF of its first pages, as a document; the model sees the pages as images. The budget reserve is 3000 tokens
   per page.
@@ -840,8 +852,9 @@ own; Claude is an optional door, not the brain (D53).
     news, sheets and the timetable arrive silently or not at all: grades are a section in Tablo and the Mini App,
     news is a small block in Tablo, and the separate "important news" messages go. Summaries (stage 7) are removed
     entirely: what matters reaches the news and the deadlines anyway.
-12. **Sheets** (the due date done, D56). A sheet without a due date is due before the next seminar of its course in RUZ, marked as
-    assumed. Find out on live data why about half of the sheets are missed.
+12. **Sheets** (done, D56, D59). A sheet without a due date is due before the next seminar of its course in RUZ, marked as
+    assumed. About half of the sheets were missed because they never came as a PDF of a chat: they come behind
+    links and as letters' attachments now, and a failed download or answer is tried again before it is given up.
 13. **MCP connector.** infomaster serves a remote MCP server on the public port, added to claude.ai as a custom
     connector (it works on the Pro plan and in the phone app). Tools read deadlines, the timetable, grades, news,
     messages, sheets and the knowledge base, upload files, and change almost every setting the Mini App changes.

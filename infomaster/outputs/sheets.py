@@ -23,7 +23,7 @@ from collections.abc import Callable
 from .. import clock
 from ..collectors.files import OWN_CHAT
 from ..collectors.inbox import Inbox
-from ..processing.sheets import Sheets
+from ..processing.sheets import Sheets, origin
 from ..store import Store
 from .feed import day, remember, source
 from .forum import Forum
@@ -172,5 +172,5 @@ class SheetTopic:
     def _source(self, sheet: dict) -> str:
         if sheet["chat_id"] == OWN_CHAT:
             return self.forum.tr("added by hand", "добавлен вручную")
-        return source(self.inbox, {"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]]},
-                      self.forum.lang, self.forum.message_url)
+        row = {"source": origin(sheet), "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]]}
+        return source(self.inbox, row, self.forum.lang, self.forum.message_url)

@@ -67,6 +67,7 @@ too, marked passed, so that an extension after the date moves them instead of ad
 
 import asyncio
 import datetime as dt
+import json
 import logging
 import re
 import time
@@ -74,7 +75,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 
 from .. import clock
-from ..collectors.files import Files, NotNow, image_file
+from ..collectors.files import Files, NotNow, image_file, pdf_file
 from ..collectors.inbox import MAILBOX, Inbox, message_link
 from ..i18n import Phrase
 from ..library.feed import MATERIAL_KINDS, ChatMaterials, material_file
@@ -92,6 +93,9 @@ from .sheets import Sheets
 from .subjects import TITLE_CHARS, Subject, dictionary_lines
 
 log = logging.getLogger(__name__)
+
+FAILED_KEY = "batches.failed"  # {"source:chat:msg": failed runs} of messages the model could not answer for
+SKIP_AFTER = 3                  # failed runs before such a message is skipped
 
 MAX_TOKENS = 16_000
 CHUNK_MESSAGES = 40       # an item costs up to ≈250 output tokens, and most chat messages give none
@@ -761,7 +765,7 @@ class Batches:
         if not pending:
             return
         chosen, skipped = self._select(chat_id, settings, pending)
-        await self._fetch_pdfs(chosen)
+        await self._fetch_pdfs(chosen, settings["study"])
         await self._read_images(chat, settings, chosen)  # may raise: then every message stays in the queue
         if waiting := [m["msg_id"] for m in chosen if m["later"]]:
             log.info("messages %s of %s wait for their files: the twin cannot download now", waiting, chat_id)
@@ -800,26 +804,35 @@ class Batches:
         images = settings["images"] and self.images is not None and self.files is not None
         materials = self.materials is not None and settings["study"] and chat_id != MAILBOX
         for message in pending:
+            # A PDF may be a sheet even after a pause of the twin: it is read whatever its age (a chat's news is not).
             keep = (readable(message) or (images and image_file(message) is not None)
                     or (materials and material_file(message) is not None)) and \
-                (settings["study"] or message["at"] >= oldest)
+                (settings["study"] or message["at"] >= oldest or pdf_file(message) is not None)
             if keep and settings["filter"] == "important":
                 keep = important(message, people) or replies_to_important(self.inbox, chat_id, message, by_id, people)
             (chosen if keep else skipped).append(message)
         return chosen, skipped
 
-    async def _fetch_pdfs(self, messages: list[dict]) -> None:
+    async def _fetch_pdfs(self, messages: list[dict], study: bool) -> None:
         """The PDF of each message, downloaded now if need be: `message["pdf"]` is its files row or None.
-        `message["later"]`: the twin cannot download it now, the message waits for the next run."""
+        `message["later"]`: the twin cannot download it now, the message waits for the next run. In a study chat
+        and in the mailbox, a message without a PDF of its own gets the one its link leads to (D59)."""
         for message in messages:
             message["pdf"], message["later"] = None, False
-            if self.files is not None:
+            if self.files is None:
+                continue
+            try:
+                message["pdf"] = await self.files.fetch(message)
+            except NotNow:
+                message["later"] = True
+            except Exception:  # the batch goes on with the file's name
+                log.exception("fetching the PDF of message %s failed", message["msg_id"])
+            if study and not message["later"] and not (message["pdf"] or {}).get("sha256") and \
+                    pdf_file(message) is None:
                 try:
-                    message["pdf"] = await self.files.fetch(message)
-                except NotNow:
-                    message["later"] = True
-                except Exception:  # the batch goes on with the file's name
-                    log.exception("fetching the PDF of message %s failed", message["msg_id"])
+                    message["pdf"] = await self.files.fetch_link(message) or message["pdf"]
+                except Exception:
+                    log.exception("fetching the linked PDF of message %s failed", message["msg_id"])
 
     async def _read_images(self, chat: dict, settings: dict, messages: list[dict]) -> None:
         """What the image of each message shows, in a chat with «Картинки»: `message["image"]` is {shows, text} or
@@ -912,22 +925,41 @@ class Batches:
         return result
 
     def _skip(self, chat: dict, message: dict, error: str) -> None:
-        """A message the model cannot answer for: it leaves the queue, and the System topic hears about it."""
+        """A message the model cannot answer for. It stays in the queue for the next runs of its chat (an answer cut
+        short or malformed may come right next time, and a PDF in it may be a sheet), and after SKIP_AFTER failed
+        runs it leaves the queue and the System topic hears about it."""
+        key = f"{chat['source']}:{chat['id']}:{message['msg_id']}"
+        failed = self.store.get_json(FAILED_KEY, {})
+        failed[key] = failed.get(key, 0) + 1
+        if failed[key] < SKIP_AFTER:
+            log.warning("message %s of %s failed (%d of %d), it is tried again at the next run: %s",
+                        message["msg_id"], chat["id"], failed[key], SKIP_AFTER, error)
+            self.store.put_json(FAILED_KEY, failed)
+            return
+        del failed[key]
         log.warning("message %s of %s skipped: %s", message["msg_id"], chat["id"], error)
         with self.db:
             self.inbox.mark_parsed(chat["id"], [message["msg_id"]], self.now(), chat["source"])
+            self.db.execute("insert into kv(key, value) values(?, ?) on conflict(key) do update set "
+                            "value = excluded.value", (FAILED_KEY, json.dumps(failed)))
         if self.notify is None:
             return
+        file = message.get("pdf") or {}
+        pdf_en = f" Its PDF «{file['name']}» may be a sheet: add it by hand in the Mini App." if \
+            file.get("sha256") else ""
+        pdf_ru = f" Его PDF «{file['name']}» может быть листочком: добавьте его вручную в Mini App." if \
+            file.get("sha256") else ""
         if chat["source"] == "mail":
             sender = message["sender_name"]
             self.notify(Phrase(f"The letter «{message['subject'] or 'no subject'}» ({sender}) is skipped by the "
-                               f"parsing: {error}.",
-                               f"Письмо «{message['subject'] or 'без темы'}» ({sender}) пропущено разбором: {error}."))
+                               f"parsing: {error}.{pdf_en}",
+                               f"Письмо «{message['subject'] or 'без темы'}» ({sender}) пропущено разбором: {error}."
+                               f"{pdf_ru}"))
             return
         link = message_link(chat, message["msg_id"])
         tail = f"\n{link}" if link else ""
-        self.notify(Phrase(f"A message of «{chat['title']}» is skipped by the parsing: {error}.{tail}",
-                           f"Сообщение из «{chat['title']}» пропущено разбором: {error}.{tail}"))
+        self.notify(Phrase(f"A message of «{chat['title']}» is skipped by the parsing: {error}.{pdf_en}{tail}",
+                           f"Сообщение из «{chat['title']}» пропущено разбором: {error}.{pdf_ru}{tail}"))
 
     # --- the prompt -------------------------------------------------------------------
 
@@ -1040,6 +1072,8 @@ class Batches:
         lines += [f"  {line}" for line in text.splitlines() if line.strip()] or ["  (no text)"]
         if (file := message.get("pdf")) and file["sha256"]:
             about = f"  PDF \"{file['name']}\", {file['pages']} pages"
+            if file.get("url"):
+                about += f", downloaded from the link {file['url']}"
             if pdf.scanned(file["first_page"]):
                 lines.append(f"{about}: a scan, its first page is attached as document {scans[message['msg_id']]}")
             else:
