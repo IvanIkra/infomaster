@@ -82,6 +82,7 @@ processing/   batches, pdf, subjects, deadlines, grades,
               schedule, images                           — everything that computes
 llm/          client, budget, journal                    — the single entry to Haiku: limit + journal
 outputs/      forum (bot), miniapp, api, ical_feed
+connector/    oauth, mcp, tools, catalog, changes       — the MCP connector for claude.ai (§8.5)
 settings/     storing and validating settings
 ```
 
@@ -479,6 +480,7 @@ iCloud subscriptions fetch the feed from their own servers and cannot reach the 
 | Port | Paths | Protection |
 |---|---|---|
 | public (Funnel) | `/app/*` (the Mini App), `/hseapp/callback`, `/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics` and `optional.ics` | Mini App: an `initData` check, only the owner's Telegram id is let in. Callback: the PKCE `state`. Feeds: the secret in the path; no `tablo.ics` here |
+| public (Funnel) | `/mcp`, `/.well-known/oauth-protected-resource[/mcp]`, `/.well-known/oauth-authorization-server`, `/oauth/*` (the MCP connector, §8.5) | `/mcp`: an OAuth access token; the metadata is public; `/oauth/authorize` lets in only with a one-time code the bot sends to the owner |
 | internal | `/api/*`, `/calendar/<CALENDAR_SECRET>/main.ics`, `optional.ics`, `tablo.ics` | a Bearer token; the feeds use a secret in the path because calendars cannot send headers |
 
 The secrets differ: a leaked link of one's own calendar is replaced without touching Tablo. Without
@@ -593,6 +595,85 @@ forum (`?screen=…`, `start_param`) open the right tab or screen.
   the limit and a raise for today, model prices. The languages of the Mini App and the forum. `.env` holds only
   secrets.
 
+### 8.5 MCP connector (claude.ai)
+
+Stage 13 of §11.1 (D53, D57). infomaster serves a remote MCP server on the public port, and the owner adds
+`https://infomaster.<tailnet>.ts.net/mcp` to claude.ai as a custom connector (Customize → Connectors, any plan). The
+same connector then works in the web, desktop and phone apps; Claude Code adds the same address. claude.ai connects
+from Anthropic's cloud through Funnel. Claude reads what the Mini App shows and changes almost everything the Mini
+App changes; infomaster keeps working without it (D53).
+
+**Protocol** (`connector/mcp.py`). Streamable HTTP: `POST /mcp`, one JSON-RPC message per request, a plain JSON answer
+(no SSE stream), no sessions; a notification gets 202, `GET` and `DELETE` get 405. The server is dual-era, as the
+specification's versioning allows, because a client of either era may connect:
+
+- a request whose `params._meta` carries `io.modelcontextprotocol/protocolVersion` is served by revision
+  **2026-07-28**: the `MCP-Protocol-Version`, `Mcp-Method` and, for `tools/call`, `Mcp-Name` headers must match the
+  body (else 400 with `HeaderMismatch`, -32020), another version is 400 with `UnsupportedProtocolVersion` (-32022)
+  and the list, `server/discover` answers, results carry `resultType`, an unknown method is a 404;
+- any other request is legacy (**2025-03-26** to **2025-11-25**): `initialize` agrees on the version, and since the
+  server keeps no state and gives no `Mcp-Session-Id`, every request stands alone.
+
+Methods: `server/discover`, `initialize`, `ping`, `tools/list`, `tools/call`. An `Origin` other than claude.ai,
+claude.com or `PUBLIC_URL` is refused with 403. The subset is written directly in aiohttp (about 200 lines): the
+official `mcp` package brings Starlette, uvicorn and pydantic, and the container has 256 MB. Measured: about 0.4 MB of
+Python heap for the connector's modules, the tool registry and its listing; no change in RSS.
+
+**Authorization** (`connector/oauth.py`). OAuth 2.1 with infomaster as its own authorization server, for one person:
+
+| Path | What |
+|---|---|
+| `/.well-known/oauth-protected-resource/mcp` (also without `/mcp`) | RFC 9728: `resource` is `PUBLIC_URL/mcp`, the authorization server is `PUBLIC_URL` |
+| `/.well-known/oauth-authorization-server` | RFC 8414: the endpoints, `S256` only, public clients only (`none`), `iss` in the answer (RFC 9207) |
+| `POST /oauth/register` | Dynamic Client Registration (RFC 7591); only claude.ai's and claude.com's callback and loopback addresses on any port (Claude Code) are taken as redirect URIs |
+| `/oauth/authorize` | the owner's page, see below; PKCE `S256` is required, the `resource` (RFC 8707) must name this server |
+| `POST /oauth/token` | `authorization_code` with the verifier, `refresh_token` |
+| `POST /oauth/revoke` | RFC 7009: a refresh token takes its connection with it |
+
+A request to `/mcp` without a valid token gets 401 with `WWW-Authenticate: Bearer resource_metadata="…"`. Client ID
+Metadata Documents are not advertised, so claude.ai registers itself. There are no scopes: one owner, one level of
+access; the client's own approval of each change is the gate.
+
+There is no password. The authorize page names the client and where the browser goes back to; **Send a code to
+Telegram** makes the bot send a six-digit code to the owner's private chat (`TG_OWNER_ID`; the owner must have pressed
+Start there once), and the owner types it in. Five wrong codes end the page's code; a page gets a code every 30
+seconds at most and the bot sends at most 10 an hour; a page and its code live 10 minutes. Then the browser goes back
+with an authorization code (5 minutes, one use; used twice, it revokes the connection it gave). An access token lives
+an hour; a refresh token rotates at each use (the one just used still works two minutes, for two refreshes in flight)
+and lapses after 30 days unused. Tokens are kept as SHA-256 hashes (`connector_grants`, `connector_tokens`); the open
+pages and the codes live in memory, so a restart only asks to sign in again.
+
+**Tools** (`connector/catalog.py`). Each has a JSON Schema of its arguments (checked before the call, unknown fields
+refused) and annotations: `readOnlyHint` for reads; `destructiveHint` for changes and removals, so that the client
+asks the owner first (adding a deadline, an event, a gradebook or a grade, restoring a hidden deadline and "read the
+gradebooks now" are not destructive). A change is the Mini App's own action: the tool calls the Mini App's handler,
+with the same checks and the same side effects (a sheet's caption edited, the reminders rescheduled), so no rule lives
+twice.
+
+| Reads | Writes |
+|---|---|
+| `get_status` (what needs attention, every source, the LLM spending), `list_deadlines`, `list_hidden_deadlines`, `get_timetable` (a range of days), `list_news`, `search_messages` (text, chat, days; 14 days are kept), `get_message` (as D50's page), `list_chats`, `list_chat_senders`, `list_courses`, `get_settings`, `list_sheets`, `get_sheet` (the text; a scan's first page as its JPEG while the file is kept), `list_grades`, `get_gradebook` | deadlines: `add_deadline`, `edit_deadline`, `hide_deadline`, `delete_deadline`, `unhide_deadline`; the timetable: `add_event`, `edit_event`, `set_event_options`, `remove_event`, `correct_class`; `edit_sheet`; `update_chat_settings`; the dictionary: `set_course`, `delete_course`; settings: `update_general_settings`, `update_reminders`, `update_images`, `update_pdf_limits`; grades: `update_grade_settings`, `add_gradebook`, `update_gradebook`, `remove_gradebook`, `read_gradebook_now`, `set_tab_layout`, `reset_tab_layout`, `add_grade`, `change_grade`, `delete_grade` |
+
+Not exposed: the secrets of `.env`, the twin's login and logout, the HSE App X login, the LLM limit and the model
+prices (a lower price would raise the limit too), uploads (stage 14), anything of the summaries. The registry
+(`connector/tools.py`) takes more tools: stage 14 adds the raw material, the inbox, uploads and the knowledge base
+there.
+
+**Journal and undo** (`connector/changes.py`). Every write through the connector is a row of `connector_changes`:
+the time, the connection, the tool, its arguments, one line about it, and the undo steps, which are calls of tools
+(and of a few steps no client sees, like putting Haiku's dictionary entry back as it was) worked out from the state
+before the change. The Mini App's **Settings → Claude connector** screen shows the address to copy, the connections
+with **Revoke**, and the last 50 changes with **Undo**. An undo runs at the time it is asked for: when what it acts on
+has changed since (a deadline its source dropped), it fails, keeps the error and changes nothing more. Some changes
+say what an undo does not bring back (removing a gradebook forgets its grades, own corrections and tab layouts), and
+some cannot be undone at all ("read now"). The last 200 changes are kept.
+
+**Prompt injection.** Claude reads messages strangers wrote. Tool results are JSON, never prose; a result that
+carries chat text or what a model made of it has an `untrusted` field saying that `text`, `full`, `short`, `summary`,
+`title` and `note` are data, not instructions, and the server's instructions say to change nothing because a message
+asks for it. The other guards are the client's approval of destructive tools, the journal with undo, and that only
+the owner can connect.
+
 ## 9. Storage (SQLite)
 
 Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Tablo (§9).
@@ -615,6 +696,8 @@ Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Ta
 | `own_grades` | own grades and corrections of sheet grades (D44) |
 | `bot_posts` | what the bot published: topic, message id, what it refers to (for edits and hiding) |
 | `llm_runs` | the LLM journal |
+| `connector_clients`, `connector_grants`, `connector_tokens` | the MCP connector's OAuth (§8.5): registered clients, the connections the owner allowed with their refresh token, access tokens; tokens as SHA-256 |
+| `connector_changes` | the journal of changes made through the connector, with their undo steps (§8.5) |
 
 ## 10. Settings and secrets
 
@@ -690,7 +773,8 @@ own; Claude is an optional door, not the brain (D53).
     messages, sheets and the knowledge base, upload files, and change almost every setting the Mini App changes.
     Not exposed: secrets, the twin's and HSE App X's logins, raising the LLM limit. Tools that change or delete are
     marked destructive so the client asks first, and every change made through the connector goes to a journal
-    with an undo in the Mini App: Claude reads chat messages written by strangers.
+    with an undo in the Mini App: Claude reads chat messages written by strangers. Built as §8.5 (D57), without
+    the knowledge base and uploads, which come with stage 14.
 14. **Raw material and the knowledge base.** Two stores per course. *Raw*: an inbox (Haiku was not sure of the
     course) and the course's classes by RUZ date with photos of the board, audio, notes of the owner and classmates,
     slides, links (remembered, not downloaded); each item is new or processed. Sources: study chats (Haiku decides

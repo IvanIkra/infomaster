@@ -17,6 +17,7 @@ from .collectors.mail import Mail
 from .collectors.ruz import Diff, Ruz
 from .collectors.telegram import Twin
 from .config import Env
+from .connector import Connector
 from .i18n import Phrase
 from .llm.budget import Budget
 from .llm.client import Haiku
@@ -108,6 +109,9 @@ class Service:
                         "hseapp": self._hseapp_status, "mail": self.mail.status, "sheets": self.sheets.status,
                         "grades": self._grades_status,
                         "images": self.images.status}
+        # The MCP connector for claude.ai (§8.5, D57): its sign-in code comes from the bot to the owner's chat.
+        self.connector = Connector(env, self.store, self.news, send_code=self._to_owner,
+                                   lang=lambda: self.settings.get("miniapp_language"))
         self.inbox.wake = self.batches.wake
         self.batches.publish = self._publish
         self.batches.notify = self._to_system
@@ -134,6 +138,11 @@ class Service:
 
     def _to_system(self, text: Phrase) -> None:
         self.forum.spawn(self.forum.post("system", text))
+
+    async def _to_owner(self, text: str) -> None:
+        """A message of the bot to the owner's private chat: the connector's sign-in code. It fails until the owner
+        has pressed Start in that chat."""
+        await self.forum.client.send_message(self.env.owner_id, text, parse_mode=None)
 
     def _twin_notice(self, text: Phrase) -> None:
         """Twin.notify_login: the line gets the button that leads to the login on the Mini App's «Chats» screen."""
@@ -221,6 +230,8 @@ class Service:
                               (api.create_app(self.env, self.budget, self.sources, self.calendar, self.merged,
                                               self.grades, self.news, self.settings),
                                self.env.internal_port)):
+                if port == self.env.public_port:
+                    self.connector.attach(app)  # the MCP connector shares the Mini App's port (§8.5)
                 runner = web.AppRunner(app, access_log=None)
                 await runner.setup()
                 await web.TCPSite(runner, "0.0.0.0", port).start()

@@ -252,6 +252,17 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   and is withdrawn when no class is left. A real date replaces it and clears the mark: the sheet's pages, a later
   message (the batch model sees the deadline marked "assumed" and moves it), or the owner in the Mini App. A newer
   version takes the deadline over. Sheets from before this change keep no date.
+- **D57. Claude comes in through an MCP connector that infomaster authorizes itself, 19.11.2026.** This adds §8.5,
+  changes §8.1 and is stage 13 of §11.1. infomaster serves a remote MCP server at `/mcp` on the public port, written
+  directly in aiohttp (the official package would bring Starlette, uvicorn and pydantic into a 256 MB container). It
+  answers both revision 2026-07-28 (per-request `_meta`, no sessions) and the initialize-based 2025 revisions,
+  statelessly, because a client of either era may connect. It is its own OAuth 2.1 authorization server for one
+  person: Dynamic Client Registration limited to claude.ai's callback and loopback addresses, PKCE S256, hashed
+  rotating refresh tokens. Instead of a password, the bot sends a one-time code to the owner's private chat. Tools act
+  through the Mini App's handlers, so no rule lives twice. Changes are marked destructive so the client asks first,
+  and every change is journaled with an undo in the Mini App (Settings → Claude connector), because Claude reads
+  messages strangers wrote. Secrets, the twin's and HSE App X's logins, the LLM limit and the model prices stay the
+  owner's alone.
 
 ## Open questions
 

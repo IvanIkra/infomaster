@@ -32,6 +32,9 @@ Tablo, a home dashboard; both integrations are optional.
 - **LLM budget.** Every call is journaled with its cost; a daily dollar limit with priorities (study chats first,
   then mail, then the rest) and a 30-day spending chart in the Mini App.
 - **Two languages.** The forum and the Mini App switch independently between English and Russian.
+- **Claude connector.** A remote MCP server with its own OAuth (a one-time code from the bot instead of a password):
+  added to claude.ai as a custom connector, Claude reads the deadlines, timetable, grades, news and messages and
+  changes what the Mini App changes; every change is journaled with an undo in the Mini App.
 
 ## How it works
 
@@ -50,16 +53,17 @@ flowchart LR
         APP[Telegram Mini App]
         ICS[iCal feeds]
         API[Read-only API]
+        MCP[Claude connector<br/>MCP + OAuth]
     end
     TG & MAIL & RUZ & HSE & GS --> CORE
-    CORE --> FORUM & APP & ICS & API
+    CORE --> FORUM & APP & ICS & API & MCP
 ```
 
 A single asyncio process runs the collectors, the processing pipeline and two HTTP servers:
 
 | Port | Exposed | Serves |
 |---|---|---|
-| public, `8080` | through Tailscale Funnel | Mini App (Telegram `initData` check, owner only), HSE App X login callback, personal iCal feeds |
+| public, `8080` | through Tailscale Funnel | Mini App (Telegram `initData` check, owner only), HSE App X login callback, personal iCal feeds, the MCP connector `/mcp` with its OAuth endpoints |
 | internal, `8081` | Docker network only | `/api/deadlines`, `/api/news`, `/api/grades`, `/api/status` (Bearer token), feeds for Tablo |
 
 The full design is in [docs/architecture.md](docs/architecture.md); the reasoning behind each choice is in
@@ -125,6 +129,7 @@ infomaster/
 ├── collectors/   # Telegram twin, mail, RUZ, HSE App X, files, grade sheets
 ├── processing/   # batches, deadlines and merge, events, schedule, sheets, grades, images
 ├── outputs/      # forum bot and its topics, Mini App, iCal feeds, internal API
+├── connector/    # MCP connector for claude.ai: OAuth, the /mcp endpoint, tools, journal with undo
 ├── llm/          # client with structured output, daily budget, journal
 ├── settings/     # general and per-chat settings
 ├── store.py      # SQLite
@@ -142,10 +147,12 @@ next to Tablo.
 
 The second round (§11.1) has begun. Stage 11, "Quiet", is done: only deadlines, their reminders and source
 failures notify; grades no longer go to the forum, the separate messages about important news are gone, and the
-summaries of stage 7 are removed.
+summaries of stage 7 are removed. A sheet without a due date is due at the next seminar (stage 12, first half), grade
+sheets may be Dropbox links (stage 15, first half), and the MCP connector (stage 13) is done and covered by tests; it
+has not yet been tried against claude.ai itself. Setting it up: [docs/setup.md](docs/setup.md), "Claude connector".
 
 Not yet verified on live Telegram, Haiku and Google Sheets: problem sheets, grades, images, the reworked Mini App,
-the language switch and the silent posts of stage 11. Text length is checked in characters rather than by the rendered
+the language switch, the silent posts of stage 11 and the assumed due dates. Text length is checked in characters rather than by the rendered
 width of the Inter font.
 
 ## License
