@@ -284,10 +284,14 @@ class Library:
                  file.get("name"), file.get("media_type"), file.get("size"), file.get("sha256"), parent, source,
                  chat_id, msg_id, status, note, clock.local_iso(at))).lastrowid
 
-    def from_origin(self, source: str, chat_id: int, msg_id: int) -> dict | None:
-        """The item that came from this message already, if any: a message is taken once."""
+    def from_origin(self, source: str, chat_id: int, msg_id: int, sha256: str | None = None) -> dict | None:
+        """The item that came from this message already, if any: a message is taken once. With `sha256`, only the
+        item of that file: a message whose file was replaced (a sheet's new version) is taken again."""
+        where, values = "", ()
+        if sha256 is not None:
+            where, values = " and sha256 = ?", (sha256,)
         row = self.db.execute("select * from materials where source = ? and chat_id = ? and msg_id = ? "
-                              "and removed_at is null", (source, chat_id, msg_id)).fetchone()
+                              f"and removed_at is null{where}", (source, chat_id, msg_id, *values)).fetchone()
         return dict(row) if row else None
 
     def _new_part(self) -> Path:

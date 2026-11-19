@@ -28,6 +28,9 @@
    sheet's pages, a later message (the batch moves the assumed deadline or gives the same work with a date), or the
    owner in the Mini App (the sheet's date, or the date of its deadline). A newer version takes the older one's
    assumed deadline over and finds its own date the same way. Sheets of before the rule are not assumed.
+6. A prepared sheet, a newer version too, is copied into the library (D58, §6.8) as kind `sheet`, at the class of its
+   course that was on when it was sent (the seminar it was handed out at), else at its course alone: there it outlives
+   the 14 days of its file here.
 
 The forum side is outputs/sheets.py. Writing methods commit themselves, except `add`: the batch calls it inside its
 own transaction.
@@ -37,12 +40,14 @@ import asyncio
 import datetime as dt
 import logging
 import re
+import shutil
 from collections.abc import Callable
 
 from .. import clock
 from ..collectors.files import OWN_CHAT, Files
 from ..collectors.inbox import Inbox
 from ..i18n import Phrase, tr
+from ..library import Library
 from ..llm.budget import CHARS_PER_TOKEN, PAGE_TOKENS, BudgetExceeded
 from ..llm.client import Document, Haiku, LLMError
 from ..settings import ChatSettings, Settings
@@ -143,6 +148,7 @@ class Sheets:
         # The owner's changes of the assumed deadlines (the refs it touched): the forum shows them quietly.
         self.on_change: Callable[[set[str]], None] | None = None
         self.stale: set[int] = set()  # posted sheets whose date changed: their captions are made anew
+        self.library: Library | None = None  # where every sheet's PDF is kept for good (D58)
 
     def status(self) -> dict:
         waiting = self.db.execute("select count(*) n from sheets where status = 'new'").fetchone()["n"]
@@ -304,7 +310,39 @@ class Sheets:
 
     async def prepare(self, sheet_id: int) -> dict | None:
         """Read the sheet, find what it updates, and with `pdf_content` let the model read it; once. None when its
-        file is gone (the sheet fails)."""
+        file is gone (the sheet fails). A prepared sheet also goes to the library."""
+        sheet = await self._prepare(sheet_id)
+        if sheet is not None and self.library is not None:
+            try:
+                await self._shelve(sheet)
+            except Exception:  # the forum gets the sheet all the same
+                log.exception("sheet %d did not go to the library", sheet_id)
+        return sheet
+
+    async def _shelve(self, sheet: dict) -> int | None:
+        """The sheet's PDF into the library (D58), kind `sheet`, at the class it was handed out at; once per file, so
+        a new version in the same message is taken too. Its item's id, or None when it is there already."""
+        if self.library.from_origin("sheet", sheet["chat_id"], sheet["msg_id"], sheet["sha256"]) is not None:
+            return None
+        path = self.files.by_hash(sheet["sha256"])
+        if path is None:
+            return None
+        sent = dt.datetime.fromisoformat(sheet["sent_at"]).replace(tzinfo=clock.TZ) if sheet["sent_at"] else None
+        found = self.library.find_class(sheet["course"], sent) if sheet["course"] and sent else None
+        author = "owner" if sheet["chat_id"] == OWN_CHAT else \
+            (self.inbox.message(sheet["chat_id"], sheet["msg_id"]) or {}).get("sender_name") or ""
+
+        async def copy(part) -> bool:
+            await asyncio.to_thread(shutil.copyfile, path, part)
+            return True
+
+        return await self.library.add_download(
+            copy, name=sheet["name"], media_type="application/pdf", kind="sheet", source="sheet",
+            chat_id=sheet["chat_id"], msg_id=sheet["msg_id"], course=sheet["course"],
+            class_uid=found["uid"] if found else None, title=" ".join(f"Sheet {sheet['number'] or ''}".split()),
+            author=author, at=sent, note="" if sheet["course"] else "the sheet's course is not known")
+
+    async def _prepare(self, sheet_id: int) -> dict | None:
         sheet = self.get(sheet_id)
         if sheet["text"] is not None:
             return sheet

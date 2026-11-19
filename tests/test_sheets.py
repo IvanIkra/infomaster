@@ -12,6 +12,7 @@ from infomaster import clock
 from infomaster.collectors.files import Files
 from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
 from infomaster.collectors.ruz import Class
+from infomaster.library import Library
 from infomaster.llm.budget import BudgetExceeded
 from infomaster.llm.client import Document, Haiku
 from infomaster.outputs import miniapp
@@ -706,3 +707,35 @@ async def test_a_new_version_takes_the_assumed_date_over(batches, llm, sheets, t
     batches.inbox.delete([2], CHAT, now())
     await batches.run_chats([CHAT])
     assert assumed_rows(batches) == [] and (sheets.get(2)["due"], sheets.get(2)["due_assumed"]) == (None, 0)
+
+
+# --- the library (D58) -------------------------------------------------------------------------------
+
+async def test_sheets_go_to_the_library(batches, llm, sheets, topic, schedule, store, files, tmp_path):
+    schedule.ruz._sync([lesson(9, "Математический анализ", "10-20 10:00", "Семинар")])  # the sheet is sent at 11:30
+    library = Library(store, tmp_path, now=batches.now)
+    library.same_course = schedule.same_course
+    sheets.library = library
+
+    await found(batches, llm, 1, SHEET3)
+    await topic.publish()
+    [item] = library.items(kind="sheet")
+    assert (item["source"], item["chat_id"], item["msg_id"], item["title"], item["author"]) == (
+        "sheet", CHAT, 1, "Sheet 3", "Ассистент")
+    assert (item["course"], item["class_uid"], item["name"], item["day"]) == (
+        "Математический анализ", "300009@ruz.example", "list3.pdf", "2026-10-20")
+    assert library.path(item).read_bytes() == SHEET3 and item["media_type"] == "application/pdf"
+    await sheets.prepare(1)  # prepared again (a post that failed): taken once
+    assert len(library.items(kind="sheet")) == 1
+
+    # The same message with a new file is a new version: its file is taken too. A sheet of no course and no number
+    # waits in the inbox.
+    files.remote[CHAT, 1] = SHEET3_FIXED
+    batches.inbox.edit(CHAT, 1, "", [{"kind": "pdf", "name": "list3_fixed.pdf", "size": len(SHEET3_FIXED)}],
+                       batches.now() + dt.timedelta(minutes=1))
+    llm.answers.append({"items": [sheet_item(1, number="", course="")]})
+    await parse(batches)
+    await topic.publish()
+    newer = next(i for i in library.items(kind="sheet") if i["id"] != item["id"])
+    assert (newer["title"], newer["course"], newer["class_uid"]) == ("Sheet", None, None)
+    assert library.path(newer).read_bytes() == SHEET3_FIXED and library.inbox_count() == 1

@@ -467,6 +467,25 @@ Every version is kept; only the newest can be taken back (an undo). The server n
 App's initData check (the signature is the check). The key is kept in `kv`, so links survive a restart. Claude Code
 uses them with `curl`; the Mini App opens a PDF by one.
 
+**Sources** (`library/feed.py`). Besides uploads from the Mini App and the connector, three sources feed the library
+on their own:
+- *Study chats.* In a study chat the batch model (§6.1) also returns `materials`: messages that carry course
+  material (a photo of the board or of notes, notes, slides, a recording, a link to one), each with its course as the
+  dictionary names it (or "" when unsure), a kind and a short title; other chats are not asked, and their schema has
+  no such field. There a photo or a recording without text goes to the model too, so it can be told. The materials
+  are queued in the batch's transaction (`library_queue`) and taken after the run, outside it: a file is downloaded by
+  the twin straight to disk, a link or a text is kept as it is. The class is the one the message was sent at; with no
+  course the item goes to the inbox. A file the twin cannot download now (offline, a flood wait) stays queued and is
+  tried again after the next batch run; any other failure is tried three times. A row goes when its item is made or
+  when its message is deleted or leaves the inbox after its 14 days. A file over the size limit is skipped.
+- *Sheets* (§6.3). When a sheet or a new version of it is prepared for the forum, its PDF is copied in as kind
+  `sheet` (source `sheet`, its message as the origin), at the class of its course that was on when it was sent, else
+  at its course alone; once per file.
+- *The bot.* A private message of the owner to the bot that is no command goes to the inbox (source `bot`): a photo,
+  a document, audio, a voice message or a video is downloaded by the bot itself; a text becomes a link (its first URL)
+  or a text. A forward's origin is the author, the caption the title. Each message of an album is its own item; the
+  bot answers once, quietly, in the forum's language. Anyone else's messages are ignored.
+
 ## 7. LLM: the journal and the daily limit
 
 **The journal (D22).** Every call, failed ones included, is written to `llm_runs`: the time (UTC), the task (`batch`,

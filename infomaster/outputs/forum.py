@@ -5,6 +5,10 @@ their ids in kv, so a deleted topic is created again on the next post.
 
 Quiet by default (D55): a post notifies only when its caller asks (a new or moved deadline, a reminder) or when it is
 an Alert, a source's failure in the System topic; everything else, files and pins too, goes silently.
+
+The bot also takes material for the library (D58): a private message of the owner that is no command (a forward, a
+photo, a file, a recording, a link, a note) goes to the library's inbox (`on_material`), and the bot says so, quietly.
+Its file is downloaded by the bot itself, straight to disk. Anyone else's messages are ignored.
 """
 
 import asyncio
@@ -18,6 +22,7 @@ from telethon.extensions import html as html_text
 from telethon.tl import types
 
 from .. import clock
+from ..collectors.telegram import message_files, message_forward, message_text
 from ..config import Env
 from ..i18n import Alert, Phrase, say, tr
 from ..llm.budget import SOFT_SHARE, Budget, Level, Notice
@@ -70,6 +75,10 @@ class Forum:
         self.emoji: dict[str, int] = {}  # emoji -> the pack's custom emoji for it (see emoji.py)
         self._topics_lock = asyncio.Lock()
         self._tasks: set[asyncio.Task] = set()
+        # The library's intake of the owner's private messages (library/feed.py, from_bot): the message as the twin's
+        # rows have it and a download of its file into a path; the new item's id, or None for nothing to keep.
+        self.on_material: Callable[[dict, Callable[[Path], Awaitable[bool]]], Awaitable[int | None]] | None = None
+        self._album: int | None = None  # the album answered last: one answer for all its messages
 
     @property
     def lang(self) -> str:
@@ -127,6 +136,7 @@ class Forum:
         self.client.add_event_handler(self._on_start, events.NewMessage(pattern=r"^/start\b",
                                                                         func=lambda e: e.is_private))
         self.client.add_event_handler(self._on_raise, events.CallbackQuery(data=RAISE_LIMIT))
+        self.client.add_event_handler(self._on_private, events.NewMessage(incoming=True, func=lambda e: e.is_private))
         await self._set_menu_button(self.env.owner_id)
         try:  # the bot has no commands left (/summary went with the summaries, D55): an old menu is cleared
             await self.client(functions.bots.ResetBotCommandsRequest(scope=types.BotCommandScopeDefault(),
@@ -360,6 +370,35 @@ class Forum:
             if screen else \
             self.tr("The settings are in the Mini App.", "Настройки — в Mini App.")
         await event.respond(text, buttons=[open_app])
+
+    async def _on_private(self, event: events.NewMessage.Event) -> None:
+        """A private message of the owner that is no command: into the library's inbox (D58). Each message of an
+        album is an item of its own; the album gets one answer."""
+        if event.sender_id != self.env.owner_id or self.on_material is None or event.raw_text.startswith("/"):
+            return
+        message = event.message
+        album = message.grouped_id
+        first = album is None or album != self._album
+        self._album = album  # before any await: the album's other messages come at once
+        fields = {"chat_id": event.chat_id, "msg_id": message.id, "at": message.date, "text": message_text(message),
+                  "files": message_files(message), "forward": message_forward(message)}
+
+        async def download(path: Path) -> bool:
+            return await message.download_media(file=str(path)) is not None
+
+        try:
+            saved = await self.on_material(fields, download)
+        except ValueError as e:  # the library refuses it (LibraryError): too big, empty
+            answer = self.tr(f"Not saved: {e}.", f"Не сохранено: {e}.")
+        except Exception:
+            log.exception("message %d to the bot did not go to the library", message.id)
+            answer = self.tr("Not saved: something went wrong, see the log.",
+                             "Не сохранено: что-то пошло не так, подробности в журнале.")
+        else:
+            if saved is None or not first:
+                return
+            answer = self.tr("Saved to the inbox.", "Сохранено во входящие.")
+        await event.respond(answer, silent=True)
 
     async def _set_menu_button(self, user) -> None:
         """The button next to the message field in the chat with the bot, for the owner only."""
