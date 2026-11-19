@@ -556,6 +556,7 @@
       sheet: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
       clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
       bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+      plug: '<path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0zM12 17v5"/>',
       plus: '<path d="M12 5v14M5 12h14"/>',
       chev: '<path d="m1 1 6 5.5L1 12" stroke-width="2"/>',
     };
@@ -1685,6 +1686,11 @@
         parts.push(section("LLM", [row({title: L("Spending and limit", "Расход и лимит"), lead: tile("bolt", "#f2b544"),
           value: `${usd(llm.spent_usd)} / ${usd(llm.limit_usd)}`, go: () => push(llmPage)})]));
       }
+      const connector = await maybe("api/connector");
+      if (connector) {
+        parts.push(section("Claude", [row({title: L("Claude connector", "Коннектор Claude"), lead: tile("plug", "#d97757"),
+          value: String(connector.connections.length), go: () => push(connectorPage)})]));
+      }
       if (general) {
         parts.push(section(L("Language", "Язык"), [
           row({title: "Mini App", control: selectOf(Object.entries(LANGUAGE_NAMES), general.miniapp_language, async (value) => {
@@ -2132,6 +2138,53 @@
             + "«Скрыть»; если сдавать нечего, сообщения нет."))];
     }
 
+    // The MCP connector (§8.5): the address to add in claude.ai, the connections, and what Claude changed, each
+    // change with Undo while it can be undone.
+    async function connectorPage() {
+      const data = await get("api/connector");
+      const address = el("div", {className: "name wrap"}, data.url);
+      const copy = el("span", {className: "value", role: "button", style: "cursor: pointer"}, L("Copy", "Копировать"));
+      copy.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(data.url);
+          copy.textContent = L("Copied", "Скопировано");
+        } catch (error) {
+          tell(data.url);
+        }
+      };
+      const parts = [el("h1", {className: "title"}, L("Claude connector", "Коннектор Claude")),
+        section(L("Address", "Адрес"), [el("div", {className: "row"}, el("div", {className: "main"}, address), copy)],
+          L("In claude.ai: Customize → Connectors → Add custom connector, paste this address. When Claude asks you to "
+            + "sign in, the bot sends a code to your chat with it.", "В claude.ai: Customize → Connectors → Add custom "
+            + "connector, вставьте этот адрес. Когда Claude попросит войти, бот пришлёт код в чат с ним.")),
+        section(L("Connected", "Подключены"), data.connections.length ? data.connections.map((c) => row({
+          title: c.name, sub: [c.redirect, L("last used ", "последний раз ") + (c.used_at || "").replace("T", " ")
+            .slice(0, 16)].filter(Boolean).join(" · "),
+          control: el("button", {className: "small", onclick: async () => {
+            if (!await askYes(L(`Disconnect «${c.name}»? It has to sign in again.`,
+              `Отключить «${c.name}»? Ему придётся войти заново.`))) return;
+            act(`api/connector/connections/${c.id}`, "DELETE", undefined, "api/connector");
+          }}, L("Revoke", "Отключить"))})) : [row({title: L("Nothing is connected.", "Ничего не подключено.")})],
+          L(`Claude reads with ${data.tools.read} tools and changes with ${data.tools.write}; the client asks you `
+            + "before each change.", `Claude читает ${data.tools.read} инструментами и меняет ${data.tools.write}; `
+            + "клиент спрашивает вас перед каждым изменением."))];
+      const changes = data.changes.map((c) => {
+        const state = c.undone_at ? L("undone", "отменено") : !c.undo ? c.note || L("cannot be undone", "не отменить")
+          : c.note ? L("undo: ", "отмена: ") + c.note : null;
+        return row({title: c.summary, wrap: true, sub: [c.at.replace("T", " ").slice(0, 16), state,
+          c.undo_error && !c.undone_at ? L("undo failed: ", "отмена не удалась: ") + c.undo_error : null]
+          .filter(Boolean).join(" · "),
+        control: c.undo && !c.undone_at ? el("button", {className: "small", onclick: async () => {
+          if (!await askYes(L(`Undo «${c.summary}»?`, `Отменить «${c.summary}»?`))) return;
+          act(`api/connector/changes/${c.id}/undo`, "POST", undefined, "api/connector");
+        }}, L("Undo", "Отменить")) : null});
+      });
+      parts.push(section(L("Changes by Claude", "Изменения Claude"), changes.length ? changes
+        : [row({title: L("No changes yet.", "Изменений пока нет.")})], L("Claude reads messages that strangers wrote: "
+          + "check what it changed.", "Claude читает сообщения, которые писали чужие люди: проверяйте, что он изменил.")));
+      return parts;
+    }
+
     async function sheetsSettingsPage() {
       const data = await get("api/sheets");
       const change = (name) => (value) => act("api/sheets", "PATCH", {[name]: value});
@@ -2363,6 +2416,7 @@
                      subjects: ["settings", subjectsPage], hseapp: ["settings", hsePage], llm: ["settings", llmPage],
                      general: ["settings", generalPage], settings: ["settings"]};
     const startScreen = new URLSearchParams(location.search).get("screen") || tg.initDataUnsafe.start_param;
+    SCREENS.connector = ["settings", connectorPage];  // the MCP connector's screen (§8.5)
 
     tg.BackButton.onClick(() => card ? closeCard() : back());
 
