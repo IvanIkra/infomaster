@@ -465,7 +465,7 @@ Every version is kept; only the newest can be taken back (an undo). The server n
 **Links** (`library/links.py`). A file goes in or out by a signed link that names one file and one direction:
 `GET /library/<token>/<name>` (24 hours), `PUT /library/<token>` (6 hours), on the public port, outside the Mini
 App's initData check (the signature is the check). The key is kept in `kv`, so links survive a restart. Claude Code
-uses them with `curl`; the Mini App opens a PDF by one.
+uses them with `curl`; the Mini App opens a PDF by one (its Materials screen, §8.4).
 
 **Sources** (`library/feed.py`). Besides uploads from the Mini App and the connector, three sources feed the library
 on their own:
@@ -612,7 +612,7 @@ way as hiding from HA did. News has none since D55: its button was under the rem
 Opened with a button in the bot. Reworked on 22.10.2026 (D44): four tabs at the bottom, each with one job, and every
 thing lives in one place. Lists only show; to change something, tap a row: a card slides up from the bottom (what
 it is, when, where from, with a link to the message) with the actions. Switches live only in the settings. **+** in
-the header of the Deadlines, Timetable and Study tabs adds a deadline, an event, a grade or a sheet. Links from the
+the header of the Deadlines, Timetable and Study tabs adds a deadline, an event, a grade, a sheet or material. Links from the
 forum (`?screen=…`, `start_param`) open the right tab or screen.
 
 - **Deadlines:** the common list after the merge, in groups (overdue, today, tomorrow, this week, later), each with
@@ -626,7 +626,16 @@ forum (`?screen=…`, `start_param`) open the right tab or screen.
 - **Study:** "Grades", by sheet and own ones by course; tapping a grade edits it (a correction of a sheet's grade
   holds until the sheet itself changes the grade) or deletes an own one. "Sheets": a card with the summary, editing
   the course, number, due date and description (the message caption in the Sheets topic is edited), "this is a new
-  version of another one" (D14), and an own sheet can be uploaded as a PDF and deleted.
+  version of another one" (D14), and an own sheet can be uploaded as a PDF and deleted. "Materials" is the library
+  (§6.8, D58): the inbox with its count, the courses (documents, items, new ones) and a line of what the library
+  holds on disk. A course's page shows its knowledge base first (the book and the cheat sheet, then the lectures
+  and seminars, the last class first); a tap opens the newest PDF (a cheat sheet's Markdown) by a signed link in
+  Telegram's browser (`openLink`: on iOS Safari's view shows the PDF itself), and **Versions** lists the older
+  ones. Then the course's started classes with their raw items (kind, title, author, new or processed); a card
+  opens an item's file or link or shows its text, moves it to another course or class (or back to the inbox) and
+  removes it. **+** adds material to the inbox, a course or a class: photos from the camera, recordings, any files
+  at once (streamed to disk by `POST /app/api/library/files`, past the app's body limit, with the upload's
+  progress), a note, a link. Knowledge documents are not edited here: Claude makes them.
 - **Settings:** at the top, **Needs attention** lists everything broken (the twin, mail, RUZ, HSE App X, grade
   sheets, images, the LLM limit, the iCal feeds), and the count shows on the tab's badge. Sources: the twin and chats
   (the twin's login and logout, the chat list, chat settings and important people), mail, RUZ, HSE App X (login),
