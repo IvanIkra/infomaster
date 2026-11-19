@@ -25,6 +25,10 @@ chat's correction in force moves or withdraws it too: the Midterms are synced af
 every hiding of a correction by the owner and every change of the dictionary by hand (its abbr starts the label). The
 merge with the other sources is processing/merge.py's.
 
+A sheet without a due date is due before the next seminar of its course (processing/sheets.py, §6.3): `next_class`
+finds it in the timetable as the feeds show it, and the sheets follow it as the Midterms follow theirs
+(`followers`, called wherever the Midterms are synced).
+
 An event whose day is told but not its time ("tomorrow a consultation in S301") is an all-day one: its start is a date
 alone, "2026-11-06", and it has no end; the feeds give it a date and no time.
 
@@ -47,12 +51,15 @@ from ..i18n import Phrase
 from ..store import Store
 from .deadlines import Deadlines, same_label
 from .events import IN_FORCE, OWN, Events, own_uid
-from .subjects import Subjects
+from .subjects import Subjects, clean
 
 log = logging.getLogger(__name__)
 
 DEFAULT_LENGTH = dt.timedelta(minutes=80)  # an event whose end nobody said: one HSE class period
 CLASS_DAYS = 21           # classes shown to the model, from today on: moves and cancellations come close to the date
+SHEET_DAYS = 21           # a sheet's next seminar is looked for this long after its message (§6.3)
+SEMINARS = ("Seminar",)   # where a sheet is handed in: seminars, practical classes, tutorials (type_of)
+NOT_CLASSES = ("Interim assessment", "Exam")  # never a sheet's class, even of a course without seminars
 AGENDA_DAYS = 28          # the Mini App's timetable, from today on
 MIDTERM_KINDS = ("рубежный контроль", "interim assessment")  # §4.4
 REGULAR = ("Lecture", "Seminar", "Lab", "Class")  # types of an event that may only repeat a class
@@ -181,6 +188,8 @@ class Schedule:
         # Midterms moved by the owner's choice (hiding a correction), for the Дедлайны topic; a RUZ poll and a batch
         # run hand theirs over with their own changes.
         self.on_midterms: Callable[[MidtermChanges], Awaitable[None]] | None = None
+        # Other deadlines that follow the timetable, synced with the Midterms: the sheets' assumed due dates.
+        self.followers: list[Callable[[], MidtermChanges]] = []
 
     # --- entries ----------------------------------------------------------------------
 
@@ -299,6 +308,33 @@ class Schedule:
                            "correction": correction})
         return listed
 
+    def same_course(self, a: str | None, b: str | None) -> bool:
+        """Two names of one course: the same name, or the same title or abbr in the dictionary («Математический
+        анализ» of a chat and *Calculus* of RUZ)."""
+        if not a or not b:
+            return False
+        if clean(a).casefold() == clean(b).casefold():
+            return True
+        first, second = self.subjects.get(a), self.subjects.get(b)
+        return first is not None and second is not None and \
+            (first.title == second.title or first.abbr.casefold() == second.abbr.casefold())
+
+    def next_class(self, course: str | None, after: dt.datetime, days: int = SHEET_DAYS) -> Entry | None:
+        """The first seminar of a course that starts after `after` (Moscow local, naive) and within `days`, as the
+        feeds show it: moved by a correction, a cancelled one skipped. A course without any seminar in the timetable
+        takes its next class of any kind (not an interim assessment or an exam). None when there is none."""
+        if not course:
+            return None
+        classes = self.ruz.classes()
+        names = {name for name in {item["subject"] for item in classes} if self.same_course(course, name)}
+        corrections = self.events.corrections()
+        entries = [self.class_entry(item, corrections.get(item["uid"])) for item in classes if item["subject"] in names]
+        seminars = any(entry.type in SEMINARS for entry in entries)
+        until = after + dt.timedelta(days=days)
+        found = [entry for entry in entries if not entry.cancelled and not entry.all_day and after < entry.start < until
+                 and (entry.type in SEMINARS if seminars else entry.type not in NOT_CLASSES)]
+        return min(found, key=lambda entry: entry.start, default=None)
+
     def agenda(self, today: dt.date, days: int = AGENDA_DAYS) -> dict:
         """The Расписание screen (§8.4): the entries of the feeds from today on, each with the event or correction
         behind it for the owner to change, and the events the owner hid."""
@@ -363,8 +399,9 @@ class Schedule:
         return row
 
     async def _follow_midterms(self) -> None:
-        """The Midterms follow the classes as the owner left them; the forum hears of the ones that moved."""
-        if (midterms := self.sync_midterms()) and self.on_midterms is not None:
+        """The Midterms (and the sheets' assumed dates) follow the classes as the owner left them; the forum hears of
+        the ones that moved."""
+        if (midterms := self.sync_deadlines()) and self.on_midterms is not None:
             try:
                 await self.on_midterms(midterms)
             except Exception:
@@ -444,7 +481,17 @@ class Schedule:
                 if change.kind != "new" and (overruled := self.events.overrule(change.new["uid"], now)):
                     log.info("RUZ changed %s itself: chat corrections %s are gone", change.new["uid"], overruled)
         await self.subjects.try_resolve((item["subject"] for item in self.ruz.classes()), who="ruz")
-        return self.sync_midterms()
+        return self.sync_deadlines()
+
+    def sync_deadlines(self) -> MidtermChanges:
+        """The Midterms, then every other deadline that follows the timetable (`followers`)."""
+        changes = self.sync_midterms()
+        for follow in self.followers:
+            more = follow()
+            changes.deadlines += more.deadlines
+            changes.moved += more.moved
+            changes.gone += more.gone
+        return changes
 
     def sync_midterms(self) -> MidtermChanges:
         """Each interim assessment's deadline as the feeds show the class: RUZ's own state, then the chat's

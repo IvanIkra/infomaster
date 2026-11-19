@@ -151,7 +151,7 @@ class DeadlineList:
         """The merge's groups in order, and the completed ones of HSE App X."""
         abbr = self._abbrs()
         rows = [Deadline(row["label"], dt.date.fromisoformat(row["due"]), "study", row["source"], abbr(row["course"]),
-                         ref=f"dl:{row['id']}", name=row["course"])
+                         ref=f"dl:{row['id']}", name=row["course"], assumed=bool(row["assumed"]))
                 for row in self.deadlines.listed(self.today() - LOOKBACK)]
         ical = tuple(d for d in rows if d.source == "ical")
         news = sorted((d for d in rows if d.source in NEWS_ORDER), key=lambda d: NEWS_ORDER.index(d.source))
@@ -175,10 +175,11 @@ class DeadlineList:
         return visible(self.all(), self.today())
 
     def items(self) -> list[dict]:
-        """GET /api/deadlines: the full list in screen order, past Tablo's 5 rows."""
+        """GET /api/deadlines: the full list in screen order, past Tablo's 5 rows; `assumed`: a sheet's date the
+        service assumed, its course's next seminar (§6.3)."""
         today = self.today()
         return [{"uid": uid(d), "title": d.title, "due": d.due.isoformat(), "category": d.category,
-                 "source": d.source, "overdue": d.due < today} for d in self.visible()]
+                 "source": d.source, "overdue": d.due < today, "assumed": d.assumed} for d in self.visible()]
 
     def find(self, item_uid: str) -> Deadline | None:
         """A deadline of the final list by its uid, shown or not."""

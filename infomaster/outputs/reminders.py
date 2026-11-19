@@ -22,7 +22,7 @@ from collections.abc import Callable
 from telethon import Button
 
 from .. import clock
-from ..i18n import Phrase
+from ..i18n import Phrase, tr
 from ..settings import Settings
 from ..store import Store
 from .deadlines import TOPIC, DeadlineTopic
@@ -110,6 +110,8 @@ class DeadlineReminders:
         for d in due_then:
             mark, where = self.topic.where(d)
             line = f"{mark} <b>{html.escape(d.title)}</b>"
+            if d.assumed:  # a sheet's next seminar (§6.3)
+                line += " ≈ " + tr(lang, "assumed", "предположительно")
             if d.name:
                 line += f" · {html.escape(d.name)}"
             lines.append(f"{line} · {where}")

@@ -18,6 +18,16 @@
 4. The owner changes a sheet's course, number, due date and summary in the Mini App, and adds sheets of their own:
    a PDF uploaded there, of the chat OWN_CHAT (D44). An own sheet is posted as a chat's, gets newer versions by
    the same rules among the own ones, and is the only kind the owner may delete.
+5. A sheet without a due date is due before the next seminar of its course (`due_assumed`): the first seminar or
+   practical class in the timetable as the feeds show it (corrections applied, cancelled ones skipped) that starts
+   after its message, within 21 days (processing/schedule.py, `next_class`); a course without seminars takes its next
+   class of any kind; none found, no date. The date is a deadline of its own (source tg, the sheet's message,
+   `assumed`), "<abbr> sheet <number>", and both are shown as assumed. It follows the timetable: synced with the
+   Midterms after every RUZ poll, batch run and correction by the owner (`follow`), it moves with its class and is
+   withdrawn when no class is left; once the class has started it stays. A real date wins and the mark goes: the
+   sheet's pages, a later message (the batch moves the assumed deadline or gives the same work with a date), or the
+   owner in the Mini App (the sheet's date, or the date of its deadline). A newer version takes the older one's
+   assumed deadline over and finds its own date the same way. Sheets of before the rule are not assumed.
 
 The forum side is outputs/sheets.py. Writing methods commit themselves, except `add`: the batch calls it inside its
 own transaction.
@@ -38,8 +48,10 @@ from ..llm.client import Document, Haiku, LLMError
 from ..settings import ChatSettings, Settings
 from ..store import Store
 from . import pdf
-from .deadlines import Deadlines
+from .deadlines import Deadlines, same_label
+from .schedule import SHEET_DAYS, MidtermChanges, Schedule
 from .subjects import Subjects, clean
+from .todo import Deadline
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +63,7 @@ SUMMARY_CHARS = 600
 CHANGES_CHARS = 400
 LABEL_CHARS = 15          # a deadline label, as in the batches (Tablo's column, §2.1)
 MAX_TOKENS = 2_000
+FOLLOW_WINDOW = dt.timedelta(days=SHEET_DAYS + 1)  # past that, no class can be a sheet's next seminar any more
 
 READ_SYSTEM = """\
 You read a sheet (листок) of a university course: a PDF with tasks for students (HSE University, Moscow, first year, \
@@ -105,6 +118,11 @@ def number_key(number: str | None) -> str:
     return re.sub(r"[\s№#]+", "", (number or "").casefold())
 
 
+def sheet_label(course: str, number: str) -> str:
+    """The label of a sheet's assumed deadline, as the batches write a sheet's: "Calc sheet 3"."""
+    return " ".join(f"{course} sheet {number}".split())
+
+
 def due_date(value) -> str | None:
     if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value.strip()):
         return None
@@ -121,6 +139,10 @@ class Sheets:
             store.db, settings, chat_settings, inbox, files)
         self.deadlines, self.subjects, self.llm, self.now = deadlines, subjects, llm, now
         self.error: str | None = None  # of the last reading that failed, for the status
+        self.schedule: Schedule | None = None  # where the next seminar is found; without it no date is assumed
+        # The owner's changes of the assumed deadlines (the refs it touched): the forum shows them quietly.
+        self.on_change: Callable[[set[str]], None] | None = None
+        self.stale: set[int] = set()  # posted sheets whose date changed: their captions are made anew
 
     def status(self) -> dict:
         waiting = self.db.execute("select count(*) n from sheets where status = 'new'").fetchone()["n"]
@@ -143,35 +165,49 @@ class Sheets:
                            (file["sha256"],)).fetchone():
             return None
         cursor = self.db.execute(
-            "insert into sheets(chat_id, msg_id, name, sha256, course, number, due, status, created_at) "
-            "values(?, ?, ?, ?, ?, ?, ?, 'new', ?)",
+            "insert into sheets(chat_id, msg_id, name, sha256, course, number, due, due_assumed, sent_at, status, "
+            "created_at) values(?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)",
             (chat_id, message["msg_id"], file["name"] or "sheet.pdf", file["sha256"],
-             sheet["course"] or None, sheet["number"], sheet["due"], clock.local_iso(at)))
+             sheet["course"] or None, sheet["number"], sheet["due"], int(not sheet["due"]), message["at"],
+             clock.local_iso(at)))
         return cursor.lastrowid
 
     def add_own(self, file: dict, course: str | None, number: str, due: str | None, at: dt.datetime) -> int:
         """An own sheet of an uploaded PDF (`file`: its files row); it waits for the forum as a chat's."""
         with self.db:
             return self.db.execute(
-                "insert into sheets(chat_id, msg_id, name, sha256, course, number, due, status, created_at) "
-                "values(?, ?, ?, ?, ?, ?, ?, 'new', ?)",
+                "insert into sheets(chat_id, msg_id, name, sha256, course, number, due, due_assumed, sent_at, "
+                "status, created_at) values(?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)",
                 (OWN_CHAT, file["msg_id"], file["name"] or "sheet.pdf", file["sha256"], course or None, number, due,
-                 clock.local_iso(at))).lastrowid
+                 int(not due), clock.local_iso(at), clock.local_iso(at))).lastrowid
 
     def edit(self, sheet_id: int, fields: dict) -> dict | None:
         """The owner's change: course, number and due date of the sheet as it is now (its newest version), the
-        summary of its first version, which the caption carries. The sheet, or None for no such sheet."""
+        summary of its first version, which the caption carries. A due date given (or cleared) is real: the assumed
+        one and its mark go; a new course or number makes the assumed date follow it. The sheet, or None for no such
+        sheet."""
         sheet = self.get(sheet_id)
         if sheet is None:
             return None
+        touched: set[int] = set()
         with self.db:
-            for name in ("course", "number", "due"):
+            for name in ("course", "number"):
                 if name in fields:
                     self.db.execute(f"update sheets set {name} = ? where id = ?", (fields[name], sheet_id))
             if "summary" in fields:
                 self.db.execute("update sheets set summary = ? where id = ?", (fields["summary"],
                                                                                self.first(sheet)["id"]))
+            if "due" in fields:
+                touched = self._settle(self.get(sheet_id), fields["due"])
+            elif "course" in fields or "number" in fields:
+                touched = self._follow(self.get(sheet_id), MidtermChanges())
+        self._changed(touched)
         return self.get(sheet_id)
+
+    def _changed(self, deadline_ids: set[int]) -> None:
+        """The owner changed these deadlines: the forum takes them quietly."""
+        if deadline_ids and self.on_change is not None:
+            self.on_change({f"dl:{deadline_id}" for deadline_id in deadline_ids})
 
     def remove_own(self, sheet_id: int) -> list[dict] | None:
         """An own sheet deleted with every version of it: the rows deleted (the forum's posts of them go too), or
@@ -184,9 +220,13 @@ class Sheets:
             chain.append(dict(newer))
         if any(s["chat_id"] != OWN_CHAT for s in chain):
             return None  # a chat's sheet joined to it: that one is not the owner's to delete
+        assumed = [row["id"] for s in chain for row in self._assumed(s["id"])]
         with self.db:
             self.db.execute(f"delete from sheets where id in ({', '.join('?' * len(chain))})",
                             [s["id"] for s in chain])
+            if assumed:
+                self.deadlines.drop(assumed, self.now())
+        self._changed(set(assumed))
         return chain
 
     def waiting(self) -> list[dict]:
@@ -291,15 +331,173 @@ class Sheets:
                             (extract.text[:TEXT_CHARS], summary, changes, previous["id"] if previous else None,
                              previous["version"] + 1 if previous else 1, sheet_id))
             self._save_deadlines(sheet, deadlines)
+            if previous is not None:
+                self._inherit(previous, sheet)
+            touched = self._follow(self.get(sheet_id), MidtermChanges())
+        if sheet["chat_id"] == OWN_CHAT:
+            self._changed(touched)  # an own sheet is the owner's change; a chat's is told after its batch run
         return self.get(sheet_id)
 
     def _save_deadlines(self, sheet: dict, deadlines: list[dict]) -> None:
-        """Deadlines of the sheet's pages that the chat has not given yet. Inside `with self.db`."""
+        """Deadlines of the sheet's pages that the chat has not given yet; one the service only assumed is told
+        for real now. Inside `with self.db`."""
         for deadline in deadlines:
-            if self.deadlines.find(deadline["label"], deadline["due"]) is None:
+            known = self.deadlines.find(deadline["label"], deadline["due"])
+            if known is None:
                 self.deadlines.add({"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]],
                                     "course": sheet["course"], "label": deadline["label"], "due": deadline["due"],
                                     "sheet_id": sheet["id"]}, self.now())
+            elif known["assumed"]:
+                self.deadlines.confirm(known["id"])
+
+    # --- the assumed due date (§6.3) ---------------------------------------------------------------
+
+    def _assumed(self, sheet_id: int) -> list[dict]:
+        """The sheet's assumed deadlines in force, oldest first (one, unless a version took another's over)."""
+        return [row for row in self.deadlines.of_sheet(sheet_id)
+                if row["assumed"] and row["moved_by"] is None and row["gone_at"] is None]
+
+    def _label(self, sheet: dict) -> str:
+        """The label of the sheet's assumed deadline: the course by its abbr once the dictionary knows it."""
+        return sheet_label(self.subjects.abbr(sheet["course"]) or clean(sheet["course"]), sheet["number"])
+
+    def _told(self, sheet: dict) -> dict | None:
+        """The earliest real date of the sheet in force: a deadline read in its pages, an assumed one a message moved
+        or told again, or the same work from the chats or mail due on the sheet's day or later."""
+        from .merge import same_work  # here: merge -> hseapp -> batches -> sheets would be a cycle
+
+        found = []
+        for row in self.deadlines.of_sheet(sheet["id"]):
+            latest = self.deadlines.latest(row["id"])
+            if latest is not None and latest["moved_by"] is None and latest["gone_at"] is None and \
+                    not latest["assumed"]:
+                found.append(latest)
+        if sheet["course"] and sheet["sent_at"]:
+            label, day = self._label(sheet), dt.date.fromisoformat(sheet["sent_at"][:10])
+            mine = Deadline(label, day, "study", "tg", self.subjects.abbr(sheet["course"]))
+            for row in self.deadlines.upcoming(day, dt.timedelta()):
+                if row["assumed"]:
+                    continue
+                theirs = Deadline(row["label"], dt.date.fromisoformat(row["due"]), "study", row["source"],
+                                  self.subjects.abbr(row["course"]))
+                # Without a number, "Calc sheet" would be the same work as every sheet of the course.
+                if same_label(row["label"], label) or (sheet["number"] and same_work(mine, theirs)):
+                    found.append(row)
+        return min(found, key=lambda row: (row["due"], row["id"]), default=None)
+
+    def _hidden(self, deadline_id: int) -> bool:
+        """The owner hid the deadline (or changed it into an own copy): it is theirs now, it does not move."""
+        return self.db.execute("select 1 from hidden_deadlines where ref = ?",
+                               (f"dl:{deadline_id}",)).fetchone() is not None
+
+    def _set_due(self, sheet: dict, due: str | None, assumed: bool, due_at: str | None) -> None:
+        """The sheet's date as it is now; a posted sheet whose date changed needs its caption anew (`stale`)."""
+        if (sheet["due"], bool(sheet["due_assumed"]), sheet["due_at"]) == (due, assumed, due_at):
+            return
+        self.db.execute("update sheets set due = ?, due_assumed = ?, due_at = ? where id = ?",
+                        (due, int(assumed), due_at, sheet["id"]))
+        if sheet["status"] == "posted":
+            self.stale.add(sheet["id"])
+
+    def _settle(self, sheet: dict, due: str | None, told: dict | None = None) -> set[int]:
+        """The sheet's real date (None: no date at all): the mark goes, and its assumed deadlines move to the one that
+        tells it (`told`; without one, a new one on that date), are told for real when the date is the same (or the
+        owner hid them), or are withdrawn without a date. The deadlines touched. Inside `with self.db`."""
+        self._set_due(sheet, due, False, None)
+        touched: set[int] = set()
+        for row in self._assumed(sheet["id"]):
+            touched.add(row["id"])
+            if self._hidden(row["id"]) or (told is None and row["due"] == due):
+                self.deadlines.confirm(row["id"])
+            elif due is None:
+                self.deadlines.drop([row["id"]], self.now())
+            else:
+                if told is None:
+                    told = self.deadlines.get(self.deadlines.add(
+                        {"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": row["msg_ids"],
+                         "course": row["course"], "label": row["label"], "due": due, "sheet_id": sheet["id"]},
+                        self.now()))
+                    touched.add(told["id"])
+                self.deadlines.move(row["id"], told["id"])
+        return touched
+
+    def _inherit(self, previous: dict, sheet: dict) -> None:
+        """A newer version takes the older one's assumed deadline over: moved into its own one if it has one, else
+        made its own (with its message: deleting the older message does not withdraw it). Inside `with self.db`."""
+        mine = self._assumed(sheet["id"])
+        for row in self._assumed(previous["id"]):
+            if mine:
+                self.deadlines.move(row["id"], mine[0]["id"])
+            else:
+                self.db.execute("update deadlines set sheet_id = ?, chat_id = ?, msg_ids = ? where id = ?",
+                                (sheet["id"], sheet["chat_id"], f"[{sheet['msg_id']}]", row["id"]))
+
+    def follow(self) -> MidtermChanges:
+        """Schedule.followers: the assumed due dates of the recent sheets follow the timetable and give way to real
+        ones; what changed, for the Дедлайны topic."""
+        changes = MidtermChanges()
+        since = clock.local_iso(self.now() - FOLLOW_WINDOW)
+        rows = self.db.execute(
+            "select * from sheets where status != 'failed' and sent_at >= ? and (due_assumed = 1 or id in "
+            "(select sheet_id from deadlines where assumed = 1 and moved_by is null and gone_at is null)) "
+            "order by id", (since,)).fetchall()
+        with self.db:
+            for row in rows:
+                if self._latest(row["id"]):
+                    self._follow(dict(row), changes)
+        return changes
+
+    def _follow(self, sheet: dict, changes: MidtermChanges) -> set[int]:
+        """One sheet: a real date told since settles it; else its assumed date is the next seminar's as the timetable
+        is now (unless that class has started or the owner hid the deadline). The deadlines touched. Inside
+        `with self.db`."""
+        current = self._assumed(sheet["id"])
+        if not (sheet["due_assumed"] or current):
+            return set()
+        if (told := self._told(sheet)) is not None:
+            changes.moved += [(row["id"], told["id"]) for row in current]
+            return self._settle(sheet, told["due"], told)
+        if not sheet["due_assumed"]:  # a version with a date of its own took an older one's assumed deadline over
+            return self._settle(sheet, sheet["due"])
+        assumed = [row for row in self.deadlines.of_sheet(sheet["id"]) if row["assumed"]]
+        if not current and assumed and assumed[-1]["gone_at"] and assumed[-1]["moved_by"] is None \
+                and sheet["due"] is not None:  # withdrawn with its message: the sheet has no date any more
+            self._set_due(sheet, None, False, None)
+            return set()
+        if self.schedule is None or (sheet["due_at"] and sheet["due_at"] <= clock.local_iso(self.now())) or \
+                any(self._hidden(row["id"]) for row in current):
+            return set()
+        touched: set[int] = set()
+        keep = current[0] if current else None
+        for extra in current[1:]:  # an older version's, taken over
+            self.deadlines.move(extra["id"], keep["id"])
+            touched.add(extra["id"])
+        entry = self.schedule.next_class(sheet["course"], dt.datetime.fromisoformat(sheet["sent_at"])) \
+            if sheet["sent_at"] else None
+        due = entry.start.date().isoformat() if entry else None
+        due_at = entry.start.isoformat(timespec="seconds") if entry else None
+        self._set_due(sheet, due, True, due_at)
+        label = self._label(sheet)
+        new = {"source": "tg", "chat_id": sheet["chat_id"], "msg_ids": [sheet["msg_id"]], "course": sheet["course"],
+               "label": label, "due": due, "sheet_id": sheet["id"], "assumed": True}
+        if due is None:
+            if keep is not None:
+                self.deadlines.drop([keep["id"]], self.now())
+                changes.gone.append(keep["id"])
+                touched.add(keep["id"])
+        elif keep is None:
+            new_id = self.deadlines.add(new, self.now())
+            changes.deadlines.append(new_id)
+            touched.add(new_id)
+        elif keep["due"] != due:
+            new_id = self.deadlines.add({**new, "msg_ids": keep["msg_ids"]}, self.now())
+            self.deadlines.move(keep["id"], new_id)
+            changes.moved.append((keep["id"], new_id))
+            touched |= {keep["id"], new_id}
+        elif (keep["label"], keep["course"]) != (label, sheet["course"]):
+            self.deadlines.rename(keep["id"], label, sheet["course"])  # the dictionary named the course, or the owner
+            touched.add(keep["id"])
+        return touched
 
     def _context(self, sheet: dict) -> list[str]:
         chat = self.inbox.chat(sheet["chat_id"])
@@ -392,6 +590,9 @@ class Sheets:
         with self.db:
             self.db.execute("update sheets set previous = ?, version = ?, changes = ?, post_id = ? where id = ?",
                             (older["id"], older["version"] + 1, changes, older["post_id"], sheet_id))
+            self._inherit(older, sheet)
+            touched = self._follow(self.get(sheet_id), MidtermChanges())
+        self._changed(touched)
         return self.get(sheet_id), own_post
 
     def listing(self) -> list[dict]:
@@ -407,6 +608,7 @@ class Sheets:
                 "error": first["error"], "course": latest["course"],
                 "title": self.subjects.title(latest["course"]) if latest["course"] else None,
                 "number": latest["number"], "name": latest["name"], "due": latest["due"],
+                "due_assumed": bool(latest["due_assumed"]), "due_at": latest["due_at"],
                 "chat": chat["title"] if chat else None, "own": first["chat_id"] == OWN_CHAT,
                 "created_at": first["created_at"],
                 "updated_at": latest["created_at"], "summary": first["summary"],

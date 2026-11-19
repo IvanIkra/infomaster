@@ -1,8 +1,9 @@
 """Internal API for Tablo (§8.1, §8.2): its own port, never behind Funnel, Bearer token on /api/.
 
-GET /api/deadlines: {"items": [{uid, title, due, category, source, overdue}]}, the merged list in screen order, as
-Tablo's route gave it (§8). Own and hidden deadlines are kept in the Mini App and with the forum's buttons: HA's
-to-do lists are gone (D34), and with them the routes that changed the list.
+GET /api/deadlines: {"items": [{uid, title, due, category, source, overdue, assumed}]}, the merged list in screen
+order, as Tablo's route gave it (§8); `assumed` marks a sheet's date assumed by the service (§6.3). Own and hidden
+deadlines are kept in the Mini App and with the forum's buttons: HA's to-do lists are gone
+(D34), and with them the routes that changed the list.
 
 GET /api/news: the live news (§8.3, D9, D23), the items of the «Новости» topic and the same rules, in rank order:
 {"items": [{id, source, study, posted_at, full, short, importance}], "ttl_hours"}. Replaced, withdrawn and hidden items

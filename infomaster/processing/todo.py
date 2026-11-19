@@ -36,6 +36,7 @@ class Deadline:
     # Which row it is, through renames: dl:<deadlines.id>, hseapp:<id>, ha-<id>. The forum diffs the list by it.
     ref: str = field(default="", compare=False)
     name: str | None = field(default=None, compare=False)  # the course as the source names it, for showing
+    assumed: bool = field(default=False, compare=False)    # a sheet's date the service assumed (§6.3)
 
 
 def uid(d: Deadline) -> str:

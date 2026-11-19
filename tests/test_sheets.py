@@ -11,9 +11,11 @@ from test_http import env, init_data
 from infomaster import clock
 from infomaster.collectors.files import Files
 from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
+from infomaster.collectors.ruz import Class
 from infomaster.llm.budget import BudgetExceeded
 from infomaster.llm.client import Document, Haiku
 from infomaster.outputs import miniapp
+from infomaster.outputs.deadlines import DeadlineTopic
 from infomaster.outputs.sheets import SheetTopic, hashtag
 from infomaster.processing import pdf
 from infomaster.processing.batches import Batches, Changes, check
@@ -483,3 +485,223 @@ async def test_owner_changes_and_adds_sheets(aiohttp_client, batches, llm, sheet
     form = FormData()
     form.add_field("course", "Calculus")
     assert (await client.post("/app/api/sheets", data=form, headers=owner)).status == 400
+
+
+# --- the assumed due date (§6.3) ---------------------------------------------------------------------
+
+def lesson(n, subject, start, kind="Seminar", cancelled=False) -> Class:
+    """A class of the fictional RUZ feed: `start` is "MM-DD HH:MM" in 2026, 80 minutes long."""
+    begin = dt.datetime.fromisoformat(f"2026-{start.replace(' ', 'T')}")
+    return Class(f"30000{n}@ruz.example", subject, begin, begin + dt.timedelta(minutes=80), kind, "R101", None,
+                 cancelled)
+
+
+TIMETABLE = [
+    lesson(1, "Математический анализ", "10-21 13:00", "Лекция"),
+    lesson(2, "Calculus", "10-22 09:30", "Seminar"),
+    lesson(3, "Математический анализ", "10-29 09:30", "Проведение семинаров (студенты)"),
+    lesson(4, "Algebra", "10-21 11:10", "Ongoing interim assessment"),  # never a sheet's class
+    lesson(5, "Algebra", "10-23 13:00", "Лекция"),
+]
+
+
+@pytest.fixture
+async def timetable(schedule, sheets, batches):
+    """RUZ classes of Calculus (lectures and seminars) and Algebra (no seminars); the sheets follow them."""
+    sheets.schedule = schedule
+    schedule.followers.append(sheets.follow)
+    schedule.ruz._sync(TIMETABLE)
+    await schedule.subjects.resolve(["Математический анализ", "Calculus", "Алгебра", "Algebra"])
+    return schedule
+
+
+async def posted(batches, llm, msg_id, data, **sheet) -> None:
+    """A sheet found by a whole batch run: the run ends by syncing the deadlines that follow the timetable."""
+    send(batches, msg_id, data, name=sheet.pop("name", "list3.pdf"))
+    llm.answers.append({"items": [sheet_item(msg_id, **sheet)]})
+    await batches.run_chats([CHAT])
+
+
+def assumed_rows(batches) -> list[dict]:
+    return [d for d in batches.deadlines.upcoming(clock.local_day(batches.now())) if d["assumed"]]
+
+
+async def test_a_sheet_without_a_date_is_due_at_the_next_seminar(batches, llm, sheets, topic, forum, timetable,
+                                                                  merged, store, now):
+    deadline_topic = DeadlineTopic(forum, store, sheets.inbox, merged, 42, now=now)
+    await deadline_topic.refresh()  # the first showing is quiet
+    await posted(batches, llm, 1, SHEET3, due="")  # posted Tue 11:30: the lecture of Wed is no seminar
+    sheet = sheets.get(1)
+    assert (sheet["due"], sheet["due_at"], sheet["due_assumed"]) == ("2026-10-22", "2026-10-22T09:30:00", 1)
+    [row] = assumed_rows(batches)
+    assert (row["label"], row["due"], row["sheet_id"], row["msg_ids"], row["source"]) == (
+        "Calc sheet 3", "2026-10-22", 1, [1], "tg")
+    [item] = [i for i in merged.items() if i["title"].startswith("Calc")]
+    assert (item["title"], item["due"], item["assumed"]) == ("Calc sheet 3", "2026-10-22", True)
+
+    await topic.publish()
+    caption = forum.messages[sheets.get(1)["post_id"]][1]
+    assert "Срок: ≈ чт 22.10 09:30 (предположительно: следующий семинар)" in caption
+    forum.lang = "en"
+    assert "Due: ≈ Thu 22.10 09:30 (assumed: the next seminar)" in topic.caption(sheets.get(1), sheets.get(1))
+    forum.lang = "ru"
+    await deadline_topic.refresh()
+    [new] = [text for text in forum.texts("deadlines") if text.startswith("🆕 <b>Calc")]
+    assert "<b>Calc sheet 3</b> — ≈ чт 22.10 (предположительно)" in new and "до следующего семинара" in new
+    assert "<b>Calc sheet 3</b> — ≈ чт 22.10 (предположительно) · " in forum.messages[forum.pinned[-1]][1]
+
+    # The batch model sees the date as assumed.
+    send(batches, 2, None, text="ок")
+    llm.answers.append({"items": []})
+    await batches.run_chats([CHAT])
+    assert f'- d{row["id"]}: "Calc sheet 3" 2026-10-22 assumed' in llm.calls[-1].prompt
+
+
+async def test_a_cancelled_seminar_is_skipped(batches, llm, sheets, timetable, now):
+    timetable.ruz._sync([*TIMETABLE[:1], lesson(2, "Calculus", "10-22 09:30", cancelled=True), *TIMETABLE[2:]])
+    await posted(batches, llm, 1, SHEET3, due="")
+    assert sheets.get(1)["due"] == "2026-10-29" and assumed_rows(batches)[0]["due"] == "2026-10-29"
+
+    # A chat cancels that one too: nothing within 21 days, no date (and no deadline) until a class comes.
+    uid = TIMETABLE[2].uid
+    item = timetable.ruz.by_uid(uid)
+    with timetable.db:
+        timetable.events.add({"uid": uid, "class_uid": uid, "source": "tg", "chat_id": CHAT, "msg_ids": [5],
+                              "course": item["subject"], "title": "", "kind": item["kind"], "start": item["start"],
+                              "end": item["end"], "room": item["room"], "required": True, "cancelled": True}, now())
+    changes = timetable.sync_deadlines()
+    sheet = sheets.get(1)
+    assert (sheet["due"], sheet["due_assumed"]) == (None, 1) and assumed_rows(batches) == [] and changes.gone
+    timetable.ruz._sync([*TIMETABLE[:1], lesson(2, "Calculus", "10-22 09:30", cancelled=True), *TIMETABLE[2:],
+                         lesson(6, "Calculus", "11-05 09:30")])
+    timetable.sync_deadlines()
+    assert sheets.get(1)["due"] == "2026-11-05" and assumed_rows(batches)[0]["due"] == "2026-11-05"
+
+
+async def test_a_course_without_seminars_takes_its_next_class(batches, llm, sheets, timetable):
+    await posted(batches, llm, 1, SHEET3, due="", course="Алгебра", number="1", name="alg1.pdf")
+    sheet = sheets.get(1)
+    assert (sheet["due"], sheet["due_at"]) == ("2026-10-23", "2026-10-23T13:00:00")  # not the interim assessment
+    assert [d["label"] for d in assumed_rows(batches)] == ["Alg sheet 1"]
+
+    await posted(batches, llm, 2, make_pdf(["Sheet 1"]), due="", course="История", number="1", name="h.pdf")
+    assert (sheets.get(2)["due"], sheets.get(2)["due_assumed"]) == (None, 1)  # no classes at all: no date
+
+
+async def test_a_real_date_wins(batches, llm, sheets, topic, timetable):
+    await posted(batches, llm, 1, SHEET3)  # the first page gives the date: nothing assumed
+    assert (sheets.get(1)["due"], sheets.get(1)["due_assumed"]) == ("2026-10-29", 0) and assumed_rows(batches) == []
+
+    # A later message moves the assumed deadline: the sheet takes the date, the mark goes.
+    await posted(batches, llm, 2, make_pdf(["Sheet 4"]), due="", number="4", name="list4.pdf")
+    [row] = assumed_rows(batches)
+    send(batches, 3, None, text="Листок 4 сдать до пятницы")
+    llm.answers.append({"items": [{"msg_ids": [3], "news": None, "events": [], "sheets": [], "deadlines": [
+        {"course": "Математический анализ", "label": "Calc sheet 4", "due": "2026-10-23", "moves": f"d{row['id']}"}]}]})
+    await batches.run_chats([CHAT])
+    sheet = sheets.get(2)
+    assert (sheet["due"], sheet["due_assumed"], sheet["due_at"]) == ("2026-10-23", 0, None)
+    newer = batches.deadlines.latest(row["id"])
+    assert (newer["due"], newer["assumed"]) == ("2026-10-23", 0) and assumed_rows(batches) == []
+
+    # The same work on the assumed date, told without a move: it is real now.
+    await posted(batches, llm, 4, make_pdf(["Sheet 5"]), due="", number="5", name="list5.pdf")
+    [row] = assumed_rows(batches)
+    send(batches, 5, None, text="Листок 5 к семинару в четверг")
+    llm.answers.append({"items": [{"msg_ids": [5], "news": None, "events": [], "sheets": [], "deadlines": [
+        {"course": "Математический анализ", "label": "Calc sheet 5", "due": row["due"], "moves": ""}]}]})
+    await batches.run_chats([CHAT])
+    assert batches.deadlines.get(row["id"])["assumed"] == 0 and sheets.get(3)["due_assumed"] == 0
+
+    # The sheet's own pages give a date: it replaces the assumed one.
+    await topic.publish()
+    sheets.chat_settings.update(CHAT, {"pdf_content": True})
+    llm.readings = [{"summary": "", "deadlines": [{"label": "Calc sheet 6", "due": "2026-10-30"}]}]
+    await posted(batches, llm, 6, make_pdf(["Sheet 6"]), due="", number="6", name="list6.pdf")
+    [sheet] = [s for s in sheets.waiting() if s["msg_id"] == 6]
+    assert sheet["due_assumed"] == 1 and assumed_rows(batches)[0]["due"] == "2026-10-22"
+    await topic.publish()
+    sheet = sheets.get(sheet["id"])
+    assert (sheet["due"], sheet["due_assumed"]) == ("2026-10-30", 0) and assumed_rows(batches) == []
+    assert "Срок: пт 30.10" in topic.caption(sheet, sheet)
+
+
+async def test_the_owner_clears_the_mark(aiohttp_client, batches, llm, sheets, topic, forum, budget, journal, store,
+                                         timetable, merged):
+    sheets.on_change = merged.on_change  # the owner's changes are quiet in the forum
+    await posted(batches, llm, 1, SHEET3, due="")
+    await posted(batches, llm, 2, make_pdf(["Sheet 4"]), due="", number="4", name="list4.pdf")
+    await topic.publish()
+    hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
+    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, sheets.inbox, sheets.chat_settings,
+                                                     {"sheets": sheets.status}, timetable.subjects, timetable, hse,
+                                                     merged, sheets.settings, topic))
+    owner = {"Authorization": "tma " + init_data()}
+    listed = {s["id"]: s for s in (await (await client.get("/app/api/sheets", headers=owner)).json())["sheets"]}
+    assert (listed[1]["due_assumed"], listed[1]["due_at"]) == (True, "2026-10-22T09:30:00")
+    items = (await (await client.get("/app/api/deadlines", headers=owner)).json())["items"]
+    assert [(d["title"], d["assumed"]) for d in items if d["title"].startswith("Calc")] == [
+        ("Calc sheet 3", True), ("Calc sheet 4", True)]
+
+    # The description alone keeps the date assumed; a date makes it real.
+    await client.patch("/app/api/sheets/1", json={"summary": "Series."}, headers=owner)
+    assert sheets.get(1)["due_assumed"] == 1
+    await client.patch("/app/api/sheets/1", json={"due": "2026-10-25"}, headers=owner)
+    sheet = sheets.get(1)
+    assert (sheet["due"], sheet["due_assumed"]) == ("2026-10-25", 0)
+    assert "Срок: вс 25.10\n" in forum.messages[sheet["post_id"]][1]
+    [real] = [d for d in batches.deadlines.upcoming(clock.local_day(batches.now())) if d["sheet_id"] == 1]
+    assert (real["due"], real["assumed"]) == ("2026-10-25", 0) and f"dl:{real['id']}" in merged.changes[-1]
+
+    # A new date for the assumed deadline itself: it moves and stays the chat's, the sheet takes the date.
+    [d] = [d for d in items if d["title"] == "Calc sheet 4"]
+    body = {"title": "Calc sheet 4", "due": "2026-10-26", "category": "study"}
+    state = await (await client.patch(f"/app/api/deadlines/{d['uid']}", json=body, headers=owner)).json()
+    [moved] = [i for i in state["items"] if i["title"] == "Calc sheet 4"]
+    assert (moved["due"], moved["assumed"], moved["source"]) == ("2026-10-26", False, "tg") and state["own"] == []
+    assert (sheets.get(2)["due"], sheets.get(2)["due_assumed"]) == ("2026-10-26", 0)
+    timetable.ruz._sync([*TIMETABLE[:1], lesson(2, "Calculus", "10-22 11:10"), *TIMETABLE[2:]])
+    timetable.sync_deadlines()
+    assert sheets.get(2)["due"] == "2026-10-26"  # a real date does not follow the timetable
+
+
+async def test_the_assumed_date_follows_the_timetable(batches, llm, sheets, topic, forum, timetable, now):
+    await posted(batches, llm, 1, SHEET3, due="")
+    await topic.publish()
+    [first] = assumed_rows(batches)
+
+    # RUZ moves the seminar to Friday: the date follows, and so does the caption.
+    diff = timetable.ruz._sync([*TIMETABLE[:1], lesson(2, "Calculus", "10-23 11:10"), *TIMETABLE[2:]])
+    changes = await timetable.after_poll(diff)
+    [row] = assumed_rows(batches)
+    assert (row["due"], batches.deadlines.get(first["id"])["moved_by"]) == ("2026-10-23", row["id"])
+    assert changes.moved == [(first["id"], row["id"])] and sheets.get(1)["due_at"] == "2026-10-23T11:10:00"
+    await topic.publish()
+    assert "≈ пт 23.10 11:10" in forum.messages[sheets.get(1)["post_id"]][1]
+
+    # The owner moves the class in the Mini App: the date follows the feeds as they are.
+    await timetable.correct_class(TIMETABLE[1].uid, "2026-10-24T10:00:00", "2026-10-24T11:20:00", "R101", False)
+    assert assumed_rows(batches)[0]["due"] == "2026-10-24"
+
+    # Once the class has started, the date stays.
+    now.moment = dt.datetime(2026, 10, 24, 10, 30, tzinfo=clock.TZ).astimezone(dt.UTC)
+    await timetable.correct_class(TIMETABLE[1].uid, "2026-10-25T10:00:00", "2026-10-25T11:20:00", "R101", False)
+    assert sheets.get(1)["due"] == "2026-10-24"
+
+
+async def test_a_new_version_takes_the_assumed_date_over(batches, llm, sheets, topic, timetable, now):
+    await posted(batches, llm, 1, SHEET3, due="")
+    await topic.publish()
+    [first] = assumed_rows(batches)
+    now.moment = dt.datetime(2026, 10, 22, 12, 0, tzinfo=clock.TZ).astimezone(dt.UTC)  # after Thursday's seminar
+    await posted(batches, llm, 2, SHEET3_FIXED, due="", name="list3_fixed.pdf")
+    await topic.publish()
+    assert sheets.get(2)["previous"] == 1
+    [row] = assumed_rows(batches)
+    assert (row["sheet_id"], row["due"]) == (2, "2026-10-29")
+    assert batches.deadlines.latest(first["id"])["id"] == row["id"]  # one deadline, moved
+
+    # Its message deleted withdraws the deadline: the sheet has no date any more and nothing comes back.
+    batches.inbox.delete([2], CHAT, now())
+    await batches.run_chats([CHAT])
+    assert assumed_rows(batches) == [] and (sheets.get(2)["due"], sheets.get(2)["due_assumed"]) == (None, 0)

@@ -41,7 +41,8 @@ their classes (§4.4).
 Sheets (§6.3, D14): a PDF of a chat message is downloaded when its batch comes (collectors/files.py), and the model
 sees its first page: the text, or for a scan the page itself as a document. The model says which PDFs are sheets, with
 their course, number and due date; they become rows of processing/sheets.py in the same transaction, and the forum
-gets them after the run.
+gets them after the run. A sheet without a date gets the next seminar's, marked assumed in the deadlines the model
+sees: a message that tells the real date moves it.
 
 Images (D12): in a chat with «Картинки» on, the image of a message is downloaded when its batch comes and read by
 Haiku in a call of its own (processing/images.py), within the daily number of images and while optional tasks run. The
@@ -236,6 +237,8 @@ the dictionary a short English abbreviation of up to 6 letters; without a course
 "Course survey"). Within the label budget.
 - due: YYYY-MM-DD. Relative dates ("в пятницу", "завтра") count from the message time. Several slots: the earliest.
 - A deadline already in the upcoming list with the same date: leave it out.
+- A listed deadline marked "assumed" is a sheet's date the service guessed, the next seminar of its course: a message \
+that tells when that work is due gives it with moves set to that id, also when the date is the same.
 - The message moves a listed deadline to another date: give the new date and set moves to the listed id ("d12"); \
 otherwise moves is "".
 
@@ -645,8 +648,9 @@ class Batches:
         if self.sheets is not None:
             names |= self.sheets.course_names(today)
         await self.subjects.try_resolve(names, who="batches")
-        # A correction given, edited or withdrawn in this run moves or withdraws its interim assessment's Midterm.
-        midterms = self.schedule.sync_midterms()
+        # A correction given, edited or withdrawn in this run moves or withdraws its interim assessment's Midterm,
+        # and the assumed due dates of the sheets (§6.3) follow their seminars.
+        midterms = self.schedule.sync_deadlines()
         changes.deadlines += midterms.deadlines
         changes.moved += midterms.moved
         changes.gone += midterms.gone
@@ -886,7 +890,7 @@ class Batches:
         lines += [f"- n{n['id']}: \"{n['full']}\"" for n in context.news] or ["(none)"]
         lines += ["", "Deadlines (upcoming and recently passed):"]
         lines += [f"- d{d['id']}: \"{d['label']}\" {d['due']}" + (" passed" if d["due"] < today else "")
-                  for d in context.deadlines] or ["(none)"]
+                  + (" assumed" if d.get("assumed") else "") for d in context.deadlines] or ["(none)"]
         lines += ["", "Upcoming events:"]
         lines += [_event_line(e) for e in context.events] or ["(none)"]
         if settings["study"]:
@@ -1032,6 +1036,8 @@ class Batches:
                 for deadline in item["deadlines"]:
                     same = self.deadlines.find(deadline["label"], deadline["due"])
                     if same is not None:  # known already, maybe from the earlier text of this very message
+                        if same["assumed"]:  # a sheet's assumed date, told for real now (§6.3)
+                            self.deadlines.confirm(same["id"])
                         settled_deadlines.add(same["id"])
                         continue
                     new_id = self.deadlines.add({"source": source, "chat_id": chat_id, "msg_ids": ids,

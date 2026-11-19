@@ -697,10 +697,14 @@
       return dayLabel(iso);
     }
 
-    function dueValue(iso, today) {
+    function dueValue(iso, today, assumed = false) {
       const days = daysFrom(today, iso);
-      return el("span", {className: days < 0 ? "late" : days <= 1 ? "soon" : ""}, dueMark(iso, today));
+      return el("span", {className: days < 0 ? "late" : days <= 1 ? "soon" : ""},
+        (assumed ? "≈ " : "") + dueMark(iso, today));
     }
+
+    // A sheet's date the service assumed: its course's next seminar in RUZ (§6.3).
+    const ASSUMED = () => L("assumed: the next seminar", "предположительно: следующий семинар");
 
     function room(value) {
       if (!value) return "";
@@ -982,15 +986,16 @@
     function deadlineRow(d, data, dated) {
       const sub = [deadlineFrom(d)];  // the course is in the title already, «Calc HW 3»; its full name is on the card
       if (d.category === "personal") sub.push(CATEGORIES().personal);
+      if (d.assumed) sub.push(L("≈ assumed", "≈ предположительно"));
       return row({title: d.title, sub: sub.filter(Boolean).join(" · "),
-        value: dated ? dueValue(d.due, data.today) : null, go: () => deadlineCard(d, data)});
+        value: dated ? dueValue(d.due, data.today, d.assumed) : null, go: () => deadlineCard(d, data)});
     }
 
     function deadlineCard(d, data) {
       const own = d.source === "ha";
       const days = daysFrom(data.today, d.due);
-      const due = (days === 0 || days === 1 ? dueMark(d.due, data.today) + ", " : "") + dayLabel(d.due)
-        + (days < 0 ? L(" · overdue", " · просрочен") : "");
+      const due = (d.assumed ? "≈ " : "") + (days === 0 || days === 1 ? dueMark(d.due, data.today) + ", " : "")
+        + dayLabel(d.due) + (days < 0 ? L(" · overdue", " · просрочен") : "") + (d.assumed ? " · " + ASSUMED() : "");
       const from = toMessage(deadlineFrom(d), d.message, d.link);
       openCard(cardHead(d.title),
         cardList(fact(L("Due", "Срок"), el("span", {className: days < 0 ? "late" : ""}, due)),
@@ -1004,6 +1009,10 @@
           }
         }, {danger: true}) : cardButton(L("Hide", "Скрыть"), () => act("api/deadlines/" + encodeURIComponent(d.uid),
           "DELETE", undefined, "api/deadlines"), {danger: true})),
+        d.assumed ? cardFoot(L("The sheet gives no date, so it is due before the next seminar of its course in RUZ "
+          + "and follows the timetable. A date you set replaces it, in the sheet too.", "В листке нет срока, поэтому он "
+          + "до следующего семинара по РУЗ и следует за расписанием. Дата, которую вы поставите, заменит его, и в листке "
+          + "тоже.")) : null,
         own ? null : cardFoot(L("Changed, it becomes your own and the source's one is hidden. A hidden one does not "
           + "come back by itself, even if the source sends it again; it can be restored in «Hidden».", "После правки "
           + "дедлайн станет своим, а дедлайн источника скроется. Скрытый сам не вернётся, даже если источник пришлёт "
@@ -1033,7 +1042,11 @@
       return [el("h1", {className: "title"}, fresh ? L("New deadline", "Новый дедлайн") : L("Edit deadline", "Изменить дедлайн")),
         section(null, [field(L("What", "Что"), title), field(L("Due", "Срок"), due),
           field(L("List", "Список"), selectOf(Object.entries(CATEGORIES()), category, (value) => { category = value; }))],
-          copy ? L("The source's deadline is hidden, your own with these values takes its place.",
+          copy && d.assumed ? L("The date becomes the sheet's real date. Change only the date and the deadline stays "
+            + "the chat's; change the title or the list too and your own takes its place.", "Дата станет настоящим "
+            + "сроком листка. Если поменять только дату, дедлайн останется из чата; если ещё название или список, его "
+            + "место займёт свой.")
+          : copy ? L("The source's deadline is hidden, your own with these values takes its place.",
             "Дедлайн источника скроется, его место займёт свой с этими данными.")
             : L("Shown in Tablo and in the «Deadlines» topic. Deleted by itself 30 days after it is due.",
               "Виден в Tablo и в теме «Дедлайны». Через 30 дней после срока удаляется сам.")),
@@ -1500,7 +1513,7 @@
           "Листочков пока нет: сюда попадут PDF с заданиями из чатов."))];
       }
       parts.push(el("div", {className: "list", style: "margin-top: 14px"}, ...data.sheets.map((sheet) => {
-        const sub = [sheet.due ? L("due ", "срок ") + dayLabel(sheet.due) : null,
+        const sub = [sheet.due ? L("due ", "срок ") + (sheet.due_assumed ? "≈ " : "") + dayLabel(sheet.due) : null,
           sheet.versions > 1 ? count(sheet.versions, ["version", "versions"], ["версия", "версии", "версий"]) : null,
           sheet.own ? L("you", "вы") : sheet.chat];
         const status = sheet.status === "failed" ? el("span", {className: "late"}, L("not posted", "не отправлен"))
@@ -1526,7 +1539,8 @@
       const older = olderSheets(sheet, data);
       openCard(cardHead(sheetTitle(sheet), sheet.name),
         sheet.summary ? el("div", {className: "list"}, el("div", {className: "text"}, sheet.summary)) : null,
-        cardList(fact(L("Due", "Срок"), sheet.due ? dayLabel(sheet.due) : null),
+        cardList(fact(L("Due", "Срок"), sheet.due ? (sheet.due_assumed ? "≈ " + (sheet.due_at ? when(sheet.due_at)
+          : dayLabel(sheet.due)) + " · " + ASSUMED() : dayLabel(sheet.due)) : null),
           fact(L("Versions", "Версий"), sheet.versions > 1 ? String(sheet.versions) : null),
           fact(L("From", "Откуда"), sheet.own ? L("added by you", "добавлен вами") : sheet.chat),
           fact(L("Received", "Получен"), when(sheet.created_at)),
@@ -1555,16 +1569,20 @@
 
     function sheetEditPage(sheet) {
       const f = sheetFields(sheet);
+      // An assumed date is sent only when changed: saving the description alone keeps it assumed.
+      const due = () => sheet.due_assumed && f.due.value === (sheet.due || "") ? {} : {due: f.due.value || null};
       const summary = el("textarea", {className: "prose", rows: 4, value: sheet.summary || "",
         placeholder: L("What is in it", "Что в нём")});
       return [el("h1", {className: "title"}, L("Edit sheet", "Изменить листочек")),
         el("p", {className: "subtitle"}, sheet.name),
-        section(null, f.rows),
+        section(null, f.rows, sheet.due_assumed ? L("The due date is assumed: the next seminar in RUZ. A date you set "
+          + "replaces it.", "Срок предположительный: следующий семинар по РУЗ. Дата, которую вы поставите, заменит его.")
+          : null),
         section(L("Description", "Описание"), [el("div", {className: "row"}, summary)],
           L("The caption of its message in the «Sheets» topic is updated.",
             "Подпись его сообщения в теме «Листочки» обновится.")),
         primary(L("Save", "Сохранить"), () => submit("api/sheets/" + sheet.id, "PATCH", {course: f.course.value,
-          number: f.number.value, due: f.due.value || null, summary: summary.value}))];
+          number: f.number.value, ...due(), summary: summary.value}))];
     }
 
     function sheetNewPage() {

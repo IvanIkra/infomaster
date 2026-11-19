@@ -159,7 +159,7 @@ def test_sources_in_their_order(named):
     assert [d.title for d in merged.visible()] == ["Dentist", "DM HW 3", "Calc KR-1", "Alg HW 1", "RSF Midterm",
                                                    "Записаться на майнор"]
     assert merged.items()[0] == {"uid": "ha-1", "title": "Dentist", "due": "2026-10-21", "category": "personal",
-                                 "source": "ha", "overdue": False}
+                                 "source": "ha", "overdue": False, "assumed": False}
     assert merged.items()[1]["uid"] == uid(final[0]) and merged.find(uid(final[0])) == final[0]
     assert merged.find("tg-0000000000") is None
 

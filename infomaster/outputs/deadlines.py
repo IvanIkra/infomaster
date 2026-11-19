@@ -13,6 +13,8 @@
 - Quiet: the first refresh (nothing shown yet) takes the list as it is, and so do the first poll of HSE App X and the
   first RUZ poll for what they bring, so a source joining floods nothing. The owner's own changes (HA, the Mini App,
   the buttons) only edit the list too.
+- A sheet's date the service assumed (its course's next seminar, §6.3) is marked "≈ … (assumed)" wherever it is
+  shown, until a real date replaces it.
 - Under the message of a new or moved deadline «Hide» hides it exactly as HA's to-do lists do (an own deadline,
   «Delete», is deleted); a hidden one gets «Restore». Only the owner may press them. Texts and buttons are in the
   forum's language (D41); the titles are the merge's, English.
@@ -60,6 +62,15 @@ def due_mark(due: dt.date, today: dt.date, lang: str) -> str:
     if days == 1:
         return tr(lang, "tomorrow", "завтра")
     return day(due.isoformat(), lang)
+
+
+def assumed(d: Deadline, when: str, lang: str) -> str:
+    """When a deadline is due, marked when the date is only assumed (a sheet's next seminar, §6.3)."""
+    return f"≈ {when} ({tr(lang, 'assumed', 'предположительно')})" if d.assumed else when
+
+
+ASSUMED_WHY = Phrase("The sheet gives no date: due before the next seminar in RUZ.",
+                     "В листке нет срока: сдать до следующего семинара по РУЗ.")
 
 
 def entry(d: Deadline) -> dict:
@@ -133,7 +144,7 @@ class DeadlineTopic:
         lines = []
         for d in shown:
             mark, where = self.where(d)
-            line = f"{mark} <b>{html.escape(d.title)}</b> — {due_mark(d.due, today, lang)}"
+            line = f"{mark} <b>{html.escape(d.title)}</b> — {assumed(d, due_mark(d.due, today, lang), lang)}"
             if d.name:
                 line += f" · {html.escape(d.name)}"
             lines.append(f"{line} · {where}")
@@ -208,16 +219,18 @@ class DeadlineTopic:
 
     def _new(self, d: Deadline) -> str:
         lang = self.forum.lang
-        lines = [f"🆕 <b>{html.escape(d.title)}</b> — {day(d.due.isoformat(), lang)}"]
+        lines = [f"🆕 <b>{html.escape(d.title)}</b> — {assumed(d, day(d.due.isoformat(), lang), lang)}"]
         if d.name:
             lines.append(html.escape(d.name))
         if d.source == "ical":
             lines.append(tr(lang, "Interim assessment in RUZ", "Рубежный контроль в РУЗ"))
+        if d.assumed:
+            lines.append(ASSUMED_WHY.get(lang))
         return "\n".join(lines + self._origin(d.ref, new=True))
 
     def _moved(self, e: dict, d: Deadline) -> str:
         lang = self.forum.lang
-        moved = f"{day(e['due'], lang)} → {day(d.due.isoformat(), lang)}"
+        moved = f"{day(e['due'], lang)} → {assumed(d, day(d.due.isoformat(), lang), lang)}"
         lines = [f"↪️ <b>{html.escape(d.title)}</b> " + tr(lang, f"moved: {moved}", f"перенесён: {moved}")]
         return "\n".join(lines + self._origin(d.ref))
 

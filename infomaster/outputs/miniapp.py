@@ -428,7 +428,8 @@ def _deadlines_state(request: web.Request) -> dict:
     merged = request.app[DEADLINES_KEY]
     today = merged.today()
     items = [{"uid": uid(d), "title": d.title, "due": d.due.isoformat(), "category": d.category, "source": d.source,
-              "course": d.name, "overdue": d.due < today, **_origin(request, d)} for d in merged.visible()]
+              "course": d.name, "overdue": d.due < today, "assumed": d.assumed, **_origin(request, d)}
+             for d in merged.visible()]
     own = [{"uid": d.key, "title": d.title, "due": d.due.isoformat(), "category": d.category}
            for d in merged.todo.own()]
     hidden = [{"uid": row["uid"], "title": row["title"], "due": row["due"], "source": row["source"]}
@@ -482,12 +483,27 @@ async def add_deadline(request: web.Request) -> web.Response:
 
 
 async def edit_deadline(request: web.Request) -> web.Response:
-    """{title?, due?, category?}: an own one changes; one from a source is hidden and an own copy takes its place."""
+    """{title?, due?, category?}: an own one changes; one from a source is hidden and an own copy takes its place.
+    A sheet's assumed date (§6.3) given another date is the sheet's real date: with the title and list as they are,
+    the deadline itself moves to it and stays the chats'; the sheet takes the date either way."""
     fields = _own_fields(request, await _json(request), some=True)
     if not fields:
         raise web.HTTPBadRequest(text="expected {title?, due?, category?}")
-    request.app[DEADLINES_KEY].edit(_listed(request), fields.get("title"), fields.get("due"), fields.get("category"))
+    merged, d = request.app[DEADLINES_KEY], _listed(request)
+    sheet_id = _assumed_sheet(request, d) if "due" in fields else None
+    if sheet_id is None or fields.get("title", d.title) != d.title or fields.get("category", d.category) != d.category:
+        merged.edit(d, fields.get("title"), fields.get("due"), fields.get("category"))
+    if sheet_id is not None:
+        await request.app[SHEETS_KEY].edit(sheet_id, {"due": fields["due"].isoformat()})
     return respond(request, _deadlines_state(request))
+
+
+def _assumed_sheet(request: web.Request, d) -> int | None:
+    """The sheet whose assumed date a deadline is, when the Mini App has the sheets."""
+    if not d.assumed or not d.ref.startswith("dl:") or request.app.get(SHEETS_KEY) is None:
+        return None
+    row = request.app[DEADLINES_KEY].deadlines.get(int(d.ref[3:]))
+    return row["sheet_id"] if row is not None else None
 
 
 async def delete_deadline(request: web.Request) -> web.Response:
