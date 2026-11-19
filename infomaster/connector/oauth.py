@@ -69,6 +69,7 @@ ATTEMPTS = 5                    # wrong codes on one page
 RESEND_AFTER = 30               # seconds between codes of one page
 CODES_PER_HOUR = 10             # codes the bot sends an hour, all pages together
 CLIENTS_MAX = 50
+PAGES_MAX = 20                  # open authorize pages kept, the oldest go first
 NAME_CHARS = 80
 # Where the browser may be sent back with a code: claude.ai's callback (the web, desktop and phone apps) and a
 # loopback address on any port (Claude Code).
@@ -256,6 +257,8 @@ class OAuth:
         page.challenge = challenge
         page_id = secrets.token_urlsafe(24)
         self.pages[page_id] = page
+        while len(self.pages) > PAGES_MAX:  # the page is public: anyone may open it, memory is not theirs
+            del self.pages[next(iter(self.pages))]
         return page_id, page
 
     def _back(self, page: Page, error: str, description: str) -> OAuthError:
