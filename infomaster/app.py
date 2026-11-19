@@ -231,13 +231,13 @@ class Service:
             for app, port in ((miniapp.create_app(self.env, self.budget, self.journal, self.inbox, self.chat_settings,
                                                   self.sources, self.subjects, self.schedule, self.hseapp,
                                                   self.merged, self.settings, self.sheet_topic,
-                                                  self.grades, self.twin, self.calendar, self.reminders),
+                                                  self.grades, self.twin, self.calendar, self.reminders,
+                                                  self.library_links),  # the links' routes come with it
                                self.env.public_port),
                               (api.create_app(self.env, self.budget, self.sources, self.calendar, self.merged,
                                               self.grades, self.news, self.settings),
                                self.env.internal_port)):
                 if port == self.env.public_port:
-                    library_links.add_routes(app, self.library_links)  # before the connector: its tools use them
                     self.connector.attach(app)  # the MCP connector shares the Mini App's port (§8.5)
                 runner = web.AppRunner(app, access_log=None)
                 await runner.setup()

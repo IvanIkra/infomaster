@@ -383,6 +383,10 @@
     .row.more .name { color: var(--link); font-size: 15px; }
     textarea.prose { font: 16px/1.4 inherit; font-family: inherit; min-height: 96px; }
     .badge.muted { color: var(--hint); background: var(--field); }
+    .text.pre { white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+    .head .title { flex: 1; min-width: 0; }
+    .progress .meter { margin-top: 6px; }
+    .picker { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
     body.locked { overflow: hidden; }
     .card {
       position: fixed;
@@ -556,6 +560,14 @@
       bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
       plug: '<path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0zM12 17v5"/>',
       plus: '<path d="M12 5v14M5 12h14"/>',
+      inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13l3.5 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/>',
+      camera: '<path d="M4 7h3l2-3h6l2 3h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><circle cx="12" cy="13" r="4"/>',
+      mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/>',
+      video: '<rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10 6-3v10l-6-3z"/>',
+      link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+      text: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+      slides: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8"/>',
+      file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
       chev: '<path d="m1 1 6 5.5L1 12" stroke-width="2"/>',
     };
 
@@ -921,7 +933,8 @@
       const kinds = [["deadline", L("Deadline", "Дедлайн"), "deadlines", "#3e88f7", () => deadlinePage(null)],
                      ["event", L("Event", "Событие"), "schedule", "#e0605a", () => eventPage(null)],
                      ["grade", L("Grade", "Оценка"), "grades", "#34a853", () => gradePage(null)],
-                     ["sheet", L("Sheet", "Листочек"), "sheet", "#8e8e93", () => sheetNewPage()]];
+                     ["sheet", L("Sheet", "Листочек"), "sheet", "#8e8e93", () => sheetNewPage()],
+                     ["material", L("Material", "Материал"), "inbox", "#a05ad8", () => uploadPage({})]];
       kinds.sort((a, b) => (b[0] === first) - (a[0] === first));
       openCard(cardHead(L("Add", "Добавить")), cardList(kinds.map(([, title, name, color, page]) =>
         row({title, lead: tile(name, color), go: () => { closeCard(true); push(page); }}))));
@@ -1276,17 +1289,20 @@
         primary(L("Save", "Сохранить"), save)];
     }
 
-    // --- Study: grades and sheets ----------------------------------------------------------------------
+    // --- Study: grades, sheets and materials ----------------------------------------------------------
 
     async function studyPage() {
-      const segments = [["grades", L("Grades", "Оценки")], ["sheets", L("Sheets", "Листочки")]];
+      const segments = [["grades", L("Grades", "Оценки")], ["sheets", L("Sheets", "Листочки")],
+                        ["materials", L("Materials", "Материалы")]];
       const bar = el("div", {className: "segmented"}, ...segments.map(([name, title]) => {
         const b = el("button", {className: name === nav.study ? "on" : ""}, title);
         b.onclick = () => { if (nav.study !== name) { haptic(); nav.study = name; draw(true); } };
         return b;
       }));
-      const body = await (nav.study === "sheets" ? sheetsPart() : gradesPart());
-      return [header(L("Study", "Учёба"), addButton(nav.study === "sheets" ? "sheet" : "grade")), bar, body];
+      const body = await (nav.study === "sheets" ? sheetsPart() : nav.study === "materials" ? materialsPart()
+        : gradesPart());
+      const first = {sheets: "sheet", materials: "material"}[nav.study] || "grade";
+      return [header(L("Study", "Учёба"), addButton(first)), bar, body];
     }
 
     const bookName = (sheet) => sheet.name || sheet.title || sheet.label || L("Untitled gradebook", "Таблица без названия");
@@ -1611,6 +1627,314 @@
             + "сообщении, а отдельное сообщение этого листка удалится."))) return;
           submit(`api/sheets/${sheet.id}/join`, "POST", {previous: other.id});
         }})))];
+    }
+
+    // --- Study: materials (D58) ---------------------------------------------------------------------------
+    // The library: per course, the knowledge base Claude makes (read here) and the raw material it is made of
+    // (uploaded here from the phone). A file opens by a signed link in Telegram's browser: on iOS that is Safari's
+    // view, which shows a PDF itself and can share or save it; the Mini App stays where it was.
+
+    const KIND_NAMES = () => L({photo: "Photo", audio: "Audio", video: "Video", notes: "Notes", slides: "Slides",
+                                sheet: "Sheet", link: "Link", text: "Note", transcript: "Transcript", file: "File"},
+                               {photo: "Фото", audio: "Аудио", video: "Видео", notes: "Конспект", slides: "Слайды",
+                                sheet: "Листочек", link: "Ссылка", text: "Заметка", transcript: "Расшифровка",
+                                file: "Файл"});
+    const KIND_TILES = {photo: ["image", "#34a853"], audio: ["mic", "#e0605a"], video: ["video", "#a05ad8"],
+                        notes: ["text", "#f2a33a"], slides: ["slides", "#f2a33a"], sheet: ["sheet", "#8e8e93"],
+                        link: ["link", "#3e88f7"], text: ["text", "#8e8e93"], transcript: ["text", "#e0605a"],
+                        file: ["file", "#8e8e93"]};
+    const DOC_NAMES = () => L({book: "Course book", cheatsheet: "Cheat sheet", lecture: "Lecture", seminar: "Seminar"},
+                              {book: "Книга курса", cheatsheet: "Шпаргалка", lecture: "Лекция", seminar: "Семинар"});
+    const DOC_TILES = {book: ["book", "#3e88f7"], cheatsheet: ["text", "#8e8e93"], lecture: ["study", "#34a853"],
+                       seminar: ["study", "#f2a33a"]};
+    const coursePath = (course) => "api/library/course?name=" + encodeURIComponent(course);
+    const libraryKeys = () => Object.keys(cache).filter((key) => key.startsWith("api/library"));
+
+    function bytes(n) {
+      if (n === null || n === undefined) return "";
+      const units = L(["B", "KB", "MB", "GB"], ["Б", "КБ", "МБ", "ГБ"]);
+      let i = 0;
+      while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+      return `${i && n < 10 ? n.toFixed(1) : Math.round(n)} ${units[i]}`;
+    }
+
+    const classKind = (c) => ({lecture: L("Lecture", "Лекция"), seminar: L("Seminar", "Семинар")})[c.kind] || c.ruz_kind;
+    const classLabel = (c) => `${when(c.start, c.end)} · ${classKind(c)}`;
+    const authorName = (a) => a === "owner" ? L("you", "вы") : a;
+
+    function itemTitle(item) {
+      const line = (item.text || "").trim().split("\n")[0].slice(0, 80);
+      return item.title || item.name || line || item.url || KIND_NAMES()[item.kind] || item.kind;
+    }
+
+    function itemRow(item, where, withDay = false) {
+      const [name, color] = KIND_TILES[item.kind] || KIND_TILES.file;
+      const mark = item.status === "new" ? el("span", {className: "badge"}, L("new", "новый"))
+        : el("span", {className: "badge muted"}, L("processed", "обработан"));
+      return row({title: el("span", {}, itemTitle(item), mark), lead: tile(name, color),
+        sub: [KIND_NAMES()[item.kind], authorName(item.author), withDay ? dayLabel(item.day) : null,
+          item.size ? bytes(item.size) : null].filter(Boolean).join(" · "),
+        go: () => itemCard(item, where)});
+    }
+
+    // Where an item is: the inbox, a course, or a class of it.
+    function itemCard(item, where) {
+      const remove = async () => {
+        if (!await askYes(L(`Remove «${itemTitle(item)}»? It is out of the library; its file is kept 30 days more.`,
+          `Удалить «${itemTitle(item)}»? Он пропадёт из библиотеки; файл хранится ещё 30 дней.`))) return;
+        change("api/library/items/" + item.id, "DELETE", undefined, ...libraryKeys());
+      };
+      openCard(cardHead(itemTitle(item), KIND_NAMES()[item.kind]),
+        item.text ? el("div", {className: "list"}, el("div", {className: "text pre"},
+          item.text + (item.text_cut ? "…" : ""))) : null,
+        cardList(fact(L("Where", "Где"), where), fact(L("From", "От кого"), authorName(item.author)),
+          fact(L("Day", "День"), item.day ? dayLabel(item.day) : null),
+          fact(L("File", "Файл"), item.name ? `${item.name} · ${bytes(item.size)}` : null),
+          fact(L("Link", "Ссылка"), item.url),
+          fact(L("State", "Состояние"), item.status === "new" ? L("new: waiting for Claude", "новый: ждёт Claude")
+            : L("processed into the knowledge base", "обработан в базу знаний")),
+          fact(L("Note", "Пометка"), item.note)),
+        cardList(item.file_url ? cardButton(L("Open", "Открыть"), () => tg.openLink(item.file_url)) : null,
+          item.url ? cardButton(L("Open the link", "Открыть ссылку"), () => openLink(item.url)) : null,
+          item.text_cut ? cardButton(L("Read it all", "Читать целиком"), () => push(() => itemTextPage(item.id)))
+            : null,
+          cardButton(L("Move…", "Переместить…"), () => push(() => movePage(item))),
+          cardButton(L("Remove", "Удалить"), remove, {danger: true})),
+        item.name && !item.file_url ? cardFoot(L("The file is gone.", "Файла уже нет.")) : null);
+    }
+
+    async function itemTextPage(id) {
+      const item = await get("api/library/items/" + id);
+      return [el("h1", {className: "title"}, itemTitle(item)),
+        el("div", {className: "list"}, el("div", {className: "text pre"}, item.text))];
+    }
+
+    async function materialsPart() {
+      const data = await maybe("api/library");
+      if (!data) return [empty(L("The library is off.", "Библиотека выключена."))];
+      const u = data.usage;
+      const courseSub = (c) => [c.documents ? count(c.documents, ["document", "documents"],
+        ["документ", "документа", "документов"]) : null, c.items ? count(c.items, ["item", "items"],
+        ["материал", "материала", "материалов"]) : null, c.new ? L(`${c.new} new`, `новых: ${c.new}`) : null]
+        .filter(Boolean).join(" · ") || L("nothing yet", "пока пусто");
+      return [section(null, [row({title: L("Inbox", "Входящие"), lead: tile("inbox", "#a05ad8"),
+          sub: L("not sorted into a course yet", "ещё не разложены по курсам"),
+          value: data.inbox ? String(data.inbox) : null, go: () => push(inboxPage)})]),
+        section(L("Courses", "Курсы"), data.courses.length ? data.courses.map((c) => row({title: c.course,
+          lead: tile("book", "#3e88f7"), sub: courseSub(c), className: c.items || c.documents ? "" : "faded",
+          go: () => push(() => coursePage(c.course))})) : [row({title: L("No courses yet", "Курсов пока нет"),
+          className: "faded"})]),
+        el("div", {className: "list", style: "margin-top: 22px"}, button(L("Add material", "Добавить материал"),
+          () => push(() => uploadPage({})), {plus: true})),
+        el("p", {className: "foot"}, [count(u.items, ["item", "items"], ["материал", "материала", "материалов"]),
+          count(u.documents, ["document", "documents"], ["документ", "документа", "документов"]),
+          L(`${bytes(u.bytes)} on disk`, `${bytes(u.bytes)} на диске`),
+          u.free_bytes !== null ? L(`${bytes(u.free_bytes)} free`, `свободно ${bytes(u.free_bytes)}`) : null]
+          .filter(Boolean).join(" · ") + ". " + L("Claude makes the knowledge base of the material: a book per course "
+          + "and notes per class.", "Из материалов Claude делает базу знаний: книгу курса и конспекты занятий."))];
+    }
+
+    async function inboxPage() {
+      const data = await get("api/library/inbox");
+      const where = L("Inbox", "Входящие");
+      return [el("div", {className: "head"}, el("h1", {className: "title"}, where),
+          headButton("plus", () => push(() => uploadPage({})))),
+        el("p", {className: "subtitle"}, L("Material of no known course: Claude sorts it into courses and classes; "
+          + "you can move an item yourself.", "Материалы без известного курса: Claude разложит их по курсам и "
+          + "занятиям; можно переместить и самому.")),
+        data.items.length ? el("div", {className: "list"}, ...data.items.map((i) => itemRow(i, where, true)))
+          : empty(L("The inbox is empty.", "Входящих нет."))];
+    }
+
+    // A document opens at its newest version; «Versions» lists the older ones.
+    function openVersion(version) {
+      if (!version.url) return tell(L("The file is gone.", "Файла уже нет."));
+      tg.openLink(version.url);
+    }
+
+    function documentRow(doc) {
+      const newest = doc.versions[0];
+      const [name, color] = DOC_TILES[doc.kind] || DOC_TILES.book;
+      const older = doc.versions.length > 1 ? el("button", {className: "small", onclick: (event) => {
+        event.stopPropagation();
+        versionsCard(doc);
+      }}, L("Versions", "Версии")) : null;
+      return row({title: doc.title, lead: tile(name, color), control: older, go: () => openVersion(newest),
+        sub: [DOC_NAMES()[doc.kind], doc.day ? dayLabel(doc.day) : null, "v" + newest.version,
+          doc.kind === "cheatsheet" ? "Markdown" : "PDF"].filter(Boolean).join(" · ")});
+    }
+
+    function versionsCard(doc) {
+      openCard(cardHead(doc.title, DOC_NAMES()[doc.kind]),
+        cardList(doc.versions.map((v, i) => row({title: "v" + v.version + (i ? "" : L(" · the newest", " · новая")),
+          sub: [v.published_at ? when(v.published_at) : null, v.note].filter(Boolean).join(" · ") || null,
+          go: () => { closeCard(true); openVersion(v); }}))),
+        cardFoot(L("Every version is kept.", "Хранятся все версии.")));
+    }
+
+    async function coursePage(course) {
+      const data = await get(coursePath(course));
+      const add = (target) => () => push(() => uploadPage(target));
+      const parts = [el("div", {className: "head"}, el("h1", {className: "title"}, data.course),
+          headButton("plus", add({course: data.course, label: data.course}))),
+        ...section(L("Knowledge base", "База знаний"), data.documents.length ? data.documents.map(documentRow)
+          : [row({title: L("Nothing yet: Claude makes it from the material.",
+            "Пока ничего: Claude сделает её из материалов."), wrap: true, className: "faded"})],
+          data.documents.length ? L("A tap opens the newest version.", "Нажатие открывает новую версию.") : null)];
+      if (data.items.length) {
+        parts.push(...section(L("The whole course", "Курс целиком"), data.items.map((i) => itemRow(i, data.course,
+          true))));
+      }
+      const bare = [];
+      for (const c of data.classes) {
+        const where = `${data.course} · ${classLabel(c)}`;
+        if (!c.items_list.length) {
+          if (!c.cancelled) bare.push(row({title: classLabel(c), go: add({course: data.course, class_uid: c.uid,
+            label: where})}));
+          continue;
+        }
+        parts.push(...section(classLabel(c) + (c.cancelled ? L(" · cancelled", " · отменено") : ""),
+          [...c.items_list.map((i) => itemRow(i, where)), button(L("Add here", "Добавить сюда"),
+            add({course: data.course, class_uid: c.uid, label: where}), {plus: true})]));
+      }
+      if (bare.length) {
+        parts.push(...section(L("Classes without material", "Занятия без материалов"), bare,
+          L("Tap a class to add material to it.", "Нажмите на занятие, чтобы добавить к нему материал.")));
+      }
+      return parts;
+    }
+
+    // Moving an item: to another course and class, or back to the inbox.
+    async function movePage(item) {
+      const home = await get("api/library");
+      let course = item.course || "", uid = item.class_uid || "";
+      const label = el("span", {className: "label"}, L("Class", "Занятие"));
+      const classField = el("div", {className: "row field"}, label);
+      const fillClasses = async () => {
+        if (!course) return classField.replaceChildren(label, el("span", {className: "grow faded"}, "—"));
+        try {
+          const data = await get("api/library/classes?course=" + encodeURIComponent(course));
+          if (!data.classes.some((c) => c.uid === uid)) uid = "";
+          classField.replaceChildren(label, selectOf([["", L("the whole course", "курс целиком")],
+            ...data.classes.map((c) => [c.uid, classLabel(c)])], uid, (value) => { uid = value; }));
+        } catch (error) {
+          tell(error.message);
+        }
+      };
+      const courses = home.courses.map((c) => c.course);
+      if (course && !courses.includes(course)) courses.unshift(course);
+      await fillClasses();
+      return [el("h1", {className: "title"}, L("Move", "Переместить")),
+        el("p", {className: "subtitle"}, itemTitle(item)),
+        section(null, [field(L("Course", "Курс"), selectOf([["", L("Inbox", "Входящие")],
+          ...courses.map((c) => [c, c])], course, (value) => { course = value; uid = ""; fillClasses(); })),
+          classField], L("Claude sorts the inbox by itself; move an item when it got it wrong.",
+          "Claude разбирает входящие сам; перемещайте, если он ошибся.")),
+        primary(L("Move", "Переместить"), () => submit("api/library/items/" + item.id, "PATCH",
+          {course: course || null, class_uid: uid || null}))];
+    }
+
+    // Files go by XMLHttpRequest, which tells how much is sent; fields first, as the server reads them first.
+    function sendFiles(place, files, progress) {
+      const form = new FormData();
+      for (const [name, value] of Object.entries(place)) if (value) form.append(name, value);
+      for (const file of files) form.append("file", file, file.name);
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "api/library/files");
+        xhr.setRequestHeader("Authorization", "tma " + tg.initData);
+        xhr.upload.onprogress = (event) => { if (event.lengthComputable) progress(event.loaded / event.total); };
+        xhr.onload = () => {
+          if (xhr.status === 200) return resolve(JSON.parse(xhr.responseText));
+          reject(new Error(xhr.status === 401 ? L("Open the app from the bot.", "Откройте приложение из бота.")
+            : xhr.responseText || L("Error ", "Ошибка ") + xhr.status));
+        };
+        xhr.onerror = () => reject(new Error(L("The upload broke off: check the connection and try again.",
+          "Загрузка прервалась: проверьте связь и попробуйте снова.")));
+        xhr.send(form);
+      });
+    }
+
+    // Adding material: files (photos from the camera, recordings, any file), a note, a link; into `target`: the inbox
+    // ({}), a course or a class of it.
+    function uploadPage(target) {
+      const files = [];
+      const box = el("div");
+      // A row that is the label of its file input: a tap opens the picker natively, which iOS needs.
+      const picker = (text, accept, capture) => {
+        const node = el("input", {type: "file", className: "picker", multiple: !capture});
+        if (accept) node.accept = accept;
+        if (capture) node.setAttribute("capture", "environment");
+        node.onchange = () => { files.push(...node.files); node.value = ""; drawFiles(); };
+        return el("label", {className: "row button left"}, icon("plus"), el("span", {}, text), node);
+      };
+      const pickers = [picker(L("Take a photo", "Сфотографировать"), "image/*", true),
+                       picker(L("Audio recording", "Аудиозапись"), "audio/*"),
+                       picker(L("Choose files", "Выбрать файлы"), "")];
+      const drawFiles = () => box.replaceChildren(el("div", {className: "list"}, ...files.map((file, i) => row({
+        title: file.name, sub: bytes(file.size), control: el("button", {className: "small", onclick: () => {
+          files.splice(i, 1);
+          drawFiles();
+        }}, L("Remove", "Убрать"))})), ...pickers));
+      drawFiles();
+      const note = el("textarea", {className: "prose", rows: 4, placeholder: L("What was said, what to look at",
+        "Что говорили, на что обратить внимание")});
+      const link = input("", {type: "url", inputMode: "url", placeholder: "https://"});
+      const title = input("", {maxLength: 200, placeholder: L("optional", "необязательно")});
+      const bar = el("i", {style: "width: 0"});
+      const status = el("div", {className: "name"});
+      const progress = el("div", {className: "list progress", hidden: true}, el("div", {className: "row"},
+        el("div", {className: "main"}, status, el("div", {className: "meter"}, bar))));
+      const place = {course: target.course || null, class_uid: target.class_uid || null};
+      let busy = false;
+      const save = async () => {
+        if (busy) return;
+        if (!files.length && !note.value.trim() && !link.value.trim()) {
+          return tell(L("Choose a file, write a note or paste a link.",
+            "Выберите файл, напишите заметку или вставьте ссылку."));
+        }
+        busy = true;
+        try {
+          if (files.length) {
+            progress.hidden = false;
+            const total = files.reduce((sum, file) => sum + file.size, 0);
+            const say = (share) => {
+              bar.style.width = `${Math.round(share * 100)}%`;
+              status.textContent = L(`Uploading ${files.length === 1 ? "the file" : files.length + " files"}: `,
+                `Загрузка (файлов: ${files.length}): `) + `${bytes(total * share)} / ${bytes(total)}`;
+            };
+            say(0);
+            await sendFiles(place, files, say);
+            files.length = 0;
+            drawFiles();
+            progress.hidden = true;
+          }
+          if (note.value.trim()) {
+            await send("api/library/items", "POST", {kind: "text", text: note.value, ...place});
+            note.value = "";
+          }
+          if (link.value.trim()) {
+            await send("api/library/items", "POST", {kind: "link", url: link.value.trim(), title: title.value, ...place});
+          }
+          back();
+        } catch (error) {
+          progress.hidden = true;
+          tell(error.message);
+        } finally {
+          busy = false;
+        }
+      };
+      return [el("h1", {className: "title"}, L("Add material", "Добавить материал")),
+        el("p", {className: "subtitle"}, target.label || L("To the inbox: Claude sorts it into a course and a class.",
+          "Во входящие: Claude разложит по курсу и занятию.")),
+        el("h3", {}, L("Files", "Файлы")), box,
+        el("p", {className: "foot"}, L("Several at once; a lecture's recording too. Keep the app open until the upload "
+          + "ends.", "Можно несколько сразу, и запись лекции тоже. Не закрывайте приложение, пока идёт загрузка.")),
+        progress,
+        section(L("Note", "Заметка"), [el("div", {className: "row"}, note)]),
+        section(L("Link", "Ссылка"), [field(L("Address", "Адрес"), link), field(L("Title", "Название"), title)],
+          L("Kept as it is: the page is not fetched.", "Сохраняется как есть: страница не скачивается.")),
+        primary(L("Add", "Добавить"), save)];
     }
 
     // --- Settings ----------------------------------------------------------------------------------------
@@ -2411,7 +2735,7 @@
     const ROOTS = {deadlines: deadlinesPage, schedule: schedulePage, study: studyPage, settings: settingsPage};
     // The screens a link may ask for (a button under a post in the forum): the tab, then what to open in it.
     const SCREENS = {chats: ["settings", chatsPage], schedule: ["schedule"], deadlines: ["deadlines"],
-                     sheets: ["study", "sheets"], grades: ["study", "grades"],
+                     sheets: ["study", "sheets"], grades: ["study", "grades"], materials: ["study", "materials"],
                      reminders: ["settings", remindersPage],
                      subjects: ["settings", subjectsPage], hseapp: ["settings", hsePage], llm: ["settings", llmPage],
                      general: ["settings", generalPage], settings: ["settings"]};

@@ -6,9 +6,9 @@ token, and only the owner's Telegram id gets in (D16).
 Screens (D44: four tabs, every change an action on a card): the merged deadlines with the owner's own ones and the
 hidden ones (§5.4, §5.5), the timetable as the feeds have it, with the main/optional switch and hiding of the chats'
 events and corrections, the owner's own events and corrections of classes (§6.5), the grades and the sheets (§6.7,
-§6.3, D14), and the settings: the twin's account with its login and logout and the chats with their settings and the
-daily number of images read in them (D12), the course dictionary with manual entries (D3, D33), the HSE App X
-login (§5.2, D7), the limits of reading a PDF, the gradebooks:
+§6.3, D14), the library's materials and knowledge base (§6.8, D58), and the settings: the twin's account with its
+login and logout and the chats with their settings and the daily number of images read in them (D12), the course
+dictionary with manual entries (D3, D33), the HSE App X login (§5.2, D7), the limits of reading a PDF, the gradebooks:
 the name, the sheets and what was read in them, the LLM spending (§7, D40): today, this week and this month by task
 and by chat, the cost of each of the last 30 days and the daily limit, which can be changed or raised for today. Tablo
 and HA show no spending: this screen is the one place. The general settings: the batches' N, how long news lives, the
@@ -34,7 +34,8 @@ from functools import partial
 from pathlib import Path
 from urllib.parse import parse_qsl
 
-from aiohttp import web
+from aiohttp import BodyPartReader, web
+from aiohttp.hdrs import CONTENT_TYPE
 
 from .. import clock
 from ..collectors.files import UPLOAD_MAX_SIZE
@@ -44,6 +45,9 @@ from ..collectors.inbox import MAILBOX, Inbox, message_link
 from ..collectors.telegram import LoginError, Twin
 from ..config import Env
 from ..i18n import LANGUAGES, json_default, reason, tr
+from ..library import CHUNK, Library, LibraryError
+from ..library.links import LIBRARY_KEY, LINKS_KEY, Links
+from ..library.links import add_routes as add_library_routes
 from ..llm.budget import SOFT_SHARE, Budget
 from ..llm.journal import Journal
 from ..processing.grades import Grades, budget
@@ -88,6 +92,12 @@ EVENT_FIELDS = ("title", "kind", "start", "end", "room", "required", "cancelled"
 NEW_EVENT = {"title", "kind", "start", "end", "room", "required"}  # what a new event needs; cancelled may come too
 KIND_LIMIT = 40  # the kind is the type of the feeds once processing/schedule.py's type_of has read it
 CHART_DAYS = 30
+LIBRARY_PREVIEW = 600   # characters of an item's text in a list; the item's own page has all of it
+LIBRARY_ITEMS = 1000    # items of a course's page or of the inbox
+LIBRARY_FIELD = 1000    # bytes of a text field of an upload's form
+LIBRARY_TITLE = 200     # characters of a note's or a link's title
+LIBRARY_URL = 2000      # characters of a link
+DOC_ORDER = {"book": 0, "cheatsheet": 1}  # a course's own documents before its classes'
 
 
 def check_init_data(init_data: str, bot_token: str, now: float | None = None) -> dict | None:
@@ -1015,6 +1025,216 @@ async def drop_grade(request: web.Request) -> web.Response:
     return respond(request, _grades_state(request))
 
 
+# --- the library (D58) ---------------------------------------------------------------------------
+
+def _library(request: web.Request) -> Library:
+    """The library of the app, looked up when asked: it is attached with its links (links.add_routes)."""
+    library = request.app.get(LIBRARY_KEY)
+    if library is None:
+        raise web.HTTPNotFound(text="the library is off")
+    return library
+
+
+def _item_view(request: web.Request, row: dict, whole: bool = False) -> dict:
+    """An item for the screen: its file by a signed link (the page opens it outside the Mini App, where no initData
+    goes along), a text cut to LIBRARY_PREVIEW characters unless `whole`."""
+    text = row["text"] or ""
+    view = {name: row[name] for name in ("id", "kind", "title", "author", "url", "name", "media_type", "size", "status",
+                                         "day", "created_at", "course", "class_uid", "note", "parent", "source")}
+    view["text"] = text if whole else text[:LIBRARY_PREVIEW]
+    view["text_cut"] = not whole and len(text) > LIBRARY_PREVIEW
+    view["file_url"] = request.app[LINKS_KEY].material(row) if _library(request).path(row) else None
+    return view
+
+
+def _item_id(request: web.Request) -> int:
+    try:
+        return int(request.match_info["item_id"])
+    except ValueError:
+        raise web.HTTPNotFound() from None
+
+
+async def library_home(request: web.Request) -> web.Response:
+    """The Materials screen: the courses with their counts, the inbox's count, and what the library takes on disk."""
+    library = _library(request)
+    return respond(request, {"courses": library.courses(), "inbox": library.inbox_count(), "usage": library.usage()})
+
+
+def _document_view(request: web.Request, doc: dict) -> dict:
+    """A document with its versions, the newest first, each with a link to its PDF (a cheat sheet: its Markdown)."""
+    links, library = request.app[LINKS_KEY], _library(request)
+    versions = []
+    for version in doc["versions"]:
+        version = {**version, "kind": doc["kind"], "title": doc["title"]}
+        part = "source" if doc["kind"] == "cheatsheet" else "pdf"
+        versions.append({"id": version["id"], "version": version["version"], "note": version["note"],
+                         "published_at": version["published_at"],
+                         "url": links.version(version, part) if library.part_path(version, part) else None})
+    return {name: doc[name] for name in ("id", "kind", "title", "day", "class_uid")} | {"versions": versions}
+
+
+async def library_course(request: web.Request) -> web.Response:
+    """A course's page (?name=): its knowledge documents (the book and the cheat sheet first, then the classes' ones,
+    the last class first), its started classes with their items, and the items of no listed class."""
+    library = _library(request)
+    course = library.course(request.query.get("name"))
+    if course is None:
+        raise bad_request(request, "which course?", "какой курс?")
+    docs = [library.document(doc["id"]) for doc in library.documents(course) if doc["version"]]
+    docs.sort(key=lambda d: d["day"] or "", reverse=True)
+    docs.sort(key=lambda d: DOC_ORDER.get(d["kind"], len(DOC_ORDER)))
+    classes = library.classes(course)
+    by_class = {c["uid"]: [] for c in classes}
+    loose = []
+    for row in library.items(course=course, limit=LIBRARY_ITEMS):
+        by_class.get(row["class_uid"], loose).append(_item_view(request, row))
+    return respond(request, {"course": course, "documents": [_document_view(request, d) for d in docs],
+                             "classes": [{**c, "items_list": by_class[c["uid"]]} for c in classes], "items": loose})
+
+
+async def library_inbox(request: web.Request) -> web.Response:
+    """The inbox: what came without a course, the newest first; Claude sorts it, the owner may too."""
+    library = _library(request)
+    return respond(request, {"items": [_item_view(request, row)
+                                       for row in library.items(inbox=True, limit=LIBRARY_ITEMS)]})
+
+
+async def library_classes(request: web.Request) -> web.Response:
+    """A course's started classes (?course=), the last first: where an item can be moved to."""
+    library = _library(request)
+    course = library.course(request.query.get("course"))
+    return respond(request, {"course": course, "classes": library.classes(course) if course else []})
+
+
+async def library_item(request: web.Request) -> web.Response:
+    """One item with its whole text and the items that hang on it (a recording's transcript)."""
+    library = _library(request)
+    row = library.get(_item_id(request))
+    if row is None:
+        raise web.HTTPNotFound(text=tr(language(request), "no such item", "такого материала нет"))
+    return respond(request, {**_item_view(request, row, whole=True),
+                             "children": [_item_view(request, child) for child in library.children(row["id"])]})
+
+
+def _place(request: web.Request, library: Library, course, class_uid) -> tuple[str | None, str | None]:
+    """A checked (course, class_uid) of an upload, before its bytes are written: a class of the timetable, of that
+    course when both are given."""
+    if not isinstance(course, str | None) or not isinstance(class_uid, str | None):
+        raise web.HTTPBadRequest(text="course and class_uid are texts")
+    course, class_uid = library.course(course), (class_uid or "").strip() or None
+    if class_uid is not None:
+        found = library.class_of(class_uid)
+        if found is None:
+            raise bad_request(request, "no such class in the timetable", "такого занятия в расписании нет")
+        if course is not None and course != found["subject"]:
+            raise bad_request(request, f"the class is of {found['subject']}, not {course}",
+                              f"это занятие по курсу {found['subject']}, а не {course}")
+    return course, class_uid
+
+
+async def _field(part) -> str:
+    """A form's text field, LIBRARY_FIELD bytes at most: the fields are read before the files they place."""
+    data = b""
+    while chunk := await part.read_chunk(LIBRARY_FIELD):
+        data += chunk
+        if len(data) > LIBRARY_FIELD:
+            raise web.HTTPBadRequest(text=f"{part.name}: up to {LIBRARY_FIELD} bytes")
+    return data.decode(errors="replace").strip()
+
+
+async def _chunks(part):
+    while chunk := await part.read_chunk(CHUNK):
+        yield chunk
+
+
+async def library_upload(request: web.Request) -> web.Response:
+    """Files from the phone (multipart): `course` and `class_uid` first, then any number of `file` parts. Each file is
+    written to disk as it comes (a recording may be hundreds of megabytes: the app's client_max_size is no limit here),
+    then kept as a new item from the Mini App. A refused file stops the upload; the files before it stay added."""
+    library = _library(request)
+    try:
+        reader = await request.multipart()
+    except (AssertionError, ValueError, KeyError):
+        raise web.HTTPBadRequest(text="expected multipart/form-data") from None
+    fields, added = {}, []
+    while (part := await reader.next()) is not None:
+        if not isinstance(part, BodyPartReader):
+            raise web.HTTPBadRequest(text="nested multipart")
+        if part.filename is None:
+            if part.name not in ("course", "class_uid"):
+                raise web.HTTPBadRequest(text=f"unknown field {part.name}")
+            if added:
+                raise web.HTTPBadRequest(text="course and class_uid come before the files")
+            fields[part.name] = await _field(part) or None
+            continue
+        course, class_uid = _place(request, library, fields.get("course"), fields.get("class_uid"))
+        try:
+            item = await library.add_stream(_chunks(part), name=part.filename,
+                                            media_type=part.headers.get(CONTENT_TYPE), course=course,
+                                            class_uid=class_uid, source="miniapp", author="owner")
+        except LibraryError as e:
+            done = tr(language(request), f" ({len(added)} added before it)", f" (до него добавлено: {len(added)})")
+            raise web.HTTPBadRequest(text=f"{part.filename}: {e}" + (done if added else "")) from None
+        added.append(item)
+    if not added:
+        raise bad_request(request, "choose a file", "выберите файл")
+    return respond(request, {"added": added})
+
+
+async def library_add(request: web.Request) -> web.Response:
+    """{kind: text, text} or {kind: link, url}, with title?, course?, class_uid?: a note or a link from the owner. A
+    link is remembered, never fetched."""
+    library = _library(request)
+    values = await _json(request)
+    if values.get("kind") not in ("text", "link") or set(values) - {"kind", "text", "url", "title", "course",
+                                                                     "class_uid"}:
+        raise web.HTTPBadRequest(text="expected {kind: text|link, text?, url?, title?, course?, class_uid?}")
+    course, class_uid = _place(request, library, values.get("course"), values.get("class_uid"))
+    title = values.get("title") or ""
+    if not isinstance(title, str) or len(title) > LIBRARY_TITLE:
+        raise web.HTTPBadRequest(text=f"title: up to {LIBRARY_TITLE} characters")
+    fields = {"course": course, "class_uid": class_uid, "title": " ".join(title.split()), "source": "miniapp",
+              "author": "owner"}
+    if values["kind"] == "text":
+        text = values.get("text")
+        if not isinstance(text, str) or not text.strip():
+            raise bad_request(request, "write the note", "напишите заметку")
+        fields["text"] = text.strip()
+    else:
+        url = values.get("url")
+        if not isinstance(url, str) or not re.fullmatch(r"https?://\S+", url.strip()) or len(url) > LIBRARY_URL:
+            raise bad_request(request, "a link starts with https://", "ссылка начинается с https://")
+        fields["url"] = url.strip()
+    try:
+        item = library.add(values["kind"], **fields)
+    except LibraryError as e:
+        raise web.HTTPBadRequest(text=str(e)) from None
+    return respond(request, _item_view(request, library.get(item)))
+
+
+async def library_move(request: web.Request) -> web.Response:
+    """{course, class_uid?}: an item moved to a course (and a class of it), or back to the inbox (course null)."""
+    library = _library(request)
+    values = await _json(request)
+    if "course" not in values or set(values) - {"course", "class_uid"}:
+        raise web.HTTPBadRequest(text="expected {course, class_uid?}")
+    course, class_uid = _place(request, library, values["course"], values.get("class_uid"))
+    try:
+        library.update(_item_id(request), course=course, class_uid=class_uid)
+    except LibraryError as e:
+        raise web.HTTPNotFound(text=str(e)) from None
+    return respond(request, _item_view(request, library.get(_item_id(request))))
+
+
+async def library_remove(request: web.Request) -> web.Response:
+    """An item out of every list (its transcripts with it); its file is kept 30 days more (Library.restore)."""
+    try:
+        _library(request).remove(_item_id(request))
+    except LibraryError as e:
+        raise web.HTTPNotFound(text=str(e)) from None
+    return respond(request, {"removed": _item_id(request)})
+
+
 def page(lang: str, title: str, text: str, hint: str, status: int = 200) -> web.Response:
     body = PAGE.format(lang=lang, title=html.escape(title), text=html.escape(text), hint=html.escape(hint))
     return web.Response(text=body, status=status, content_type="text/html",
@@ -1026,9 +1246,11 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
                merged: DeadlineList, settings: Settings | None = None,
                sheet_topic: SheetTopic | None = None, grade_list: Grades | None = None, twin: Twin | None = None,
                calendar_feed: ical_feed.CalendarFeed | None = None,
-               deadline_reminders: DeadlineReminders | None = None) -> web.Application:
+               deadline_reminders: DeadlineReminders | None = None,
+               library_links: Links | None = None) -> web.Application:
     """The Mini App's port; without the settings and the sheets' topic the Листочки screen has no API, without the
-    grades the Оценки screen has none, without the calendar feed there are no public feeds."""
+    grades the Оценки screen has none, without the calendar feed there are no public feeds. With the library's links
+    come their routes (/library/<token>) and the Materials screen's API."""
     app = web.Application(middlewares=[owner_only], client_max_size=UPLOAD_MAX_SIZE + 2**20)  # an own sheet's PDF
     app[ENV_KEY], app[BUDGET_KEY], app[JOURNAL_KEY] = env, budget, journal
     app[INBOX_KEY], app[CHAT_SETTINGS_KEY], app[SOURCES_KEY] = inbox, chat_settings, sources
@@ -1089,6 +1311,17 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
         app.router.add_post("/app/api/grades/sheets/{sid}/read", read_gradebook)
         app.router.add_put("/app/api/grades/sheets/{sid}/tabs/{tab}", set_layout)
         app.router.add_delete("/app/api/grades/sheets/{sid}/tabs/{tab}", clear_layout)
+    if library_links is not None:
+        add_library_routes(app, library_links)  # the library and its links under LIBRARY_KEY and LINKS_KEY
+        app.router.add_get("/app/api/library", library_home)
+        app.router.add_get("/app/api/library/course", library_course)
+        app.router.add_get("/app/api/library/inbox", library_inbox)
+        app.router.add_get("/app/api/library/classes", library_classes)
+        app.router.add_post("/app/api/library/files", library_upload)
+        app.router.add_post("/app/api/library/items", library_add)
+        app.router.add_get("/app/api/library/items/{item_id}", library_item)
+        app.router.add_patch("/app/api/library/items/{item_id}", library_move)
+        app.router.add_delete("/app/api/library/items/{item_id}", library_remove)
     app.router.add_get("/app/api/hseapp", hseapp)
     app.router.add_patch("/app/api/hseapp", update_hseapp)
     app.router.add_post("/app/api/hseapp/link", hseapp_link)

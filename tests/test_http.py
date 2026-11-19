@@ -566,3 +566,124 @@ async def test_miniapp_message(aiohttp_client, budget, journal, store, schedule,
     assert body["stored"] is False and body["link"] == "https://t.me/c/1234567890/99"  # after its 14 days
     assert (await client.get("/app/api/message?chat=-5&msg=1", headers=owner())).status == 404
     assert (await client.get("/app/api/message?chat=x&msg=1", headers=owner())).status == 400
+
+
+async def test_miniapp_library(aiohttp_client, budget, journal, store, schedule, merged, tmp_path):
+    """The Materials screen (D58): courses and the inbox, a course's documents and classes, uploads streamed to disk
+    past the app's body limit, notes and links, moving and removing."""
+    from aiohttp import FormData
+    from test_library import NOW, add_class
+
+    from infomaster.collectors.files import UPLOAD_MAX_SIZE
+    from infomaster.library import Library
+    from infomaster.library.links import Links
+
+    add_class(store, "calc-1", "Calculus", "2026-11-18T09:30:00", "Лекция")
+    add_class(store, "calc-2", "Calculus", "2026-11-19T11:10:00", "Семинар")
+    add_class(store, "alg-1", "Algebra", "2026-11-20T11:10:00", "Lecture")
+    library = Library(store, tmp_path, now=lambda: NOW)
+    links = Links(store, library, env().public_url)
+    hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
+    app = miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
+                             schedule, hse, merged, library_links=links)
+    client = await aiohttp_client(app)
+    local = lambda url: url.removeprefix(env().public_url)  # noqa: E731
+    assert (await client.get("/app/api/library")).status == 401
+    body = await (await client.get("/app/api/library", headers=owner())).json()
+    assert [c["course"] for c in body["courses"]] == ["Algebra", "Calculus"] and body["inbox"] == 0
+    assert body["usage"]["items"] == 0
+
+    # Files: the fields first, then the files; a recording bigger than the app's client_max_size still goes in.
+    form = FormData()
+    form.add_field("course", "Calculus")
+    form.add_field("class_uid", "calc-1")
+    form.add_field("file", b"jpeg-bytes", filename="board.jpg", content_type="image/jpeg")
+    form.add_field("file", b"a" * (UPLOAD_MAX_SIZE + 2**21), filename="lecture.m4a", content_type="audio/mp4")
+    response = await client.post("/app/api/library/files", data=form, headers=owner())
+    assert response.status == 200, await response.text()
+    photo, audio = (await response.json())["added"]
+    assert (library.get(photo)["kind"], library.get(photo)["source"], library.get(photo)["author"]) == (
+        "photo", "miniapp", "owner")
+    assert library.get(audio)["size"] == UPLOAD_MAX_SIZE + 2**21 and library.get(audio)["class_uid"] == "calc-1"
+
+    form = FormData()
+    form.add_field("file", b"%PDF-notes", filename="notes.pdf", content_type="application/pdf")
+    inboxed = (await (await client.post("/app/api/library/files", data=form, headers=owner())).json())["added"][0]
+    form = FormData()
+    form.add_field("class_uid", "nope")
+    form.add_field("file", b"x", filename="x.txt", content_type="text/plain")
+    bad = await client.post("/app/api/library/files", data=form, headers=owner())
+    assert bad.status == 400 and await bad.text() == "no such class in the timetable"
+    form = FormData()
+    form.add_field("course", "Algebra")
+    form.add_field("class_uid", "calc-1")
+    form.add_field("file", b"x", filename="x.txt", content_type="text/plain")
+    assert (await client.post("/app/api/library/files", data=form, headers=owner())).status == 400
+    form = FormData()
+    form.add_field("file", b"", filename="empty.txt", content_type="text/plain")
+    assert (await client.post("/app/api/library/files", data=form, headers=owner())).status == 400
+    assert (await client.post("/app/api/library/files", json={}, headers=owner())).status == 400
+    assert library.usage()["items"] == 3
+
+    # A note and a link.
+    note = await (await client.post("/app/api/library/items", json={"kind": "text", "text": "Limits: " + "ε" * 700,
+                                                                    "class_uid": "calc-2"}, headers=owner())).json()
+    assert note["course"] == "Calculus" and note["text_cut"] and len(note["text"]) == miniapp.LIBRARY_PREVIEW
+    link = await (await client.post("/app/api/library/items", json={"kind": "link", "url": "https://example.org/rec",
+                                                                    "title": "Recording"}, headers=owner())).json()
+    assert link["course"] is None and link["title"] == "Recording"
+    for wrong in ({"kind": "link", "url": "ftp://x"}, {"kind": "text", "text": " "}, {"kind": "photo"},
+                  {"kind": "text", "text": "x", "extra": 1}):
+        assert (await client.post("/app/api/library/items", json=wrong, headers=owner())).status == 400
+    whole = await (await client.get(f"/app/api/library/items/{note['id']}", headers=owner())).json()
+    assert not whole["text_cut"] and len(whole["text"]) == 708 and whole["children"] == []
+
+    # The knowledge base: a lecture with two versions and a cheat sheet; a document with a draft alone is not listed.
+    for text in ("v1", "v2"):
+        draft = library.draft("Calculus", "lecture", class_uid="calc-1", title="Limits")
+        await library.put_text(draft["id"], "source", text)
+        await library.put_text(draft["id"], "pdf", "%PDF-" + text)
+        library.publish(draft["id"])
+    cheat = library.draft("Calculus", "cheatsheet")
+    await library.put_text(cheat["id"], "source", "# Notation")
+    library.publish(cheat["id"])
+    library.draft("Calculus", "book")
+
+    body = await (await client.get("/app/api/library/course?name=Calculus", headers=owner())).json()
+    assert [(d["kind"], len(d["versions"])) for d in body["documents"]] == [("cheatsheet", 1), ("lecture", 2)]
+    newest = body["documents"][1]["versions"][0]
+    assert newest["version"] == 2
+    pdf = await client.get(local(newest["url"]))
+    assert pdf.status == 200 and await pdf.read() == b"%PDF-v2"
+    assert await (await client.get(local(body["documents"][0]["versions"][0]["url"]))).read() == b"# Notation"
+    assert [(c["uid"], [i["id"] for i in c["items_list"]]) for c in body["classes"]] == [
+        ("calc-2", [note["id"]]), ("calc-1", [audio, photo])]
+    shown = body["classes"][1]["items_list"][1]
+    assert await (await client.get(local(shown["file_url"]))).read() == b"jpeg-bytes"
+    assert (await client.get("/app/api/library/course", headers=owner())).status == 400
+
+    inbox = await (await client.get("/app/api/library/inbox", headers=owner())).json()
+    assert [i["id"] for i in inbox["items"]] == [link["id"], inboxed]
+    assert inbox["items"][0]["file_url"] is None and inbox["items"][0]["url"] == "https://example.org/rec"
+    classes = await (await client.get("/app/api/library/classes?course=Algebra", headers=owner())).json()
+    assert [c["uid"] for c in classes["classes"]] == ["alg-1"]
+
+    # Sorting the inbox by hand, and back; a class of another course is refused.
+    path = f"/app/api/library/items/{inboxed}"
+    moved = await (await client.patch(path, json={"course": "Algebra", "class_uid": "alg-1"}, headers=owner())).json()
+    assert (moved["course"], moved["class_uid"]) == ("Algebra", "alg-1")
+    assert (await client.patch(path, json={"course": "Calculus", "class_uid": "alg-1"}, headers=owner())).status == 400
+    moved = await (await client.patch(path, json={"course": None}, headers=owner())).json()
+    assert moved["course"] is None and library.inbox_count() == 2
+    assert (await client.patch("/app/api/library/items/999", json={"course": None}, headers=owner())).status == 404
+
+    assert (await client.delete(f"/app/api/library/items/{photo}", headers=owner())).status == 200
+    assert library.get(photo) is None
+    assert (await client.delete(f"/app/api/library/items/{photo}", headers=owner())).status == 404
+    assert (await client.get(f"/app/api/library/items/{photo}", headers=owner())).status == 404
+
+
+async def test_miniapp_without_library(aiohttp_client, budget, journal, store, schedule, merged):
+    """Without the library's links the Materials screen has no API: the page says so."""
+    client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
+    assert (await client.get("/app/api/library", headers=owner())).status == 404
