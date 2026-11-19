@@ -2,6 +2,9 @@
 
 The bot must be an admin of the forum with the "Manage topics" right: it creates its topics itself and keeps
 their ids in kv, so a deleted topic is created again on the next post.
+
+Quiet by default (D54): a post notifies only when its caller asks (a new or moved deadline, a reminder) or when it is
+an Alert, a source's failure in the System topic; everything else, files and pins too, goes silently.
 """
 
 import asyncio
@@ -16,7 +19,7 @@ from telethon.tl import types
 
 from .. import clock
 from ..config import Env
-from ..i18n import Phrase, say, tr
+from ..i18n import Alert, Phrase, say, tr
 from ..llm.budget import SOFT_SHARE, Budget, Level, Notice
 from ..store import Store
 from . import emoji
@@ -26,12 +29,7 @@ log = logging.getLogger(__name__)
 # key -> title, in the forum's language when the topic is created; the other topics come with their stages
 TOPICS = {"system": Phrase("System", "Система"), "news": Phrase("News", "Новости"),
           "deadlines": Phrase("Deadlines", "Дедлайны"), "schedule": Phrase("Timetable", "Расписание"),
-          "sheets": Phrase("Sheets", "Листочки"), "grades": Phrase("Grades", "Оценки"),
-          "summaries": Phrase("Summaries", "Сводки")}
-# The bot's commands for Telegram's menu: name -> description
-COMMANDS = {"summary": Phrase("Chat summary: /summary [chat] [3h | 2d | 20.10-22.10] [en | ru]",
-                              "Сводка чата: /summary [чат] [3h | 2d | 20.10-22.10] [en | ru]"),
-            "tldr": Phrase("The same as /summary", "То же, что /summary")}
+          "sheets": Phrase("Sheets", "Листочки")}
 RAISE_LIMIT = re.compile(rb"^llm:raise:(\d{4}-\d{2}-\d{2})$")  # the day is in the data: the button raises only that day
 # Mini App screens a post can open (see app_button) -> what the bot says above the Mini App's button
 SCREENS = {"hseapp": Phrase("The HSE App X login is in the Mini App.", "Вход в HSE App X — в Mini App."),
@@ -130,12 +128,11 @@ class Forum:
                                                                         func=lambda e: e.is_private))
         self.client.add_event_handler(self._on_raise, events.CallbackQuery(data=RAISE_LIMIT))
         await self._set_menu_button(self.env.owner_id)
-        try:
-            await self.client(functions.bots.SetBotCommandsRequest(
-                scope=types.BotCommandScopeDefault(), lang_code="",
-                commands=[types.BotCommand(name, about.get(self.lang)) for name, about in COMMANDS.items()]))
+        try:  # the bot has no commands left (/summary went with the summaries, D54): an old menu is cleared
+            await self.client(functions.bots.ResetBotCommandsRequest(scope=types.BotCommandScopeDefault(),
+                                                                     lang_code=""))
         except errors.RPCError as e:
-            log.info("bot commands not set: %s", e)
+            log.info("bot commands not reset: %s", e)
 
     def on_button(self, pattern: re.Pattern, handler: Callable[[events.CallbackQuery.Event], Awaitable[None]]) -> None:
         """A callback button under the bot's posts; the handler checks who pressed it."""
@@ -154,15 +151,18 @@ class Forum:
         await self.client.disconnect()
 
     async def post(self, topic: str, text: str | Phrase, buttons=None, *, html: bool = False,
-                   reply_to: int | None = None) -> int:
+                   reply_to: int | None = None, notify: bool = False) -> int:
         """Send to a topic; returns the message id. With `html` the text is HTML and links get no preview; with
-        `reply_to` it answers that message of the topic. A Phrase goes in the forum's language."""
+        `reply_to` it answers that message of the topic. A Phrase goes in the forum's language. Silent unless
+        `notify` or the text is an Alert (D54)."""
+        silent = not (notify or isinstance(text, Alert))
         text, formatting = self._formatted(say(text, self.lang), html)
         for attempt in (1, 2):
             topic_id = await self._topic(topic)
             try:
                 message = await self.client.send_message(self._forum, text, reply_to=reply_to or topic_id,
-                                                         buttons=buttons, **formatting, **self._preview(html))
+                                                         buttons=buttons, silent=silent, **formatting,
+                                                         **self._preview(html))
                 return message.id
             except errors.TopicDeletedError:
                 if attempt == 2:
@@ -172,13 +172,13 @@ class Forum:
         raise AssertionError("unreachable")
 
     async def post_file(self, topic: str, path: Path, name: str, caption: str) -> int:
-        """Send a file under its own name to a topic, with an HTML caption; returns the message id."""
+        """Send a file under its own name to a topic, with an HTML caption, silently; returns the message id."""
         caption, formatting = self._formatted(caption, html=True)
         for attempt in (1, 2):
             topic_id = await self._topic(topic)
             try:
                 message = await self.client.send_file(
-                    self._forum, str(path), caption=caption, reply_to=topic_id, force_document=True,
+                    self._forum, str(path), caption=caption, reply_to=topic_id, force_document=True, silent=True,
                     attributes=[types.DocumentAttributeFilename(name)], **formatting)
                 return message.id
             except errors.TopicDeletedError:
@@ -241,7 +241,8 @@ class Forum:
         task.add_done_callback(self._task_done)
 
     def on_budget(self, notice: Notice) -> None:
-        """Budget.notify: the limit's warnings go to the System topic (§7)."""
+        """Budget.notify: the limit's warnings go to the System topic (§7). The spent limit stops the batches, so new
+        deadlines stop too: it notifies; the 80 % warning goes silently (D54)."""
         if notice.level is Level.HARD:
             text = self.tr(f"The daily LLM limit is spent: ${notice.spent:.2f} of ${notice.limit:.2f}.\n"
                            "Calls wait until midnight Moscow time, messages queue up.",
@@ -249,10 +250,10 @@ class Forum:
                            "Вызовы стоят до полуночи по Москве, сообщения копятся в очереди.")
         else:
             text = self.tr(f"LLM spending: ${notice.spent:.2f} of ${notice.limit:.2f}, {SOFT_SHARE:.0%} of the daily "
-                           "limit.\nThe optional tasks are off: images, reading PDFs whole, the daily summary.",
+                           "limit.\nThe optional tasks are off: images, reading PDFs whole.",
                            f"Расход LLM: ${notice.spent:.2f} из ${notice.limit:.2f}, это {SOFT_SHARE:.0%} дневного "
-                           "лимита.\nОтключены необязательные задачи: картинки, чтение PDF целиком, ежедневная сводка.")
-        self.spawn(self.post("system", text, buttons=[self._raise_button()]))
+                           "лимита.\nОтключены необязательные задачи: картинки, чтение PDF целиком.")
+        self.spawn(self.post("system", text, buttons=[self._raise_button()], notify=notice.level is Level.HARD))
 
     # --- topics -----------------------------------------------------------------
 

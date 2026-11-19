@@ -238,6 +238,7 @@ async def test_posts_and_versions(batches, llm, sheets, topic, forum, schedule):
                                        '<a href="https://t.me/c/1234567890/1">Матан</a> · #Calc')
     first = sheets.get(1)
     assert (first["status"], first["post_id"], first["version"]) == ("posted", post, 1)
+    assert forum.notified == set()  # sheets are posted silently (D54)
     assert first["text"].startswith("Calculus. Sheet 3") and llm.readings == []  # pdf_content is off: no reading
 
     # The same number again: the first message takes the new file, a reply tells it.

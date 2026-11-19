@@ -167,32 +167,6 @@ class Inbox:
         self.db.execute(f"update messages set parsed_at = ? where source = ? and chat_id = ? and msg_id in ({marks})",
                         (clock.local_iso(at), source, chat_id, *msg_ids))
 
-    # --- summaries ----------------------------------------------------------------
-
-    def for_summary(self, chat_id: int, since: dt.datetime, until: dt.datetime, fresh: bool) -> list[dict]:
-        """Messages of a chat in [since, until), oldest first, deleted ones aside; `fresh`: only those no summary has
-        taken yet (§6.6)."""
-        rows = self.db.execute(
-            "select * from messages where source = 'tg' and chat_id = ? and deleted_at is null and at >= ? and at < ?"
-            + (" and summarized_at is null" if fresh else "") + " order by at, msg_id",
-            (chat_id, clock.local_iso(since), clock.local_iso(until)))
-        return [_decode(row) for row in rows]
-
-    def mark_summarized(self, chat_id: int, msg_ids: list[int], at: dt.datetime) -> None:
-        if not msg_ids:
-            return
-        marks = ", ".join("?" * len(msg_ids))
-        with self.db:
-            self.db.execute(f"update messages set summarized_at = ? where source = 'tg' and chat_id = ? "
-                            f"and msg_id in ({marks})", (clock.local_iso(at), chat_id, *msg_ids))
-
-    def sent_at(self, at: dt.datetime) -> list[dict]:
-        """Stored chat messages sent at this second: what a forward to the bot was forwarded from (its date is the
-        original's)."""
-        rows = self.db.execute("select * from messages where source = 'tg' and at = ? and deleted_at is null",
-                               (clock.local_iso(at),))
-        return [_decode(row) for row in rows]
-
     # --- letters ------------------------------------------------------------------
 
     def add_letter(self, msg_id: int, fields: dict) -> bool:

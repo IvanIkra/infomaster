@@ -10,7 +10,9 @@ Mini App use the Russian names.
    my.telegram.org.
 2. **Forum.** Create a group and turn topics on. Add the bot as an admin with the rights to manage topics, pin
    messages and delete messages. Put the group id (`-100…`) in `TG_FORUM_ID` and your own id in `TG_OWNER_ID`.
-   The bot creates the topics System, News, Deadlines, Timetable, Sheets, Grades and Summaries itself.
+   The bot creates the topics System, News, Deadlines, Timetable and Sheets itself. Only new and moved deadlines,
+   deadline reminders and source failures in System notify; everything else arrives silently (D54). Grades and
+   Summaries topics left from an older version get nothing new and can be deleted.
 3. **Tailscale (a personal tailnet).** In the tailnet admin console turn on HTTPS certificates and Funnel (the
    `funnel` attribute in the policy). Create an auth key and put it in `TS_AUTHKEY`. After the first start put the
    address `https://infomaster.<tailnet>.ts.net` in `PUBLIC_URL` and restart.
@@ -50,8 +52,7 @@ Mini App use the Russian names.
     `infomaster_by_<bot>` in the owner's name from `infomaster/outputs/emoji-pack/` (MDI glyphs, as on Tablo's
     screen) and shows the emoji of its posts as the pack's ones, in the colour of the text. Without Premium Telegram
     shows the ordinary emoji. A bot may set only Telegram's own topic icons, so the pack's ones are set by hand:
-    a topic → **Edit** → its icon → the pack (System ⚙️, News 📰, Deadlines ⏰, Timetable 📅, Sheets 📄, Grades 📊,
-    Summaries 📝).
+    a topic → **Edit** → its icon → the pack (System ⚙️, News 📰, Deadlines ⏰, Timetable 📅, Sheets 📄).
 
 What you should see: "infomaster is up." in the System topic, the Mini App shows LLM spending and all the twin's
 chats, and messages from the enabled chats pile up in the database (`messages`). Until the twin logs in, the service
@@ -62,8 +63,8 @@ runs without chats and reminds you about the login in System.
 **Batch processing** (needs `ANTHROPIC_API_KEY`). Every enabled chat is processed at hours divisible by N (3 by
 default: 0, 3, 6…). A chat marked urgent is processed soon after a pin, a PDF or a message from an important person:
 once the chat has been quiet for a minute, but no later than 5 minutes. The News topic holds a pinned list of live
-news for the last 24 hours, which the bot edits in place, plus a short notification for each item of importance
-4–5; **Hide** under a notification removes the item for good. The queue and the last error are in
+news for the last 24 hours, which the bot edits in place without a notification; nothing else goes there (the
+short messages about items of importance 4–5 were removed in D54). The queue and the last error are in
 `GET /api/status` (`batches`).
 
 **Course dictionary and timetable.** RUZ is polled once an hour. After the first poll with classes, System reports
@@ -99,8 +100,8 @@ screen and in `GET /api/status` (`hseapp`: `logged_in`, `login_needed`, `ok_at`,
 mail and chats, your own; Tablo gets the same list in the same order. Each line has a source icon (🎓 HSE App X,
 📅 RUZ, ✉️ mail, 💬 chat, 🏠 own), the title, the due date ("today", "tomorrow", "overdue (Mon 19.10)", or a day and
 date) and the course; overdue ones stay visible for 3 days (1 day for mail and chats). The bot edits the list in
-place. Every new or moved deadline from any source arrives as its own message, and one withdrawn by its source as a
-"withdrawn" message; what the owner did (an own deadline, hiding, an edit in the Mini App) only edits the list, and
+place. Every new or moved deadline from any source arrives as its own message with a notification, and one
+withdrawn by its source as a silent "withdrawn" message; what the owner did (an own deadline, hiding, an edit in the Mini App) only edits the list, and
 so does a rename (the English HSE App X label, `<abbr> Midterm` after the dictionary); a copy of the same task from
 another source is not news. Under a message is **Hide** (**Delete** for your own): a hidden deadline does not come
 back even if the source sends it again; **Restore** undoes it. Your own, hidden and the list itself are on the Mini
@@ -137,31 +138,15 @@ description can be corrected (the message caption is edited), and **+** uploads 
 Downloaded files are deleted after 14 days; the sheets stay in the forum. The queue and the reading error are in
 `GET /api/status` (`sheets`: `waiting`, `error`).
 
-**Summaries.** At 21:00 Moscow time (set under **Settings → Daily summary**) the Summaries topic receives a message
-for every enabled chat with the summary switch on: what happened there since the last summary, as points in the
-forum's language, each with a "→" link to its message. Chats with nothing important are gathered in one line. A
-summary is built from raw messages and does not wait for a batch; Haiku first compresses a long period day by day. A
-chat filtered to "important only" contributes only the selected messages. The daily summary is an optional task:
-above 80 % of the daily limit it is skipped, and its messages go into the next one. On demand, in a private chat
-with the bot or in the forum: `/summary [chat] [period] [language]`. The chat is part of its name; the period is
-`3h`, `2d`, `20.10` or `20.10-22.10` (at most 7 days; without it, since this chat's last summary); the language is
-`en` or `ru` at the end, before or after the period (without it, the forum's language; the chat buttons remember
-it). Without a chat the bot shows the enabled chats as buttons; you can also forward the bot a message from a chat
-and reply `/summary` to it. An on-demand summary also goes to the Summaries topic, and the bot answers with a link to
-it; it works above 80 % of the limit too, and one too large for what is left is simply refused without stopping
-batch processing. Only a "since the last one" summary moves the start of the next. State is in `GET /api/status`
-(`summaries`: `ok_at`, `error`, `done`, `time`).
-
 **Grades.** Teachers' Google Sheets are read every 30 minutes (and right after an edit under
 **Settings → Gradebooks** or on **Read now**). In every visible tab the service finds your row by full name; Haiku
 sees the top of the tab (up to 15 rows above yours, other students' included) and your row, finds the header itself
 and says which columns are graded tasks, their maximum and the bonus. The answer is cached with the header: while the
 header does not change, Haiku is not called, however other students' grades change. Grades are brought to a 0–10
-scale. The first read of a sheet is a snapshot: System reports the sheet as connected, without grade messages. After
-that every new or changed grade goes to the Grades topic, one message per sheet: the label (`DM HW 1A`), the grade,
-the bonus, the sheet's points and the previous grade (`DM HW 1A — 9 +1 (6.3 of 7; was 8.4)`). A zero for a task that
-did not exist before counts as "not graded yet". A sheet that cannot be read for 12 hours (closed, no own row, the
-LLM limit) gets one line in System, and one when it is read again; its grades stay meanwhile. Removing a sheet or
+scale. The first read of a sheet is a snapshot: System reports the sheet as connected. Grades are not posted to
+the forum (D54): they are on the Mini App's Study tab and in Tablo. A zero for a task that did not exist before
+counts as "not graded yet". A sheet that cannot be read for 12 hours (closed, no own row, the LLM limit) gets one
+line in System with a notification, and a silent one when it is read again; its grades stay meanwhile. Removing a sheet or
 changing the name erases its grades: the next read is a snapshot again. Every sheet has its own Mini App screen:
 name, check and the tab layout, which can be corrected (yours overrides Haiku's answer); on the Study tab a grade can
 be changed (it holds until the sheet itself changes it) or your own added (D44). New grades of the last 7 days (the
@@ -193,17 +178,16 @@ cd ~/infomaster && printf "\nCALENDAR_PUBLIC_SECRET=%s\n" "$(python3 -c 'import 
 forecast, a 30-day chart with the limit line, tasks and chats for the chosen period, the daily limit and a raise for
 today. Tablo and HA no longer show spending (D40).
 
-**All settings** are on the Mini App's Settings tab: sources, processing (batches and news, the summary, PDFs, images,
-the dictionary), LLM spending and model prices, languages; at the top, **Needs attention** lists what is broken.
+**All settings** are on the Mini App's Settings tab: sources, processing (batches and news, deadline reminders,
+PDFs, images, the dictionary), LLM spending and model prices, languages; at the top, **Needs attention** lists what is broken.
 `.env` holds only secrets.
 
 **Languages** (D41): English or Russian, English by default, with two switches under **Settings → Language**. The
 **Mini App** switch covers the whole interface, the errors and states the service sends, and the page shown after the
 HSE App X login; it applies at once. The **forum** switch covers everything the bot writes: topics, pins, messages,
-buttons, button replies and `/summary`, System, and also the daily summary, the sheet summary and "what changed"
-(Haiku writes them in that language). It applies to what the bot writes after the switch: old messages stay as they
-were, the News and Deadlines pins are rewritten on their next edit, existing topics are not renamed, and the
-command description and the menu button change after a restart. News, deadline labels, course names and the iCal
+buttons, button replies, System, and also the sheet summary and "what changed" (Haiku writes them in that language).
+It applies to what the bot writes after the switch: old messages stay as they were, the News and Deadlines pins are
+rewritten on their next edit, existing topics are not renamed, and the menu button changes after a restart. News, deadline labels, course names and the iCal
 feeds are always in English, because Tablo receives them too.
 
 ## Moving from Tablo

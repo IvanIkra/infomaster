@@ -20,7 +20,6 @@ ICONS = {
     "moved": "↪️",  # calendar-arrow-right
     "restored": "↩️",  # arrow-u-left-top
     "room": "🚪",  # door
-    "alert": "🔔",  # bell-outline
     "chat": "💬",  # send, as Tablo shows Telegram
     "channel": "📢",  # bullhorn-outline
     "person": "👤",  # account-outline
@@ -28,13 +27,11 @@ ICONS = {
     "hseapp": "🎓",  # school
     "calendar": "📅",  # calendar
     "own": "🏠",  # home-outline
-    "grades": "📊",  # chart-box-outline
     "sheet": "📄",  # file-document-outline
     "updated": "🔄",  # sync
     "system": "⚙️",  # cog-outline: the icons of the topics from here on
     "news": "📰",  # newspaper-variant-outline
     "deadlines": "⏰",  # alert-circle-outline, as Tablo's deadlines
-    "summaries": "📝",  # text-box-outline
 }
 VARIATION = "️"  # the emoji form of a symbol: ✖ and ✖️ are one emoji
 

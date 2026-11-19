@@ -1,14 +1,14 @@
 """The languages of what the owner reads (D41): English or Russian, English by default.
 
 Two general settings: `forum_language` for the bot (its posts, buttons and answers in the forum and in its chat, and
-what the models write for them: the summaries, a sheet's summary and what changed in it) and `miniapp_language` for
-the Mini App and the page the browser comes back to after the HSE login. A summary asked for with /summary may name
-its own language. What Tablo and the iCal feeds get is English either way, so the news, the deadline labels and the
-course titles the models write stay English in the forum too.
+what the models write for them: a sheet's summary and what changed in it) and `miniapp_language` for the Mini App and
+the page the browser comes back to after the HSE login. What Tablo and the iCal feeds get is English either way, so
+the news, the deadline labels and the course titles the models write stay English in the forum too.
 
 Text made away from its output (a collector's line for the System topic, the reason a login failed, an error kept for
 a status) is a Phrase with both languages; the output picks one when it shows it: the forum when it posts, the Mini
-App when it answers. str() of a Phrase is the English: the log and the API for Tablo.
+App when it answers. str() of a Phrase is the English: the log and the API for Tablo. An Alert is a Phrase about a
+source that stopped working: the System topic posts it with a notification, every other line goes silently (D54).
 """
 
 from dataclasses import dataclass
@@ -27,6 +27,11 @@ class Phrase:
 
     def get(self, lang: str) -> str:
         return self.ru if lang == "ru" else self.en
+
+
+@dataclass(frozen=True)
+class Alert(Phrase):
+    """A line about a failure of a source (it is unavailable, a login is needed): the forum notifies of it (D54)."""
 
 
 def tr(lang: str, en: str, ru: str) -> str:

@@ -54,7 +54,7 @@ def test_unknown(settings):
 def test_chat_defaults():
     chats = ChatSettings(Store())
     assert chats.all(-1001) == {"enabled": False, "study": False, "filter": "all", "people": [], "images": False,
-                                "pdf_content": False, "summary": False, "urgent": False, "batch_hours": None,
+                                "pdf_content": False, "urgent": False, "batch_hours": None,
                                 "note": ""}
     assert chats.enabled_ids() == set()
 
@@ -97,3 +97,17 @@ def test_texts_for_the_models(settings):
     assert chats.update(-1001, {"note": "Calc  chat"})["note"] == "Calc chat"
     with pytest.raises(SettingsError):
         chats.update(-1001, {"note": "x" * 301})
+
+
+def test_old_summary_settings_are_left_alone():
+    """Rows the summaries saved before they were removed (D54) load as nothing and break nothing."""
+    store = Store()
+    with store.db:
+        store.db.execute("insert into settings(name, value) values('summary_time', '\"21:00\"')")
+        store.db.execute("insert into chat_settings(chat_id, name, value) values(-1001, 'summary', 'true')")
+        store.db.execute("insert into chat_settings(chat_id, name, value) values(-1001, 'enabled', 'true')")
+    assert "summary_time" not in Settings(store).all()
+    chats = ChatSettings(store)
+    assert "summary" not in chats.all(-1001) and chats.enabled_ids() == {-1001}
+    with pytest.raises(SettingsError):
+        Settings(store).get("summary_time")

@@ -11,10 +11,10 @@ from test_http import TWIN, env, owner
 from infomaster import clock
 from infomaster.collectors import grades as collector
 from infomaster.collectors.grades import GradeSheets, Read, Sheet
+from infomaster.i18n import Alert
 from infomaster.llm.budget import BudgetExceeded
 from infomaster.llm.client import BadAnswer
 from infomaster.outputs import api, miniapp
-from infomaster.outputs.grades import GradeTopic, line, mark
 from infomaster.processing import grades as g
 from infomaster.processing.grades import Grades, Item
 from infomaster.settings import Settings, SettingsError
@@ -190,6 +190,11 @@ def item(key, label, value, bonus=None, position=0, tab="T", header=None):
     return Item(key, tab, header or key, label, value, value, 10, bonus, position)
 
 
+def journal(grades) -> list[dict]:
+    """The new and changed grades as they were recorded, oldest first."""
+    return [dict(row) for row in grades.db.execute("select * from grade_events order by id")]
+
+
 def test_first_read_is_a_baseline_then_changes_are_new(grades, now):
     assert grades.record("abc123", "ДМ", [item("k1", "DM HW 1A", 8.43), item("k2", "DM Quiz 1", 0)])
     assert grades.new() == []
@@ -201,12 +206,11 @@ def test_first_read_is_a_baseline_then_changes_are_new(grades, now):
     new = grades.new()
     assert {(x["label"], x["value"]) for x in new} == {("DM HW 1A", 9.0), ("DM Quiz 1", 8)}
     assert set(new[0]) == {"key", "label", "value", "bonus", "seen_at"}
-    events = {e["label"]: e for e in grades.waiting()}
+    events = {e["label"]: e for e in journal(grades)}
     assert events["DM HW 1A"]["previous"] == 8.43 and events["DM Quiz 1"]["previous"] is None
-    assert events["DM HW 1A"]["course"] == "DM" and events["DM HW 1A"]["url"] == URL
 
     now.moment += dt.timedelta(days=8)
-    assert grades.new() == [] and grades.waiting() == []  # out of the window
+    assert grades.new() == []  # out of the window
 
 
 def test_the_newest_event_of_a_work_is_given(grades, now):
@@ -254,7 +258,7 @@ async def test_a_grade_that_leaves_and_comes_back_is_no_new_grade(grades, now):
     assert grades.new() == [] and len(grades.items("abc123")) == 2
     await grades.apply(hidden)
     await grades.apply(sheet(quiz=9))  # back with another grade: that one is new, with the grade before it
-    assert [(e["label"], e["value"], e["previous"]) for e in grades.waiting()] == [("DM Quiz 1", 9, 8)]
+    assert [(e["label"], e["value"], e["previous"]) for e in journal(grades)] == [("DM Quiz 1", 9, 8)]
 
 
 def test_a_work_listed_twice_counts_once(grades):
@@ -333,67 +337,6 @@ async def test_a_sheet_dropped_while_read_records_nothing(grades, settings):
     assert grades.db.execute("select count(*) n from grade_items").fetchone()["n"] == 0
 
 
-# --- the topic ------------------------------------------------------------------------------------
-
-def test_lines():
-    assert mark(8.43) == "8.4" and mark(9.0) == "9" and mark(9.96) == "10"
-    event = {"label": "DM HW 1A", "value": 8.43, "raw": 5.9, "max": 7, "bonus": 1.0, "previous": None}
-    assert line(event, "ru") == "DM HW 1A — <b>8.4</b> +1 (5.9 из 7)"
-    assert line(event, "en") == "DM HW 1A — <b>8.4</b> +1 (5.9 of 7)"
-    event = {"label": "Calc <Quiz> 2", "value": 6, "raw": 6, "max": 10, "bonus": None, "previous": 5.5}
-    assert line(event, "ru") == "Calc &lt;Quiz&gt; 2 — <b>6</b> (было 5.5)"
-    assert line(event, "en") == "Calc &lt;Quiz&gt; 2 — <b>6</b> (was 5.5)"
-
-
-async def test_topic_posts_a_message_per_sheet_and_keeps_failures(grades, forum, now):
-    topic = GradeTopic(forum, grades.store, grades, now=now)
-    grades.configure({"grades_sheets": [{"url": URL, "label": "DM"}, {"url": OTHER, "label": ""}]})
-    grades.record("abc123", "ДМ ПИ", [])
-    grades.record("zzz999", "Матанализ ПИ", [])
-    grades.record("abc123", "ДМ ПИ", [item("k1", "DM HW 1", 8)])
-    grades.record("zzz999", "Матанализ ПИ", [item("k2", "Матанали Quiz 1", 7)])
-
-    async def down(*args, **kwargs):
-        raise ConnectionError("Telegram is down")
-
-    post, forum.post = forum.post, down
-    await topic.publish()
-    assert len(grades.waiting()) == 2
-    forum.post = post
-    await topic.publish()
-    assert forum.texts("grades") == [
-        f'📊 <b>Оценки · <a href="{URL}">ДМ ПИ</a></b> #DM\nDM HW 1 — <b>8</b>',
-        '📊 <b>Оценки · <a href="https://docs.google.com/spreadsheets/d/zzz999/edit">Матанализ ПИ</a></b> #Матанали\n'
-        "Матанали Quiz 1 — <b>7</b>"]
-    assert grades.waiting() == []
-    await topic.publish()
-    assert len(forum.texts("grades")) == 2
-
-
-async def test_a_failure_halfway_posts_nothing_twice(grades, forum, now, monkeypatch):
-    from infomaster.outputs import grades as topic_module
-
-    monkeypatch.setattr(topic_module, "MESSAGE_LIMIT", 140)  # the header and two lines
-    topic = GradeTopic(forum, grades.store, grades, now=now)
-    grades.record("abc123", "ДМ", [])
-    grades.record("abc123", "ДМ", [item(f"k{i}", f"DM HW {i}", 8, position=i) for i in range(6)])
-    post, calls = forum.post, []
-
-    async def flaky(*args, **kwargs):
-        calls.append(1)
-        if len(calls) == 2:
-            raise ConnectionError("Telegram is down")
-        return await post(*args, **kwargs)
-
-    forum.post = flaky
-    await topic.publish()
-    assert len(forum.texts("grades")) == 1 and len(grades.waiting()) == 4
-    forum.post = post
-    await topic.publish()
-    lines = [text for message in forum.texts("grades") for text in message.split("\n")[1:]]
-    assert lines == [f"DM HW {i} — <b>8</b>" for i in range(6)] and len(forum.texts("grades")) == 3
-
-
 # --- the collector ----------------------------------------------------------------------------------
 
 @pytest.fixture
@@ -421,10 +364,10 @@ async def google(aiohttp_server, monkeypatch):
     return state
 
 
-async def test_poll_end_to_end(google, grades, settings, llm, forum, now):
+async def test_poll_end_to_end(google, grades, settings, llm, now):
+    """New grades reach the API's list; the forum hears only that the sheet is connected (D54)."""
     source = GradeSheets(settings, now=now)
-    topic = GradeTopic(forum, grades.store, grades, now=now)
-    source.on_sheet, source.on_poll = grades.apply, topic.publish
+    source.on_sheet = grades.apply
     system = []
     source.notify = lambda line: system.append(line.ru)  # a Phrase: the forum picks its language
 
@@ -432,14 +375,14 @@ async def test_poll_end_to_end(google, grades, settings, llm, forum, now):
     status = source.status()["sheets"]["abc123"]
     assert status["title"] == 'ДМ "ПИ"' and (status["tabs"], status["items"], status["error"]) == (2, 2, None)
     assert system == ['Таблица оценок «ДМ "ПИ"» подключена: вкладок со своей строкой — 2, оценок — 2. '
-                      "Новые и изменённые оценки будут приходить в «Оценки»."]
-    assert forum.texts("grades") == []
+                      "Они в Mini App, «Учёба»."]
+    assert grades.new() == []
 
     google["data"] = workbook(hw_score=6.3, quiz=9)
     now.moment += dt.timedelta(hours=1)
     await source.poll()
-    assert forum.texts("grades") == [f'📊 <b>Оценки · <a href="{URL}">ДМ &quot;ПИ&quot;</a></b> #DM\n'
-                                     "DM HW 1A — <b>9</b> +1 (6.3 из 7; было 8.4)\nDM Quiz 1 — <b>9</b> (было 8)"]
+    assert sorted((x["label"], round(x["value"], 1), x["bonus"]) for x in grades.new()) == \
+        [("DM HW 1A", 9.0, 1.0), ("DM Quiz 1", 9.0, None)]
     assert len(llm.prompts) == 2 and google["titles"] == 1  # one layout per tab, the title once
     assert len(system) == 1
 
@@ -447,8 +390,8 @@ async def test_poll_end_to_end(google, grades, settings, llm, forum, now):
 async def test_poll_failures(google, grades, settings, now):
     source = GradeSheets(settings, now=now)
     source.on_sheet = grades.apply
-    system = []
-    source.notify = lambda line: system.append(line.ru)  # a Phrase: the forum picks its language
+    system, alerts = [], []
+    source.notify = lambda line: (system.append(line.ru), alerts.append(isinstance(line, Alert)))
     await source.poll()
     assert grades.items("abc123")
 
@@ -471,6 +414,7 @@ async def test_poll_failures(google, grades, settings, now):
     google["data"] = workbook()
     await source.poll()
     assert system[2:] == ['Таблица оценок «ДМ "ПИ"» снова читается.'] and grades.new() == []
+    assert alerts == [False, True, False]  # only the failure notifies (D54)
     assert source.status()["sheets"]["abc123"]["error"] is None
 
 

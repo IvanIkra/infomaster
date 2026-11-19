@@ -8,7 +8,7 @@ hidden ones (§5.4, §5.5), the timetable as the feeds have it, with the main/op
 events and corrections, the owner's own events and corrections of classes (§6.5), the grades and the sheets (§6.7,
 §6.3, D14), and the settings: the twin's account with its login and logout and the chats with their settings and the
 daily number of images read in them (D12), the course dictionary with manual entries (D3, D33), the HSE App X
-login (§5.2, D7), the limits of reading a PDF, the time of the daily summary and its chats (§6.6), the gradebooks:
+login (§5.2, D7), the limits of reading a PDF, the gradebooks:
 the name, the sheets and what was read in them, the LLM spending (§7, D40): today, this week and this month by task
 and by chat, the cost of each of the last 30 days and the daily limit, which can be changed or raised for today. Tablo
 and HA show no spending: this screen is the one place. The general settings: the batches' N, how long news lives, the
@@ -57,7 +57,6 @@ from . import ical_feed
 from .api import SOURCES_KEY, Sources
 from .reminders import DeadlineReminders
 from .sheets import SheetTopic
-from .summaries import SummaryTopic
 
 STATIC = Path(__file__).with_name("miniapp")
 INIT_DATA_TTL = 24 * 3600  # seconds; Telegram signs initData once, when the Mini App opens
@@ -73,7 +72,6 @@ HSEAPP_KEY = web.AppKey("hseapp", HseApp)
 DEADLINES_KEY = web.AppKey("deadlines", DeadlineList)
 SETTINGS_KEY = web.AppKey("settings", Settings)
 SHEETS_KEY = web.AppKey("sheets", SheetTopic)
-SUMMARIES_KEY = web.AppKey("summaries", SummaryTopic)
 REMINDERS_KEY = web.AppKey("reminders", DeadlineReminders)
 GRADES_KEY = web.AppKey("grades", Grades)
 TWIN_KEY = web.AppKey("twin", Twin)
@@ -695,33 +693,6 @@ PAGE = """<!doctype html>
 """
 
 
-# --- summaries --------------------------------------------------------------------------------
-
-def _summaries_state(request: web.Request) -> dict:
-    topic = request.app[SUMMARIES_KEY]
-    return {"time": request.app[SETTINGS_KEY].get("summary_time"), "status": topic.status(),
-            "chats": [{"id": chat["id"], "title": chat["title"]}
-                      for chat in (topic.inbox.chat(chat_id) for chat_id in topic.summaries.daily_chats())]}
-
-
-async def summaries(request: web.Request) -> web.Response:
-    """The Сводки screen: the time of the daily summary, its chats and how the last one went."""
-    return respond(request, _summaries_state(request))
-
-
-async def update_summaries(request: web.Request) -> web.Response:
-    """{time: "HH:MM"}: the daily summary's time; the loop waits for the new one at once."""
-    values = await _json(request)
-    if set(values) != {"time"}:
-        raise web.HTTPBadRequest(text="expected {time}")
-    try:
-        request.app[SETTINGS_KEY].set("summary_time", values["time"])
-    except SettingsError as e:
-        raise web.HTTPBadRequest(text=str(e)) from None
-    request.app[SUMMARIES_KEY].reschedule()
-    return respond(request, _summaries_state(request))
-
-
 # --- deadline reminders ------------------------------------------------------------------------
 
 REMINDER_FIELDS = {"enabled": "deadline_reminders", "eve": "reminder_eve", "day": "reminder_day"}
@@ -1037,18 +1008,16 @@ def page(lang: str, title: str, text: str, hint: str, status: int = 200) -> web.
 def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_settings: ChatSettings,
                sources: Sources, dictionary: Subjects, timetable: Schedule, hse: HseApp,
                merged: DeadlineList, settings: Settings | None = None,
-               sheet_topic: SheetTopic | None = None, summary_topic: SummaryTopic | None = None,
-               grade_list: Grades | None = None, twin: Twin | None = None,
+               sheet_topic: SheetTopic | None = None, grade_list: Grades | None = None, twin: Twin | None = None,
                calendar_feed: ical_feed.CalendarFeed | None = None,
                deadline_reminders: DeadlineReminders | None = None) -> web.Application:
     """The Mini App's port; without the settings and the sheets' topic the Листочки screen has no API, without the
-    settings and the summaries' topic the Сводки screen has none, without the grades the Оценки screen has none,
-    without the calendar feed there are no public feeds."""
+    grades the Оценки screen has none, without the calendar feed there are no public feeds."""
     app = web.Application(middlewares=[owner_only], client_max_size=UPLOAD_MAX_SIZE + 2**20)  # an own sheet's PDF
     app[ENV_KEY], app[BUDGET_KEY], app[JOURNAL_KEY] = env, budget, journal
     app[INBOX_KEY], app[CHAT_SETTINGS_KEY], app[SOURCES_KEY] = inbox, chat_settings, sources
     app[SUBJECTS_KEY], app[SCHEDULE_KEY], app[HSEAPP_KEY], app[DEADLINES_KEY] = dictionary, timetable, hse, merged
-    app[SETTINGS_KEY], app[SHEETS_KEY], app[SUMMARIES_KEY] = settings, sheet_topic, summary_topic
+    app[SETTINGS_KEY], app[SHEETS_KEY] = settings, sheet_topic
     app.router.add_get("/app", to_index)
     app.router.add_get("/app/", index)
     app.router.add_get("/app/api/me", me)
@@ -1092,9 +1061,6 @@ def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
         app[REMINDERS_KEY] = deadline_reminders
         app.router.add_get("/app/api/reminders", reminders)
         app.router.add_patch("/app/api/reminders", update_reminders)
-    if settings is not None and summary_topic is not None:
-        app.router.add_get("/app/api/summaries", summaries)
-        app.router.add_patch("/app/api/summaries", update_summaries)
     if grade_list is not None:
         app[GRADES_KEY] = grade_list
         app.router.add_get("/app/api/grades", grade_sheets)

@@ -34,7 +34,7 @@ from html.parser import HTMLParser
 
 from .. import clock
 from ..config import Env
-from ..i18n import Phrase
+from ..i18n import Alert, Phrase
 from ..settings import Settings
 from ..store import Store
 from .inbox import Inbox
@@ -332,10 +332,10 @@ class Mail:
             self._told = True
             if self.notify is not None:
                 since = self._failing_since.astimezone(clock.TZ)
-                self.notify(Phrase(f"The mailbox is unavailable since {since:%d.%m %H:%M}: {error}.\nNew letters are "
+                self.notify(Alert(f"The mailbox is unavailable since {since:%d.%m %H:%M}: {error}.\nNew letters are "
                                    "not read; the read ones stay in the news and the deadlines.",
-                                   f"Почта недоступна с {since:%d.%m %H:%M}: {error}.\n"
-                                   "Новые письма не читаются; прочитанные остаются в новостях и дедлайнах."))
+                                  f"Почта недоступна с {since:%d.%m %H:%M}: {error}.\n"
+                                  "Новые письма не читаются; прочитанные остаются в новостях и дедлайнах."))
 
     def _recovered(self) -> None:
         if self._told and self.notify is not None:

@@ -36,7 +36,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import aiohttp
 
 from .. import clock
-from ..i18n import Phrase
+from ..i18n import Alert, Phrase
 from ..settings import Settings
 from ..store import Store
 
@@ -375,15 +375,15 @@ class HseApp:
             if self.auth.ever:
                 reason = self.error.removeprefix(LOGIN_ERROR) if (self.error or "").startswith(LOGIN_ERROR) else ""
                 why = f" ({reason})" if reason else ""
-                text = Phrase(f"The HSE App X login is no longer valid{why}: its deadlines are not updated.\n"
-                              "Log in again with the button below or in the Mini App, Settings → HSE App X.",
-                              f"Вход в HSE App X больше не действует{why}: дедлайны оттуда не обновляются.\n"
-                              "Войти заново — кнопкой ниже или в Mini App, Настройки → HSE App X.")
+                text = Alert(f"The HSE App X login is no longer valid{why}: its deadlines are not updated.\n"
+                             "Log in again with the button below or in the Mini App, Settings → HSE App X.",
+                             f"Вход в HSE App X больше не действует{why}: дедлайны оттуда не обновляются.\n"
+                             "Войти заново — кнопкой ниже или в Mini App, Настройки → HSE App X.")
             else:
-                text = Phrase("An HSE App X login is needed: without it no deadlines come from there.\n"
-                              "Log in with the button below or in the Mini App, Settings → HSE App X.",
-                              "Нужен вход в HSE App X: без него дедлайны оттуда не приходят.\n"
-                              "Войти — кнопкой ниже или в Mini App, Настройки → HSE App X.")
+                text = Alert("An HSE App X login is needed: without it no deadlines come from there.\n"
+                             "Log in with the button below or in the Mini App, Settings → HSE App X.",
+                             "Нужен вход в HSE App X: без него дедлайны оттуда не приходят.\n"
+                             "Войти — кнопкой ниже или в Mini App, Настройки → HSE App X.")
             self._notify(text, login=True)
         elif told and (logged_in or not enabled):
             self.store.put_json(TOLD_KEY, False)
@@ -399,10 +399,10 @@ class HseApp:
         if not self._told_down and now - self._failing_since >= STALE_AFTER:
             self._told_down = True
             since = self._failing_since.astimezone(clock.TZ)
-            self._notify(Phrase(f"HSE App X is unavailable since {since:%d.%m %H:%M}: {error}.\n"
-                                "The deadlines have the last list received.",
-                                f"HSE App X недоступен с {since:%d.%m %H:%M}: {error}.\n"
-                                "В дедлайнах — последний полученный список."))
+            self._notify(Alert(f"HSE App X is unavailable since {since:%d.%m %H:%M}: {error}.\n"
+                               "The deadlines have the last list received.",
+                               f"HSE App X недоступен с {since:%d.%m %H:%M}: {error}.\n"
+                               "В дедлайнах — последний полученный список."))
 
     def _recovered(self) -> None:
         if self._told_down:

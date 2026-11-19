@@ -3,7 +3,7 @@
 In a chat with «Картинки» on, the image of a message waiting for its batch is downloaded by the twin
 (collectors/files.py) and read by Haiku in a call of its own (task `image`): what the picture is and the text on it,
 word for word. The batch sees the reading in place of the picture, so a screenshot of the timetable or a photo of a
-notice gives news, deadlines and events like a text does. The summaries take readings already made, never a new call.
+notice gives news, deadlines and events like a text does.
 
 Limits (§7): reading images is optional, so it stops above 80 % of the daily LLM limit, and at most `images_daily`
 images are read a Moscow day (failed calls count too). An image left unread goes to the batch as a "photo" only, and a

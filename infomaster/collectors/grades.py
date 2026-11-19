@@ -10,7 +10,8 @@ sheet read and says what came of it (Read).
 Failures count per sheet: the download, a file that is no workbook (a sheet closed to the link gives a login page),
 no own row in any tab (a wrong name, or the row is not there yet: the grades kept are not dropped for it), the layout
 (Haiku, the limit). A failed sheet keeps its grades as they were. A sheet failing for 12 hours is told to the System
-topic once, and once more when it reads again; the first read of a sheet is told there too.
+topic once (with a notification, D54), and once more when it reads again; the first read of a sheet is told there
+too. New grades are not posted anywhere: the Mini App and the API show them (D54).
 """
 
 import asyncio
@@ -25,7 +26,7 @@ from dataclasses import dataclass, field
 import aiohttp
 
 from .. import clock
-from ..i18n import Phrase, say
+from ..i18n import Alert, Phrase, say
 from ..llm.budget import BudgetExceeded
 from ..llm.client import LLMError
 from ..settings import GOOGLE_SHEET, Settings
@@ -184,7 +185,6 @@ class GradeSheets:
     def __init__(self, settings: Settings, now: Callable[[], dt.datetime] = clock.now_utc):
         self.settings, self.now = settings, now
         self.on_sheet: Callable[[Sheet], Awaitable[Read]] | None = None
-        self.on_poll: Callable[[], Awaitable[None]] | None = None  # after every poll: the new grades go to the forum
         self.notify: Callable[[Phrase], None] | None = None        # a line for the System topic
         self.sheets: dict[str, SheetStatus] = {}                    # by sheet id, the configured sheets only
         self._wake = asyncio.Event()
@@ -225,11 +225,6 @@ class GradeSheets:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=TIMEOUT)) as session:
             for sid, sheet in zip(ids, sheets, strict=True):
                 await self._poll_sheet(session, sid, sheet, student)
-        if self.on_poll is not None:
-            try:
-                await self.on_poll()
-            except Exception:
-                log.exception("posting the new grades failed")
 
     async def _poll_sheet(self, session: aiohttp.ClientSession, sid: str, sheet: dict, student: str) -> None:
         st = self.sheets[sid]
@@ -262,9 +257,9 @@ class GradeSheets:
         self._recovered(st)
         if read.first:
             self._notify(Phrase(f"The grade sheet «{st.name}» is connected: tabs with the own row: {len(views)}, "
-                                f"grades: {read.items}. New and changed grades will come to «Grades».",
+                                f"grades: {read.items}. They are in the Mini App, Study.",
                                 f"Таблица оценок «{st.name}» подключена: вкладок со своей строкой — {len(views)}, "
-                                f"оценок — {read.items}. Новые и изменённые оценки будут приходить в «Оценки»."))
+                                f"оценок — {read.items}. Они в Mini App, «Учёба»."))
 
     def _failed(self, st: SheetStatus, error: str | Phrase) -> None:
         st.error = error
@@ -274,10 +269,10 @@ class GradeSheets:
         if not st.told and now - st.failing_since >= STALE_AFTER:
             st.told = True
             since = st.failing_since.astimezone(clock.TZ)
-            self._notify(Phrase(f"The grade sheet «{st.name}» cannot be read since {since:%d.%m %H:%M}: "
-                                f"{say(error, 'en')}.\nIts grades are not updated.",
-                                f"Таблица оценок «{st.name}» не читается с {since:%d.%m %H:%M}: {say(error, 'ru')}.\n"
-                                "Оценки из неё не обновляются."))
+            self._notify(Alert(f"The grade sheet «{st.name}» cannot be read since {since:%d.%m %H:%M}: "
+                               f"{say(error, 'en')}.\nIts grades are not updated.",
+                               f"Таблица оценок «{st.name}» не читается с {since:%d.%m %H:%M}: {say(error, 'ru')}.\n"
+                               "Оценки из неё не обновляются."))
 
     def _recovered(self, st: SheetStatus) -> None:
         if st.told:

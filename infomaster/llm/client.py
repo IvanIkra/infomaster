@@ -18,7 +18,8 @@ from .journal import Journal
 log = logging.getLogger(__name__)
 
 MODEL = "claude-haiku-5-5"
-TASKS = frozenset({"batch", "pdf", "image", "summary", "subjects", "grades", "hseapp_labels"})
+# The journal may still hold "summary" rows from before the summaries were removed (D54); no new call is one.
+TASKS = frozenset({"batch", "pdf", "image", "subjects", "grades", "hseapp_labels"})
 
 
 class LLMError(RuntimeError):
@@ -58,10 +59,9 @@ class Haiku:
         return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
 
     async def json(self, task: str, system: str, prompt: str, schema: dict, *, max_tokens: int = 8000,
-                   chat_id: int | None = None, documents: Sequence[Document] = (), images: Sequence[Image] = (),
-                   asked: bool = False) -> dict:
+                   chat_id: int | None = None, documents: Sequence[Document] = (),
+                   images: Sequence[Image] = ()) -> dict:
         """One request whose answer must match `schema`; `documents`, then `images` go before the prompt, in order.
-        `asked`: the owner asked for it, see Budget.reserve.
 
         Raises BudgetExceeded when the limit does not let the call happen (nothing is spent or logged then),
         LLMError when the call failed (it is logged with whatever tokens it spent), BadAnswer when the failure is
@@ -76,7 +76,7 @@ class Haiku:
             raise LLMError(f"no price for {self.model} in the llm_prices setting")
         input_chars = len(system) + len(prompt) + len(json.dumps(schema)) + \
             (sum(d.pages for d in documents) * PAGE_TOKENS + len(images) * IMAGE_TOKENS) * CHARS_PER_TOKEN
-        ticket = self.budget.reserve(task, self.budget.estimate(price, input_chars, max_tokens), asked)
+        ticket = self.budget.reserve(task, self.budget.estimate(price, input_chars, max_tokens))
         started = time.monotonic()
         response = None
         content = [*({"type": "document", "source": {"type": "base64", "media_type": "application/pdf",

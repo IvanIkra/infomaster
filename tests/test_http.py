@@ -452,31 +452,16 @@ async def test_miniapp_deadlines(aiohttp_client, budget, journal, store, schedul
     assert [own["uid"] for own in body["own"]] == ["ha-1"] and row
 
 
-async def test_miniapp_summaries(aiohttp_client, budget, journal, store, schedule, merged, forum, now):
-    from infomaster.outputs.summaries import SummaryTopic
-    from infomaster.processing.summaries import Summaries
-
+async def test_miniapp_has_no_summaries(aiohttp_client, budget, journal, store, schedule, merged):
+    """The summaries are gone (D54): no screen, and a chat's old «Summary» flag is not a setting any more."""
     inbox, chat_settings, settings = schedule.inbox, ChatSettings(store), Settings(store)
     inbox.put_chat(-1001, "Матан", "supergroup", None, 0)
-    chat_settings.update(-1001, {"enabled": True, "summary": True})
-    topic = SummaryTopic(forum, store, inbox, chat_settings, Summaries(chat_settings, inbox, None, now=now), settings,
-                         OWNER, -100, now=now)
     hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
     client = await aiohttp_client(miniapp.create_app(env(), budget, journal, inbox, chat_settings, TWIN,
-                                                     schedule.subjects, schedule, hse, merged, settings,
-                                                     summary_topic=topic))
-    response = await client.get("/app/api/summaries", headers=owner())
-    state = await response.json()
-    assert state["time"] == "21:00" and state["chats"] == [{"id": -1001, "title": "Матан"}]
-
-    response = await client.patch("/app/api/summaries", json={"time": "9:15"}, headers=owner())
-    assert (await response.json())["time"] == "09:15" and settings.get("summary_time") == "09:15"
-    assert topic._woken.is_set()  # the loop counts its sleep anew
-    response = await client.patch("/app/api/summaries", json={"time": "25:00"}, headers=owner())
-    assert response.status == 400 and settings.get("summary_time") == "09:15"
-    response = await client.patch("/app/api/summaries", json={"time": "21:00", "x": 1}, headers=owner())
+                                                     schedule.subjects, schedule, hse, merged, settings))
+    assert (await client.get("/app/api/summaries", headers=owner())).status == 404
+    response = await client.patch("/app/api/chats/-1001", json={"summary": True}, headers=owner())
     assert response.status == 400
-    assert (await client.get("/app/api/summaries")).status == 401
 
 
 async def test_miniapp_reminders(aiohttp_client, budget, journal, store, schedule, merged, forum, now):

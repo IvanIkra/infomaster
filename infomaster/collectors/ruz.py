@@ -31,7 +31,7 @@ import aiohttp
 import icalendar
 
 from .. import clock
-from ..i18n import Phrase
+from ..i18n import Alert, Phrase
 from ..processing.subjects import clean
 from ..store import Store
 
@@ -223,10 +223,10 @@ class Ruz:
             self._told = True
             if self.notify is not None:
                 since = self._failing_since.astimezone(clock.TZ)
-                self.notify(Phrase(f"RUZ is unavailable since {since:%d.%m %H:%M}: {error}.\nThe feed and Tablo "
-                                   "have the last timetable received.",
-                                   f"РУЗ недоступен с {since:%d.%m %H:%M}: {error}.\n"
-                                   "В ленте и в Tablo — последнее полученное расписание."))
+                self.notify(Alert(f"RUZ is unavailable since {since:%d.%m %H:%M}: {error}.\nThe feed and Tablo "
+                                  "have the last timetable received.",
+                                  f"РУЗ недоступен с {since:%d.%m %H:%M}: {error}.\n"
+                                  "В ленте и в Tablo — последнее полученное расписание."))
 
     def _recovered(self) -> None:
         if self._told and self.notify is not None:

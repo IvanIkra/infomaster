@@ -71,6 +71,7 @@ async def test_the_first_refresh_takes_the_list_as_it_is(topic, forum):
                          ("h2", "Записаться на майнор", "2026-10-21", None, "Записаться на майнор")])
     await topic.refresh()
     assert posts(forum) == [] and forum.pinned == [101]  # no flood: only the list
+    assert forum.notified == set()  # the pinned list is silent (D54)
     assert board(forum) == HEADER + "\n".join([
         "",
         "🎓 <b>DM HW 3</b> — сегодня · Дискретная математика · HSE App X",
@@ -95,6 +96,7 @@ async def test_new_moved_and_withdrawn(topic, forum):
                             f"🆕 <b>Calc KR</b> — пт 23.10\nМатанализ\n{LINK}",
                             f"🆕 <b>Old HW</b> — пн 19.10\nМатанализ\n{LINK}"]
     assert labels(forum.buttons[102]) == [[("Скрыть", b"dl:hide")]]
+    assert forum.notified == {102, 103, 104}  # new deadlines notify, the list does not (D54)
     rows = topic.db.execute("select kind, ref, key from bot_posts where kind = 'deadline' order by id").fetchall()
     assert [tuple(row) for row in rows] == [("deadline", first, f"dl:{first}"), ("deadline", gone, f"dl:{gone}"),
                                             ("deadline", past, f"dl:{past}")]
@@ -108,6 +110,8 @@ async def test_new_moved_and_withdrawn(topic, forum):
                             f"✖️ <b>Calc KR</b> (пт 23.10) снят: сообщение удалено или исправлено\n{LINK}"]  # past: no
     assert topic.db.execute("select ref, key from bot_posts where kind = 'deadline' order by id desc").fetchone()[
         "key"] is None  # «снят» has no button
+    moved_post, withdrawn_post = [msg_id for msg_id in forum.messages if msg_id not in forum.pinned]
+    assert moved_post in forum.notified and withdrawn_post not in forum.notified  # a withdrawal is silent (D54)
     assert board(forum) == HEADER + f"\n💬 <b>Calc HW 5</b> — сб 24.10 · Матанализ · {LINK}" and moved
 
 
@@ -268,10 +272,10 @@ async def test_a_failing_post_does_not_stop_the_list(topic, forum):
     await topic.refresh()
     post = forum.post
 
-    async def flaky(topic_key, text, buttons=None, *, html=False):
+    async def flaky(topic_key, text, buttons=None, *, html=False, notify=False):
         if text.startswith("🆕 <b>Calc HW 5"):
             raise ConnectionError("Telegram is down")
-        return await post(topic_key, text, buttons, html=html)
+        return await post(topic_key, text, buttons, html=html, notify=notify)
 
     forum.post = flaky
     add(topic)

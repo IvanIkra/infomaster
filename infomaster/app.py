@@ -24,17 +24,12 @@ from .llm.journal import Journal
 from .outputs import api, miniapp
 from .outputs.deadlines import BUTTON as DEADLINE_BUTTON
 from .outputs.deadlines import DeadlineTopic
-from .outputs.feed import BUTTON as NEWS_BUTTON
 from .outputs.feed import Feed
 from .outputs.forum import Forum
-from .outputs.grades import GradeTopic
 from .outputs.ical_feed import CalendarFeed
 from .outputs.reminders import BUTTON as REMINDER_BUTTON
 from .outputs.reminders import DeadlineReminders
 from .outputs.sheets import SheetTopic
-from .outputs.summaries import BUTTON as SUMMARY_BUTTON
-from .outputs.summaries import COMMAND as SUMMARY_COMMAND
-from .outputs.summaries import SummaryTopic
 from .outputs.timetable import BUTTON, Timetable
 from .processing.batches import Batches, Changes
 from .processing.deadlines import Deadlines
@@ -47,7 +42,6 @@ from .processing.news import News
 from .processing.schedule import MidtermChanges, Schedule, event_key
 from .processing.sheets import Sheets
 from .processing.subjects import Subjects
-from .processing.summaries import Summaries
 from .settings import ChatSettings, Settings
 from .store import Store
 
@@ -105,20 +99,14 @@ class Service:
         self.merged = DeadlineList(self.store, self.deadlines, self.hseapp_deadlines, self.subjects)
         self.deadline_topic = DeadlineTopic(self.forum, self.store, self.inbox, self.merged, env.owner_id)
         self.reminders = DeadlineReminders(self.forum, self.store, self.deadline_topic, self.settings, env.owner_id)
-        # Summaries are made from the raw messages, the daily one and /summary (§6.6).
-        summaries = Summaries(self.chat_settings, self.inbox, self.llm, subjects=self.subjects, settings=self.settings)
-        summaries.files = self.files  # what the batches read on images
-        self.summary_topic = SummaryTopic(self.forum, self.store, self.inbox, self.chat_settings, summaries,
-                                          self.settings, env.owner_id, env.forum_id)
-        # Grades from teachers' Google Sheets, new ones to «Оценки» (§6.7).
+        # Grades from teachers' Google Sheets (§6.7): the Mini App and the API show them, the forum does not (D54).
         self.grade_sheets = GradeSheets(self.settings)
         self.grades = Grades(self.store, self.settings, self.llm)
-        self.grade_topic = GradeTopic(self.forum, self.store, self.grades)
         # GET /api/status and the Mini App's screens read these by name (the «Расписание» screen reads "ruz", the
         # «HSE App X» one "hseapp", the «Чаты» one "images").
         self.sources = {"telegram": self.twin.status, "batches": self.batches.status, "ruz": self._ruz_status,
                         "hseapp": self._hseapp_status, "mail": self.mail.status, "sheets": self.sheets.status,
-                        "summaries": self.summary_topic.status, "grades": self._grades_status,
+                        "grades": self._grades_status,
                         "images": self.images.status}
         self.inbox.wake = self.batches.wake
         self.batches.publish = self._publish
@@ -133,16 +121,12 @@ class Service:
         self.hseapp_deadlines.on_change = self._hseapp_changed
         self.merged.on_change = self.deadline_topic.changed
         self.grade_sheets.on_sheet = self.grades.apply
-        self.grade_sheets.on_poll = self.grade_topic.publish
         self.grade_sheets.notify = self._to_system
         self.grades.wake = self.grade_sheets.wake
         self.subjects.on_manual = self._dictionary_changed
         self.forum.on_button(BUTTON, self.timetable.on_button)
         self.forum.on_button(DEADLINE_BUTTON, self.deadline_topic.on_button)
         self.forum.on_button(REMINDER_BUTTON, self.reminders.on_button)
-        self.forum.on_button(NEWS_BUTTON, self.feed.on_button)
-        self.forum.on_button(SUMMARY_BUTTON, self.summary_topic.on_button)
-        self.forum.on_command(SUMMARY_COMMAND, self.summary_topic.on_command)
 
     def _to_system(self, text: Phrase) -> None:
         self.forum.spawn(self.forum.post("system", text))
@@ -220,8 +204,7 @@ class Service:
             for app, port in ((miniapp.create_app(self.env, self.budget, self.journal, self.inbox, self.chat_settings,
                                                   self.sources, self.subjects, self.schedule, self.hseapp,
                                                   self.merged, self.settings, self.sheet_topic,
-                                                  self.summary_topic, self.grades, self.twin, self.calendar,
-                                                  self.reminders),
+                                                  self.grades, self.twin, self.calendar, self.reminders),
                                self.env.public_port),
                               (api.create_app(self.env, self.budget, self.sources, self.calendar, self.merged,
                                               self.grades, self.news, self.settings),
@@ -245,7 +228,6 @@ class Service:
             tasks.append(asyncio.create_task(self.mail.run()))
             tasks.append(asyncio.create_task(self.deadline_topic.run()))
             tasks.append(asyncio.create_task(self.reminders.run()))
-            tasks.append(asyncio.create_task(self.summary_topic.run()))
             tasks.append(asyncio.create_task(self.grade_sheets.run()))
 
             await self._watch(stop)

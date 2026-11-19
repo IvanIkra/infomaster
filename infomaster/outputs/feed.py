@@ -2,15 +2,14 @@
 
 «Новости»: a pinned list of every live news item, `full`, in rank order, with its source: the chat with a link to the
 message, or for a letter its subject (letters have no link, §8.3). The bot rebuilds it after each batch run and edits
-it in place; a list longer than one Telegram message takes several in a row. A new item with importance 4 or 5 also
-gets a short message of its own, which the next rebuild deletes. Under it «Скрыть» hides the item for good (only the
-owner may press it): it leaves the list at once, and the API later.
+it in place, which notifies no one; a list longer than one Telegram message takes several in a row. Nothing else goes
+to the topic (D54): the short messages that once announced an item of importance 4 or 5 are gone, and those an older
+version left behind are deleted at the next rebuild.
 
 The deadlines have their own topic (outputs/deadlines.py), built from the merged list.
 
-The list is read from `bot_posts`, brought up to date in Telegram and only then written back, so its rebuild and the
-alerts it drops run under a lock: the batches and the owner's buttons rebuild it. What the bot posted is kept in
-`bot_posts`.
+The list is read from `bot_posts`, brought up to date in Telegram and only then written back, so its rebuild runs
+under a lock. What the bot posted is kept in `bot_posts`.
 """
 
 import asyncio
@@ -18,10 +17,7 @@ import datetime as dt
 import hashlib
 import html
 import logging
-import re
 from collections.abc import Callable
-
-from telethon import Button
 
 from .. import clock
 from ..collectors.inbox import Inbox, message_link
@@ -35,11 +31,9 @@ from .forum import Forum
 log = logging.getLogger(__name__)
 
 MESSAGE_LIMIT = 4096   # characters; the HTML is counted whole, so the visible text always fits
-ALERT_IMPORTANCE = 4
 ICONS = {"channel": "📢", "user": "👤", "bot": "👤"}  # chats and groups: 💬
 MAIL_ICON = "✉️"
 WEEKDAYS = {"en": ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"), "ru": ("пн", "вт", "ср", "чт", "пт", "сб", "вс")}
-BUTTON = re.compile(rb"^nw:hide:(\d+)$")
 
 
 def digest(text: str) -> str:
@@ -152,7 +146,7 @@ class Feed:
                  now: Callable[[], dt.datetime] = clock.now_utc):
         self.forum, self.db, self.inbox = forum, store.db, inbox
         self.news, self.settings, self.owner_id, self.now = news, settings, owner_id, now
-        self._lock = asyncio.Lock()  # one rebuild of the list at a time, with its alerts
+        self._lock = asyncio.Lock()  # one rebuild of the list at a time
 
     @property
     def pinned(self) -> Board:
@@ -161,15 +155,9 @@ class Feed:
     async def publish(self, changes: Changes) -> None:
         """Batches.publish: called after every run, so the list also drops items that are no longer live."""
         async with self._lock:
-            await self._rebuild()
-            for news_id in changes.news:
-                item = self.news.get(news_id)
-                if item and item["replaced_by"] is None and item["gone_at"] is None and not item["hidden"] \
-                        and item["importance"] >= ALERT_IMPORTANCE:
-                    text = f"🔔 {html.escape(item['full'])}\n{self._source(item, self.forum.lang)}"
-                    hide = [[Button.inline(self.forum.tr("Hide", "Скрыть"), f"nw:hide:{news_id}".encode())]]
-                    self._remember(await self.forum.post("news", text, buttons=hide, html=True), "news_alert",
-                                   news_id)
+            await self.pinned.sync(self.board())
+            # The alerts of items of importance 4-5 an older version posted (D54): their items are on the list.
+            await forget(self.forum, self.db, posts(self.db, "news_alert"))
 
     # --- the news list ------------------------------------------------------------------
 
@@ -186,36 +174,3 @@ class Feed:
 
     def _source(self, item: dict, lang: str) -> str:
         return source(self.inbox, item, lang, self.forum.message_url)
-
-    async def _rebuild(self) -> None:
-        """The list as it should be; a change deletes the alerts, whose items are on it already. Under the lock."""
-        if await self.pinned.sync(self.board()):
-            await forget(self.forum, self.db, posts(self.db, "news_alert"))
-
-    # --- the button under an alert --------------------------------------------------------
-
-    async def on_button(self, event) -> None:
-        """«Скрыть» under an alert (Telethon's CallbackQuery): the item leaves the list for good."""
-        if event.sender_id != self.owner_id:
-            await event.answer(self.forum.tr("No access", "Нет доступа"), alert=True)
-            return
-        news_id = int(event.pattern_match.group(1))
-        item = self.news.get(news_id)
-        if item is None or item["replaced_by"] is not None or item["gone_at"] is not None:
-            await event.answer(self.forum.tr("This news is gone: another one replaced it or the message was deleted",
-                                             "Этой новости больше нет: её заменила другая или сообщение удалено"),
-                               alert=True)
-            await event.edit(buttons=None)
-            return
-        async with self._lock:  # hidden under the lock: a rebuild running now must not see it half done
-            with self.db:
-                self.news.hide(news_id)
-            # Only this alert goes: the others stay until a rebuild of the batches, as they would without the hiding.
-            await self.pinned.sync(self.board())
-            await forget(self.forum, self.db, [row for row in posts(self.db, "news_alert") if row["ref"] == news_id])
-        await event.answer(self.forum.tr("Hidden: it is off the news list", "Скрыто: в списке новостей её больше нет"))
-
-    # --- helpers --------------------------------------------------------------------------
-
-    def _remember(self, msg_id: int, kind: str, ref: int | None) -> None:
-        remember(self.db, "news", msg_id, kind, ref, self.now())

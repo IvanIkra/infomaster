@@ -24,7 +24,7 @@ from telethon.tl.custom import Message
 
 from .. import clock
 from ..config import Env
-from ..i18n import Phrase
+from ..i18n import Alert, Phrase
 from ..settings import ChatSettings
 from .files import NotNow
 from .inbox import RETENTION, Inbox
@@ -111,7 +111,7 @@ class Twin:
     def _needs_login(self, why: Phrase) -> bool:
         self.login_needed, self.error = True, why
         log.warning("%s; log in in the Mini App or with: %s", why, LOGIN_HINT)
-        (self.notify_login or self.notify)(Phrase(
+        (self.notify_login or self.notify)(Alert(
             f"The chats are not read: {why.en}.\nLog in in the Mini App, Settings → Twin and chats (or on the server: "
             f"{LOGIN_HINT}).",
             f"Чаты не читаются: {why.ru}.\nВойти — в Mini App, Настройки → Твинк и чаты "
