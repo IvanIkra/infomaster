@@ -142,24 +142,24 @@ docs/             # architecture, decisions, setup guide, notes on Tablo
 
 ## Status
 
-Stages 1–9 of the plan ([docs/architecture.md](docs/architecture.md), §11) are done and covered by tests: the
-twin and chat settings, batch processing, the course dictionary and timetable, deadlines, problem sheets,
-summaries, grades and images. The API for Tablo (stage 10) is done on the infomaster side, and the service runs
-next to Tablo.
+Stages 1–10 of the plan ([docs/architecture.md](docs/architecture.md), §11) are done and covered by tests: the
+twin and chat settings, batch processing, the course dictionary and timetable, deadlines, problem sheets, grades,
+images and the API for Tablo. Tablo was switched to infomaster in one step and takes its deadlines, news, grades and
+classes from it.
 
-The second round (§11.1) has begun. Stage 11, "Quiet", is done: only deadlines, their reminders and source failures
-notify; grades no longer go to the forum, the separate messages about important news are gone, and the summaries of
-stage 7 are removed. A sheet without a due date is due at the next seminar, and sheets behind links, in letters and
-on course wiki pages are found (stages 12 and 15), grade sheets may be Dropbox links (stage 15, first half), and the
-MCP connector (stage 13) is done and covered by tests; it is connected to claude.ai. Setting it up:
-[docs/setup.md](docs/setup.md), "Claude connector". The library (stage 14, D58) keeps raw material per course and
-class (from study chats, sheets, files sent to the bot and Mini App uploads) and the knowledge base Claude makes of
-it (LaTeX and PDF per class, a book and a cheat sheet per course, every version kept); files move by signed links. It
-is covered by tests, not yet tried on live data.
+The second round (§11.1) is done up to stage 15. Stage 11, "Quiet": only deadlines, their reminders and source
+failures notify; grades no longer go to the forum, the separate messages about important news are gone, and the
+summaries of stage 7 are removed. A sheet without a due date is due at the next seminar, and sheets behind links, in
+letters and on course wiki pages are found (stages 12 and 15); grade sheets may be Dropbox links (stage 15). The MCP
+connector (stage 13) is connected to claude.ai; setting it up: [docs/setup.md](docs/setup.md), "Claude connector".
+The library (stage 14, D58) keeps raw material per course and class (from study chats, sheets, files sent to the bot
+and Mini App uploads) and the knowledge base Claude makes of it (LaTeX and PDF per class, a book and a cheat sheet per
+course, every version kept); files move by signed links. Next is stage 16: a home-screen web app with Web Push in
+place of the forum.
 
-Not yet verified on live Telegram, Haiku and Google Sheets: problem sheets, grades, images, the reworked Mini App,
-the language switch, the silent posts of stage 11 and the assumed due dates. Text length is checked in characters rather than by the rendered
-width of the Inter font.
+Problem sheets, grades, images, the library and the connector run on live data. Not yet tried live: the Mini App's
+own events, grades and sheets, the language switch, and Tablo's "infomaster is unavailable" mark. Text length is
+checked in characters rather than by the rendered width of the Inter font.
 
 ## License
 

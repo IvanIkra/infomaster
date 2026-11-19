@@ -301,47 +301,47 @@ Collected in [architecture.md](architecture.md), §12.
 
 The move happens in one step (D35). First stop Tablo and copy the data (`import-tablo`, [setup.md](setup.md),
 "Moving from Tablo"), then start infomaster with all sources, then the reworked Tablo. The work is done in the
-`tablo-t75` repository.
+`tablo-t75` repository. Done: Tablo was switched on 22.10.2026, and every item below is in place.
 
 **The Tablo service (`service/tablo/`):**
 
-- [ ] **A new source, `sources/infomaster.py`.** Once a minute it calls `GET /api/deadlines`, `/api/news`,
+- [x] **A new source, `sources/infomaster.py`.** Once a minute it calls `GET /api/deadlines`, `/api/news`,
   `/api/grades`, `/api/status` with infomaster's Bearer `API_TOKEN` at `http://infomaster:8081` (Tablo joins the
   `infomaster` network as an external one). The last successful answer is kept in `kv` and shown while infomaster
   is unavailable (§11.1).
-- [ ] **Deadlines** come as a finished list from `/api/deadlines` in screen order; Tablo only takes the first lines.
+- [x] **Deadlines** come as a finished list from `/api/deadlines` in screen order; Tablo only takes the first lines.
   Remove `todo.py`, the merge in `builder.py` (`merge_deadlines`, `drop_done`, `drop_hidden`) and the
   `/api/deadlines` routes.
-- [ ] **News** comes from `/api/news` (`full`, `short`, `importance`, `study`, `source`); the §6.6 layout stays.
+- [x] **News** comes from `/api/news` (`full`, `short`, `importance`, `study`, `source`); the §6.6 layout stays.
   Remove `news.py` (Haiku parsing) and `sources/telegram.py`.
-- [ ] **Grades** come from `/api/grades` (`label`, `value`, `bonus`). Remove `sources/grades.py` and the layout
+- [x] **Grades** come from `/api/grades` (`label`, `value`, `bonus`). Remove `sources/grades.py` and the layout
   detection.
-- [ ] **HSE App X and mail**: remove `sources/hseapp.py`, `sources/mail.py`, the `/hseapp` page,
+- [x] **HSE App X and mail**: remove `sources/hseapp.py`, `sources/mail.py`, the `/hseapp` page,
   `/api/hseapp/login` and the callback; delete the HSE App X tokens from `kv`.
-- [ ] **The dictionary**: remove `subjects.py` and the manual entries from the config (`import-tablo` has already
+- [x] **The dictionary**: remove `subjects.py` and the manual entries from the config (`import-tablo` has already
   copied them).
-- [ ] **Haiku**: remove `llm.py`, `/api/llm/runs`, the `llm_runs` journal and the LLM block of the diagnostics
+- [x] **Haiku**: remove `llm.py`, `/api/llm/runs`, the `llm_runs` journal and the LLM block of the diagnostics
   screen, without a replacement (D40).
-- [ ] **Classes**: `ical.url` becomes `http://infomaster:8081/calendar/<CALENDAR_SECRET>/tablo.ics`. In `ical.py`:
+- [x] **Classes**: `ical.url` becomes `http://infomaster:8081/calendar/<CALENDAR_SECRET>/tablo.ics`. In `ical.py`:
   the title is `SUMMARY` as it is (already English, no dictionary); no more `<abbr> Midterm` from the feed (it comes
   in `/api/deadlines`); `STATUS:TENTATIVE` / `X-INFOMASTER-OPTIONAL:TRUE` becomes an optional mark (`ClassItem.mark`,
-  a new value next to `moved` and `cancelled`, D36). **To do in Tablo: an icon for optional events.** A source icon
+  a new value next to `moved` and `cancelled`, D36), shown with its own icon. A source icon
   (`X-INFOMASTER-SOURCE`) comes later.
-- [ ] **Failures per block** (D37) come from infomaster's `/api/status`, with the thresholds unchanged. **To do in
-  Tablo: an "infomaster is unavailable" icon.**
-- [ ] **Tablo's `GET /api/status`** takes `hseapp.login_needed` from infomaster's status (for the HA notification).
-- [ ] **`tablo.refresh_data`** polls infomaster and the weather again (infomaster has no "refresh now", D5).
-- [ ] **Config**: remove the `grades`, `hseapp`, `news`, `mail`, `subjects` sections; `ical` keeps the link. Add
+- [x] **Failures per block** (D37) come from infomaster's `/api/status`, with the thresholds unchanged; the panel is told
+  when infomaster goes and comes back (the "infomaster is unavailable" mark).
+- [x] **Tablo's `GET /api/status`** takes `hseapp.login_needed` from infomaster's status (for the HA notification).
+- [x] **`tablo.refresh_data`** polls infomaster and the weather again (infomaster has no "refresh now", D5).
+- [x] **Config**: remove the `grades`, `hseapp`, `news`, `mail`, `subjects` sections; `ical` keeps the link. Add
   infomaster's address and token (the token goes in `.env`).
-- [ ] **Secrets**: remove `ANTHROPIC_API_KEY`, `TABLO_MAIL_USER`/`TABLO_MAIL_PASSWORD`, `TABLO_ICAL_URL` from Tablo's
+- [x] **Secrets**: remove `ANTHROPIC_API_KEY`, `TABLO_MAIL_USER`/`TABLO_MAIL_PASSWORD`, `TABLO_ICAL_URL` from Tablo's
   `.env` (mail and RUZ are now only here, as `MAIL_*` and `RUZ_ICAL_URL`).
-- [ ] **Texts on screen**: cut with "…" for now (D39).
+- [x] **Texts on screen**: cut with "…" for now (D39).
 
 **The HA integration (`ha-integration/`):**
 
-- [ ] Remove the `todo` platform (D34) and the `/api/deadlines` reads in the coordinator.
-- [ ] The Sources form keeps the weather coordinates and the iCal link; remove HSE App X, the full name, the sheets,
+- [x] Remove the `todo` platform (D34) and the `/api/deadlines` reads in the coordinator.
+- [x] The Sources form keeps the weather coordinates and the iCal link; remove HSE App X, the full name, the sheets,
   the channels, the news lifetime, mail and the dictionary (D33).
-- [ ] The HSE App X login notification links to the bot (D38).
-- [ ] Remove the LLM sensors ("LLM run: …", "LLM cost today") without a replacement (D40).
-- [ ] Bring Tablo's documents (`docs/software/04`, `05`, `07`) in line with the new scheme.
+- [x] The HSE App X login notification links to the bot (D38).
+- [x] Remove the LLM sensors ("LLM run: …", "LLM cost today") without a replacement (D40).
+- [x] Bring Tablo's documents (`docs/software/04`, `05`, `07`) in line with the new scheme.
