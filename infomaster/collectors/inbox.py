@@ -231,6 +231,30 @@ class Inbox:
             "group by sender_id order by messages desc, max(at) desc", (chat_id,))
         return [dict(row) for row in rows]
 
+    def search(self, text: str = "", chat_id: int | None = None, since: str | None = None,
+               until: str | None = None, limit: int = 30) -> list[dict]:
+        """Stored messages and letters, newest first (the MCP connector, §8.5): those whose text or subject has
+        `text` (in any case), of one chat, from the day `since` to the day `until` (YYYY-MM-DD, both included).
+        They are kept 14 days (D29), so the scan in Python stays small; SQLite's LIKE folds the case of ASCII only."""
+        sql, params = "select * from messages where deleted_at is null", []
+        if chat_id is not None:
+            sql += " and chat_id = ?"
+            params.append(chat_id)
+        if since:
+            sql += " and at >= ?"
+            params.append(since)
+        if until:
+            sql += " and at < ?"
+            params.append((dt.date.fromisoformat(until) + dt.timedelta(days=1)).isoformat())
+        needle, found = " ".join(text.split()).casefold(), []
+        for row in self.db.execute(sql + " order by at desc, id desc", params):
+            if needle and needle not in " ".join(f"{row['text']} {row['subject'] or ''}".split()).casefold():
+                continue
+            found.append(_decode(row))
+            if len(found) >= limit:
+                break
+        return found
+
     def prune(self, now: dt.datetime) -> int:
         """Remove raw messages older than 14 days (D29)."""
         with self.db:

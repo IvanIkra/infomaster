@@ -74,6 +74,28 @@ def head(path: Path, pages: int) -> bytes:
     return out.getvalue()
 
 
+JPEG_MAX = 5 * 2**20  # bytes of a page image handed out whole
+
+
+def first_page_jpeg(path: Path) -> bytes | None:
+    """The biggest JPEG image on the first page, as it is stored: what a scanned page is. pypdf cannot render a page,
+    but a scanner puts each page in as one JPEG, which needs no decoding. None for a page without one."""
+    page = _reader(path).pages[0]
+    try:
+        images = page["/Resources"]["/XObject"].get_object()
+    except (KeyError, TypeError):
+        return None
+    best = None
+    for ref in images.values():
+        image = ref.get_object()
+        if image.get("/Subtype") != "/Image" or image.get("/Filter") not in ("/DCTDecode", ["/DCTDecode"]):
+            continue
+        data = image.get_data()
+        if data[:2] == b"\xff\xd8" and len(data) <= JPEG_MAX and (best is None or len(data) > len(best)):
+            best = data
+    return best
+
+
 def _clean(text: str) -> str:
     """Lines without trailing blanks, no empty runs: the extract of pypdf is loose with spaces."""
     lines = [re.sub(r"[ \t ]+", " ", line).strip() for line in text.splitlines()]

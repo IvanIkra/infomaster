@@ -187,6 +187,13 @@ class Subjects:
             self._changed()
         return deleted
 
+    def restore(self, name: str, title: str, abbr: str, manual: bool) -> None:
+        """An entry put back as it was, Haiku's or manual: an undo of the MCP connector (§8.5)."""
+        with self.db:
+            self.db.execute("delete from subjects where name = ?", (clean(name),))
+        self._put(clean(name), title, abbr, manual)
+        self._changed()
+
     def _changed(self) -> None:
         if self.on_manual is not None:
             try:
