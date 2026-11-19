@@ -206,6 +206,36 @@ were, the News and Deadlines pins are rewritten on their next edit, existing top
 command description and the menu button change after a restart. News, deadline labels, course names and the iCal
 feeds are always in English, because Tablo receives them too.
 
+## Claude connector
+
+infomaster is a remote MCP server (architecture §8.5): add it to claude.ai as a custom connector, and Claude in the
+web, desktop and phone apps can read your deadlines, timetable, grades, news, messages and sheets, and change what
+the Mini App changes. It works on any plan, Free included (one custom connector there). Nothing is set in `.env`.
+
+1. Make sure you have pressed **Start** in your private chat with the bot (step 6 of the first start): the sign-in
+   code comes there.
+2. In the Mini App, **Settings → Claude connector**: **Copy** the address, `https://infomaster.<tailnet>.ts.net/mcp`.
+3. In claude.ai: **Customize → Connectors → Add → Add custom connector**. Name it `infomaster`, paste the address and
+   click **Continue**. Keep the options marked **Detected**; if the dialog asks how Claude identifies itself, choose
+   **Register automatically** (infomaster supports Dynamic Client Registration, not Claude's published identity),
+   leave the client secret and the request headers empty, and click **Add**.
+4. Click **Connect**. A page "Connect to infomaster" opens: check that it says **Claude** and goes back to
+   `claude.ai`, click **Send a code to Telegram**, type the code the bot sent and click **Allow**.
+5. In a chat, turn the connector on under **+ → Connectors**. The phone app uses the same connector.
+6. Under **Customize → Connectors → infomaster** you can set each tool's permission. Keep the changing tools on
+   approval rather than **Always allow**: Claude reads messages strangers wrote.
+
+Everything Claude changes is listed on the same Mini App screen with **Undo**; **Revoke** there ends a connection
+(Claude asks you to sign in again). An access token lives an hour and is refreshed by Claude on its own; a connection
+unused for 30 days lapses.
+
+**Claude Code** (on your machine) connects to the same address: `claude mcp add --transport http infomaster
+https://infomaster.<tailnet>.ts.net/mcp`, then `/mcp` in Claude Code to sign in the same way; the browser goes back
+to a loopback address, which the page says.
+
+If claude.ai says it cannot reach the server, check that `PUBLIC_URL` is the Funnel address and that
+`curl https://infomaster.<tailnet>.ts.net/.well-known/oauth-protected-resource/mcp` answers from outside the tailnet.
+
 ## Moving from Tablo
 
 The move happens in one step, with a full stop (D35). Own and hidden deadlines and the manual dictionary entries live
