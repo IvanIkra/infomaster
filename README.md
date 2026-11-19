@@ -130,6 +130,7 @@ infomaster/
 ├── processing/   # batches, deadlines and merge, events, schedule, sheets, grades, images
 ├── outputs/      # forum bot and its topics, Mini App, iCal feeds, internal API
 ├── connector/    # MCP connector for claude.ai: OAuth, the /mcp endpoint, tools, journal with undo
+├── library/      # raw course material and the knowledge base, signed file links, feeding from chats and the bot
 ├── llm/          # client with structured output, daily budget, journal
 ├── settings/     # general and per-chat settings
 ├── store.py      # SQLite
@@ -149,7 +150,10 @@ The second round (§11.1) has begun. Stage 11, "Quiet", is done: only deadlines,
 failures notify; grades no longer go to the forum, the separate messages about important news are gone, and the
 summaries of stage 7 are removed. A sheet without a due date is due at the next seminar (stage 12, first half), grade
 sheets may be Dropbox links (stage 15, first half), and the MCP connector (stage 13) is done and covered by tests; it
-has not yet been tried against claude.ai itself. Setting it up: [docs/setup.md](docs/setup.md), "Claude connector".
+is connected to claude.ai. Setting it up: [docs/setup.md](docs/setup.md), "Claude connector". The library (stage 14,
+D58) keeps raw material per course and class (from study chats, sheets, files sent to the bot and Mini App uploads)
+and the knowledge base Claude makes of it (LaTeX and PDF per class, a book and a cheat sheet per course, every version
+kept); files move by signed links. It is covered by tests, not yet tried on live data.
 
 Not yet verified on live Telegram, Haiku and Google Sheets: problem sheets, grades, images, the reworked Mini App,
 the language switch, the silent posts of stage 11 and the assumed due dates. Text length is checked in characters rather than by the rendered
