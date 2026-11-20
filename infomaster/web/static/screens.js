@@ -162,7 +162,8 @@ export function Feed({ course, push, onOut }) {
     <header class="top">
       ${header}
       <button class="rb" aria-label=${t("search")} disabled>${icon(ICONS.search)}</button>
-      <a class="rb" href="#/machine" aria-label=${t("machineOk")}><span class="dot"></span></a>
+      <a class="rb" href="#/machine" aria-label=${data && data.problems ? t("machineBad", { n: data.problems })
+        : t("machineOk")}><span class=${data && data.problems ? "dot bad" : "dot"}></span></a>
     </header>
     ${data && html`<${Lenses} courses=${data.courses} active=${course} onPick=${pick} />`}
     <div class="err" role="alert">${error}</div>

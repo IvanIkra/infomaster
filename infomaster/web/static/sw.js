@@ -59,7 +59,8 @@ self.addEventListener("push", (event) => {
     data = { body: event.data ? event.data.text() : "" };
   }
   event.waitUntil(self.registration.showNotification(data.title || "infomaster", {
-    body: data.body || "", tag: data.tag, renotify: Boolean(data.tag), lang: "",
+    body: data.body || "", tag: data.tag, renotify: Boolean(data.tag) && !data.silent, silent: Boolean(data.silent),
+    lang: "",
     icon: "/web/static/icons/icon-192.png", data: { url: data.url || "/web/" },
   }));
 });

@@ -14,6 +14,9 @@ checks, and every change goes into the connector's journal (`via` web) with the 
 Notifications (stage 16.4): a device turns them on with its browser's push subscription (push.py); the notifier
 (notify.py) sends what the forum announces with a sound.
 
+«Machine» (stage 16.6, machine.py): the sources and their freshness, the journal of changes with undo, and the Mini
+App's settings, under /web/api/machine.
+
 «+» (stage 16.5, quick.py): material for the library at the class going on, one line read by Haiku and confirmed, a
 deadline, an event or a grade by hand. Android's «Share» lands on /web/share: the service worker keeps the files and
 opens «+» with them; without it, the server only sends the app there.
@@ -38,6 +41,7 @@ from ..llm.client import Haiku
 from ..store import Store
 from .auth import COOKIE, COOKIE_PATH, SESSION_IDLE, Auth, AuthError, device_name
 from .check import Check
+from .machine import MACHINE_KEY, Machine
 from .notify import Notifier
 from .push import Push, PushError
 from .quick import Quick, QuickError
@@ -54,7 +58,7 @@ class WebApp:
                  data: Data | None = None, llm: Haiku | None = None):
         parts = urlsplit(env.public_url)
         self.origin = f"{parts.scheme}://{parts.netloc}"
-        self.lang = lang
+        self.lang, self.seconds = lang, now
         self.data = data  # what the screens read; set by the service, left out by the login's tests
         self.check = Check(data, store) if data is not None else None
         self.quick = Quick(data, llm) if data is not None else None
@@ -62,6 +66,7 @@ class WebApp:
         self.auth = Auth(store, parts.hostname or "", self.origin, send_code, lang, now)
         self.push = Push(store, env.public_url, now)
         self.notifier = Notifier(self.push, lang)
+        self.machine = Machine(self)
 
     def attach(self, app: web.Application) -> web.Application:
         app[WEB_KEY] = self
@@ -100,6 +105,8 @@ class WebApp:
                ("POST", "/add/files", add_files),
                ("POST", "/add/note", add_note),
                ("POST", "/add/{what}", add_by_hand)]
+        api += [(method, "/machine" + path, handler) for method, path, handler in self.machine.routes()]
+        app[MACHINE_KEY] = self.machine
         for method, path, handler in api:
             app.router.add_route(method, "/web/api" + path, guarded(handler))
         if self.connector is not None and self.check is not None:
@@ -277,6 +284,7 @@ async def feed(request: web.Request) -> web.Response:
     course = _course(request)
     answer = _data(request).feed(course)
     answer["check"] = request.app[WEB_KEY].check.items(course)
+    answer["problems"] = len(request.app[WEB_KEY].machine.attention(request.app))  # the status dot
     return web.json_response(answer)
 
 

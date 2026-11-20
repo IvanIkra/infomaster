@@ -19,7 +19,7 @@ const sameKey = (subscription, key) => {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 };
 
-export function Notifications({ onOut, onChange }) {
+export function Notifications({ onOut, onChange, children }) {
   const [state, setState] = useState(null);
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
@@ -78,8 +78,7 @@ export function Notifications({ onOut, onChange }) {
           : html`<button class="btn" disabled=${busy || blocked} onClick=${on}>${t("turnOn")}</button>`}
         <div class="note">${note}</div>`}
       <div class="err" role="alert">${error}</div>
-      <h2>${t("pushWhat")}</h2>
-      <div class="note">${t("pushWhatList").split(" · ").map((line) => html`<div key=${line}>— ${line.charAt(0).toUpperCase() + line.slice(1)}</div>`)}</div>
+      ${children}
     </div>
   </main>`;
 }

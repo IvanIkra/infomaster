@@ -197,8 +197,9 @@ feeds are always in English, because Tablo receives them too.
 
 ## Web app
 
-The home-screen app (architecture §8.6) is replacing the forum and the Mini App step by step (stage 16); for now it
-has the login and the list of devices. Nothing is set in `.env`: it uses `PUBLIC_URL`.
+The home-screen app (architecture §8.6) is replacing the forum and the Mini App step by step (stage 16): the feed,
+the week, the cards and «Check», «+», notifications, and «Machine» with the sources, the journal of changes and the
+settings. Nothing is set in `.env`: it uses `PUBLIC_URL`.
 
 1. Make sure you have pressed **Start** in your private chat with the bot: the login code comes there.
 2. Open `https://infomaster.<tailnet>.ts.net/web/` on the phone, tap **Send a code**, type the six digits the bot
@@ -211,6 +212,12 @@ has the login and the list of devices. Nothing is set in `.env`: it uses `PUBLIC
 **Machine → Login and devices** lists where you are logged in and your passkeys; a lost phone is logged out there
 from another device. A device unused for 90 days is logged out by itself.
 
+**Machine** is behind the dot at the top of the feed; the dot turns red when something needs you, and Machine says
+what and where to fix it. Every setting of the Mini App is there too (the twin's login and the chats, HSE App X, the
+gradebooks, batches and news, reminders, the dictionary, the LLM limit, the Claude connector), and **Journal of
+changes** lists what you and Claude changed, with **Undo**. **Machine → Notifications** picks what comes to the
+phone and the quiet hours, when notifications come without a sound.
+
 ## Claude connector
 
 infomaster is a remote MCP server (architecture §8.5): add it to claude.ai as a custom connector, and Claude in the
@@ -219,7 +226,8 @@ the Mini App changes. It works on any plan, Free included (one custom connector 
 
 1. Make sure you have pressed **Start** in your private chat with the bot (step 6 of the first start): the sign-in
    code comes there.
-2. In the Mini App, **Settings → Claude connector**: **Copy** the address, `https://infomaster.<tailnet>.ts.net/mcp`.
+2. In the web app, **Machine → Claude connector** (or the Mini App, **Settings → Claude connector**): **Copy** the
+   address, `https://infomaster.<tailnet>.ts.net/mcp`.
 3. In claude.ai: **Customize → Connectors → Add → Add custom connector**. Name it `infomaster`, paste the address and
    click **Continue**. Keep the options marked **Detected**; if the dialog asks how Claude identifies itself, choose
    **Register automatically** (infomaster supports Dynamic Client Registration, not Claude's published identity),

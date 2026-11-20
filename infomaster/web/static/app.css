@@ -304,3 +304,36 @@ select.field { appearance: none; -webkit-appearance: none; }
 .pairs { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 15px; }
 .pairs dt { color: var(--mut); font-weight: 700; font-size: 13px; padding-top: 1px; }
 .pairs dd { margin: 0; font-weight: 700; }
+
+/* «Machine» (16.6) */
+.dot.bad { background: var(--bad); }
+.mach { padding-bottom: 24px; }
+.mach h2 { font-size: 16px; }
+.list { padding-top: 0; padding-bottom: 0; }
+a.row, button.row.plain { color: inherit; }
+button.row.plain { width: 100%; border: 0; border-bottom: 1px dashed var(--line); background: none; padding: 8px 0;
+                   text-align: left; cursor: pointer; font: inherit; }
+.list > div:last-child > button.row.plain { border-bottom: 0; }
+.row > a { flex: 1; min-width: 0; }
+.field.narrow { width: 120px; flex: 0 0 auto; }
+select.field.narrow { width: 150px; }
+.link em { font-style: normal; font-weight: 700; color: var(--mut); margin-right: 4px; }
+.link em.bad { color: var(--bad); }
+.st { flex-shrink: 0; padding: 2px 9px; border-radius: var(--rc); font: 800 11px var(--fb); border: 1px solid; }
+.st-ok { color: var(--ok); }
+.st-late, .st-login, .st-idle { color: var(--due); }
+.st-error { color: var(--bad); }
+.st-off { color: var(--mut); }
+.switch { position: relative; flex-shrink: 0; width: 50px; height: 30px; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.switch span { position: absolute; inset: 0; border-radius: 15px; background: var(--line); transition: background .15s;
+               pointer-events: none; }
+.switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 12px;
+                      background: var(--card); box-shadow: 0 1px 3px rgba(28, 25, 23, 0.3); transition: transform .15s; }
+.switch input:checked + span { background: var(--acc); }
+.switch input:checked + span::after { transform: translateX(20px); }
+.switch input:focus-visible + span { outline: 2px solid var(--acc); outline-offset: 2px; }
+.switch input:disabled + span { opacity: 0.55; }
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 80px; padding: 10px 0; }
+.bars span { flex: 1; min-width: 0; border-radius: 2px 2px 0 0; background: var(--acc); opacity: 0.8; }
+.bars span.stopped { background: var(--bad); }

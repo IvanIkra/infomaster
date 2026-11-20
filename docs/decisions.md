@@ -346,6 +346,18 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   like the rest. A shared file goes through the service worker rather than to the server directly: the share is a POST
   from the system, and the owner should still pick its class.
 
+- **D65. «Machine» reads through the Mini App and changes through the connector, 20.11.2026.** This adds to §8.6 and
+  is step 16.6 of §11.1. The web app's settings are the Mini App's moved over, not written again: its screens read
+  through the Mini App's handlers, so the two show the same while both run, and every change of a setting is a
+  connector's write tool, so it is checked once and lands in the one journal with its undo, as the owner's changes of
+  deadlines do (D62). The journal shows the owner's and Claude's changes together, marked who made them: the owner
+  wants one place to see what changed and take it back. What no tool does stays the owner's and is not journaled: the
+  twin's and HSE App X's logins, the LLM limit, revoking Claude. A source shows its freshness as the time of its last
+  good read and is «late» when that read is older than its poll allows, so a source that stopped quietly shows before
+  it fails loudly. Notifications get the settings D63 put off: which kinds come and the quiet hours. A message of the
+  quiet hours comes silent rather than not at all, so a failure at night is still on the lock screen in the morning.
+  The model prices are not moved: they change with a new model, in the code's defaults.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

@@ -207,6 +207,28 @@ def _language(value: Any) -> str:
     return value
 
 
+PUSH_KINDS = ("deadlines", "reminders", "failures", "llm")  # what the web app may push (§8.6)
+
+
+def _push_kinds(value: Any) -> list[str]:
+    """Some of PUSH_KINDS, in their order; an empty list pushes nothing."""
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value) or set(value) - set(PUSH_KINDS):
+        raise SettingsError(f"expected some of {', '.join(PUSH_KINDS)}")
+    return [kind for kind in PUSH_KINDS if kind in value]
+
+
+def _quiet_hours(value: Any) -> str:
+    """'23:00-08:00': the notifications of these hours come without a sound; '' for none."""
+    if value == "":
+        return ""
+    if not isinstance(value, str) or value.count("-") != 1:
+        raise SettingsError(f"expected HH:MM-HH:MM or nothing, got {value!r}")
+    start, end = (_clock_time(part) for part in value.split("-"))
+    if start == end:
+        raise SettingsError("the quiet hours start and end at the same time")
+    return f"{start}-{end}"
+
+
 # name -> (default, check); the check returns the value to keep or raises SettingsError.
 SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "llm_daily_limit_usd": (0.50, _positive_money),  # D27
@@ -237,6 +259,9 @@ SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "about_me": ("", _text(ABOUT_ME_CHARS)),
     # Course pages of the faculty's wiki (D60): their new sheets and homework come as notices in the mailbox.
     "wiki_pages": ([], _wiki_pages),
+    # The web app's notifications (§8.6, D65): which kinds are pushed, and the hours they come without a sound.
+    "push_kinds": (list(PUSH_KINDS), _push_kinds),
+    "push_quiet": ("", _quiet_hours),
 }
 
 

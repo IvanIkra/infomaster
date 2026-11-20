@@ -141,6 +141,7 @@ class Service:
                                     language), llm=self.llm)
         self.web.connector = self.connector  # the owner's changes are the connector's tools, journaled with undo
         # Web Push (§8.6): what the forum announces with a sound goes to the app's devices too.
+        self.web.notifier.settings = self.settings  # the kinds pushed and the quiet hours («Machine», D65)
         self.deadline_topic.notify = self.web.notifier.deadline
         self.reminders.notify = self.web.notifier.reminder
         self.budget.notify = self._budget_notice

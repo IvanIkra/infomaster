@@ -8,6 +8,8 @@ import * as passkey from "./passkey.js";
 import { Card, CheckQueue, Feed, Week } from "./screens.js";
 import { Notifications } from "./notifications.js";
 import { AddSheet } from "./add.js";
+import { Chat, Chats, ConnectorScreen, Courses, Gradebook, Gradebooks, HseApp, Journal, Llm, Machine,
+         NotificationPrefs, Processing, Tab } from "./machine.js";
 
 const LANG_KEY = "infomaster.lang";  // the login screen's choice, before the server's setting is known
 
@@ -105,17 +107,6 @@ function OfferPasskey({ onDone }) {
 
 // --- after the login ---------------------------------------------------------------------------------------
 
-function Machine() {
-  return html`<main class="screen">
-    <header class="top">
-      <a class="rb" href="#/" aria-label=${t("back")}>${icon(ICONS.back)}</a>
-      <div><h1>${t("machine")}</h1></div>
-    </header>
-    <a class="link" href="#/machine/login">${t("login")}<span>${icon(ICONS.next, 16)}</span></a>
-    <a class="link" href="#/machine/push">${t("notifications")}<span>${icon(ICONS.next, 16)}</span></a>
-  </main>`;
-}
-
 function Devices({ onOut }) {
   const [state, setState] = useState(null);
   const [error, setError] = useState("");
@@ -199,6 +190,31 @@ function Toast() {
   </div></div>`;
 }
 
+// --- «Machine» (16.6) ---------------------------------------------------------------------------------------
+
+function machineScreen(at, out, load) {
+  const p = at.params;
+  switch (at.path) {
+    case "/machine": return html`<${Machine} onOut=${out} onLang=${load} />`;
+    case "/machine/login": return html`<${Devices} onOut=${out} />`;
+    case "/machine/push": return html`<${Notifications} onOut=${out} onChange=${load}>
+      <${NotificationPrefs} onOut=${out} /><//>`;
+    case "/machine/journal": return html`<${Journal} onOut=${out} />`;
+    case "/machine/chats": return html`<${Chats} onOut=${out} />`;
+    case "/machine/chat": return html`<${Chat} key=${p.get("id")} id=${p.get("id")} onOut=${out} />`;
+    case "/machine/hseapp": return html`<${HseApp} onOut=${out} />`;
+    case "/machine/processing": return html`<${Processing} onOut=${out} />`;
+    case "/machine/courses": return html`<${Courses} onOut=${out} />`;
+    case "/machine/llm": return html`<${Llm} onOut=${out} />`;
+    case "/machine/grades": return html`<${Gradebooks} onOut=${out} />`;
+    case "/machine/gradebook": return html`<${Gradebook} key=${p.get("id")} id=${p.get("id")} onOut=${out} />`;
+    case "/machine/tab": return html`<${Tab} key=${p.get("id") + "|" + p.get("tab")} id=${p.get("id")}
+      name=${p.get("tab")} onOut=${out} />`;
+    case "/machine/connector": return html`<${ConnectorScreen} onOut=${out} />`;
+    default: return null;
+  }
+}
+
 // --- the frame ---------------------------------------------------------------------------------------------
 
 let base = { path: "/", params: new URLSearchParams() };  // the screen under a card
@@ -230,9 +246,8 @@ function App() {
   }
   if (offer) return html`<${OfferPasskey} onDone=${() => { setOffer(false); load(); }} />`;
   const out = () => { setMe(null); location.hash = ""; };
-  if (at.path === "/machine") return html`<${Machine} />`;
-  if (at.path === "/machine/login") return html`<${Devices} onOut=${out} />`;
-  if (at.path === "/machine/push") return html`<${Notifications} onOut=${out} onChange=${load} />`;
+  const machine = machineScreen(at, out, load);
+  if (machine) return html`${machine}<${Toast} />`;
 
   const card = at.path === "/d" || at.path === "/c";
   const check = at.path === "/check";

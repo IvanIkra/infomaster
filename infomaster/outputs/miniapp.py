@@ -694,12 +694,12 @@ async def hseapp_callback(request: web.Request) -> web.Response:
     except ValueError as e:
         why = reason(e, lang).rstrip(".")
         return page(lang, tr(lang, "The login failed", "Вход не удался"), f"{why[:1].upper()}{why[1:]}.",
-                    tr(lang, "Go back to Telegram and log in again: the Mini App, Settings → HSE App X.",
-                       "Вернитесь в Telegram и войдите ещё раз: Mini App, Настройки → HSE App X."), status=400)
+                    tr(lang, "Go back to infomaster and log in again: Machine → HSE App X.",
+                       "Вернитесь в infomaster и войдите ещё раз: Машина → HSE App X."), status=400)
     return page(lang, tr(lang, "Logged in to HSE App X", "Вход в HSE App X выполнен"),
                 tr(lang, "The deadlines will be updated within a minute.", "Дедлайны обновятся в течение минуты."),
-                tr(lang, "This window can be closed: go back to Telegram.",
-                   "Это окно можно закрыть и вернуться в Telegram."))
+                tr(lang, "This window can be closed: go back to infomaster.",
+                   "Это окно можно закрыть и вернуться в infomaster."))
 
 
 PAGE = """<!doctype html>

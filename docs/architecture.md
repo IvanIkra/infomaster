@@ -886,13 +886,35 @@ decides what:
   the text in a cache of its own and opens «+», where the owner picks the class; a link waits as a note. Without the
   worker (the app never opened) the server only sends the app to «+» and asks to share again.
 
+**«Machine»** (step 16.6, D65, `web/machine.py`), behind the status dot of the feed, which turns red when something
+needs the owner (`problems` in the feed):
+
+- `GET /web/api/machine`: what needs attention, each with the screen that fixes it (none for what only `.env` and the
+  logs fix), and the sources with their freshness: the twin, the mail, RUZ, HSE App X, the gradebooks, the wiki pages,
+  the batches, the images and the LLM limit, each ok, late (its last good read is older than its poll allows: the
+  mail 30 minutes, HSE App X an hour, the gradebooks two, RUZ three, the wiki nine), failing, off or waiting for a
+  login, with the time of that read and a count;
+- `GET /web/api/machine/journal`: the connector's journal, the owner's changes in the app and Claude's through the
+  connector in one list, the newest 100, each with its undo (`POST /web/api/changes/{id}/undo`);
+- the Mini App's settings, moved over. The screens read through the Mini App's handlers, so the two show the same; a
+  change goes through the connector's write tool, journaled with its undo: a chat's settings
+  (`PATCH /machine/chats/{id}`), the batches, news, about me and the wiki pages, the reminders, whole PDFs, images and
+  the notifications (`PATCH /machine/settings/{group}`), the dictionary (`PUT /machine/courses`,
+  `POST /machine/courses/remove`), the gradebooks, their names and the layouts of their tabs
+  (`/machine/grades...`). What has no tool is the owner's alone and is not journaled: the twin's login
+  (`POST /machine/twin/login|cancel|logout`), HSE App X (`/machine/hseapp...`; the callback page now sends the owner
+  back to infomaster), the LLM limit and its raise for today (`/machine/llm`), reading a gradebook now and revoking a
+  connection of Claude's (`/machine/connector`). The model prices stay in the Mini App and the defaults;
+- notifications: which kinds come (`push_kinds`: new and moved deadlines, reminders, failures and logins, the LLM
+  limit) and the quiet hours (`push_quiet`, Moscow time, over midnight too), when a message comes without a sound or
+  vibration rather than not at all. The connector's `update_notifications` changes them.
+
 **Screens**: the feed with the lenses and the «Check, please» box (the first two questions with their quick answer),
 the course's lens (grades, next class, shelves), the week as a grid with the deadlines of each day above it, an
 item's card over them with «Done», «Edit», «Not mine» (an own one: «Delete»), «It is a duplicate…» (the course's
 deadlines within two weeks to pick the one that stays) and, for an assumed date, «The date is right», and the «Check»
-queue one question at a time («Check · 1 of 3», «Later» puts one off for the visit). Still to come in the steps of
-stage 16 (§11.1): «Machine» with the sources, the journal and the settings, «+», and the shelves of sheets and raw
-material.
+queue one question at a time («Check · 1 of 3», «Later» puts one off for the visit). «Machine» with the sources, what needs
+attention, the journal and the settings (16.6), and «+» (16.5). Still to come: the shelves of sheets and raw material.
 
 ## 9. Storage (SQLite)
 
@@ -1023,7 +1045,8 @@ own; Claude is an optional door, not the brain (D53).
       and moved deadlines, reminders, failures, the LLM budget, a login the twin or HSE App X needs);
     - 16.5 «+» (done, D64): uploads to the class in progress, one line parsed by Haiku within the budget and
       confirmed, a deadline, an event or a grade by hand, Share Target on Android;
-    - 16.6 «Machine»: the sources and their freshness, the journal with undo, the Mini App's settings moved over;
+    - 16.6 «Machine» (done, D65): the sources and their freshness, what needs attention, the journal with undo, the
+      Mini App's settings moved over, the notifications' kinds and quiet hours;
     - 16.7 the switch: the links of calendars and cards lead to the app; the forum's topics and the Mini App are
       switched off.
 

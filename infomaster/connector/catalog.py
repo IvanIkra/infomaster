@@ -20,7 +20,7 @@ from ..processing.grades import OWN_LAYOUT
 from ..processing.pdf import PdfError, first_page_jpeg
 from ..processing.schedule import DEFAULT_LENGTH, all_day, local
 from ..processing.todo import CATEGORIES, uid
-from ..settings import BATCH_HOURS, CHAT_SPECS
+from ..settings import BATCH_HOURS, CHAT_SPECS, PUSH_KINDS, SPECS, SettingsError
 from .tools import UNTRUSTED, Context, Output, Registry, Tool, ToolError, mini_app, schema
 
 DATE = {"type": "string", "description": "a date, YYYY-MM-DD"}
@@ -211,10 +211,11 @@ async def get_settings(ctx: Context, args: dict) -> dict:
             "pdf": {name: settings.get(name) for name in miniapp.PDF_LIMITS},
             "grades": {key: settings.get(name) for key, name in miniapp.GRADE_SETTINGS.items() if key != "sheets"},
             "hseapp_enabled": settings.get("hseapp_enabled"),
+            "notifications": {key: settings.get(name) for key, name in NOTIFICATION_NAMES.items()},
             "llm": {**budget.status(), "daily_limit_usd": settings.get("llm_daily_limit_usd"),
                     "prices": settings.get("llm_prices")},
             "not_here": "the secrets of .env, the twin's and HSE App X's logins and the LLM limit are the owner's, "
-                        "in the Mini App"}
+                        "in the web app («Machine») and the Mini App"}
     return data
 
 
@@ -596,6 +597,26 @@ async def update_pdf_limits(ctx: Context, args: dict) -> Output:
                                 "update_pdf_limits", "Reading whole PDFs")
 
 
+NOTIFICATION_NAMES = {"kinds": "push_kinds", "quiet": "push_quiet"}
+
+
+async def update_notifications(ctx: Context, args: dict) -> Output:
+    """The web app's notifications (§8.6, D65): which kinds come, and the quiet hours."""
+    settings = need(ctx, miniapp.SETTINGS_KEY)
+    if not args:
+        raise ToolError("give kinds, quiet or both")
+    try:
+        checked = {key: SPECS[NOTIFICATION_NAMES[key]][1](value) for key, value in args.items()}
+    except SettingsError as e:
+        raise ToolError(str(e)) from None
+    before = {key: settings.get(NOTIFICATION_NAMES[key]) for key in checked}
+    for key, value in checked.items():
+        settings.set(NOTIFICATION_NAMES[key], value)
+    shown = {key: ", ".join(value) if isinstance(value, list) else value for key, value in checked.items()}
+    return Output(checked, "Notifications: " + ", ".join(f"{key} → {value or 'none'}" for key, value in shown.items()),
+                  [step("update_notifications", **before)])
+
+
 # --- writes: grades -----------------------------------------------------------------------------
 
 FORGOTTEN = "the grades are read again from scratch: own changes of the sheet's grades and its tab layouts are gone"
@@ -946,6 +967,13 @@ def register(registry: Registry, app) -> None:
         write("update_images", "Change images read a day",
               "How many images a day Haiku reads in chats with images on; 0 reads none.",
               {"daily": {"type": "integer", "minimum": 0, "maximum": 500}}, update_images, ("daily",),
+              idempotent=True)
+        write("update_notifications", "Change the web app's notifications",
+              "Which kinds the web app pushes to the owner's devices (deadlines: new and moved; reminders; failures: "
+              "a source failed or needs a login; llm: the daily limit spent), and the quiet hours (Moscow, "
+              "HH:MM-HH:MM, '' for none) when they come without a sound.",
+              {"kinds": {"type": "array", "items": {"type": "string", "enum": list(PUSH_KINDS)}},
+               "quiet": {"type": "string", "description": "HH:MM-HH:MM, or ''"}}, update_notifications,
               idempotent=True)
     if has[miniapp.SETTINGS_KEY] and has[miniapp.REMINDERS_KEY]:
         write("update_reminders", "Change deadline reminders",
