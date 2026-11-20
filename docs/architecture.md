@@ -13,8 +13,8 @@ infomaster runs on a server next to Tablo. It:
 - **reads** study and other chats and channels through a separate Telegram account (the twin), plus the
   `@edu.hse.ru` mailbox, HSE App X, RUZ and grade sheets;
 - **computes everything itself**: LLM parsing, the course dictionary, merging deadlines, new grades;
-- **serves the results** to three places: a Telegram forum (through the bot), a Mini App for the settings and an API
-  for Tablo.
+- **serves the results**: a home-screen web app with Web Push (§8.6), a Claude connector (§8.5), iCal feeds and an
+  API for Tablo. Until stage 16 a Telegram forum and a Mini App did the web app's job; both are gone (D69).
 
 After the move Tablo only displays (D1).
 
@@ -31,7 +31,7 @@ PDFs from chats ──► sheets_pdf ┘   every N h / "urgent"    ├─► dea
 RUZ iCal ─────────► classes ────────────────────────────────► events (classes)
 HSE App X ────────► deadlines (source=hseapp)
 Google Sheets ────► grade_items ─► grade_events
-Mini App, buttons ► own_deadlines / hidden_deadlines
+web app, Claude ──► own_deadlines / hidden_deadlines
 
 One subjects dictionary for everything.
 
@@ -39,8 +39,8 @@ One subjects dictionary for everything.
 events ───────────► iCal feed (English) ─► Tablo, any calendar
 deadlines ─ merge §5.5 ─ hiding ─────► API ─► Tablo
 news, grade_events ─────────────────► API ─► Tablo
-everything new ─────────────────────► bot ─► forum (topics)
-settings ◄──────────────────────────── Mini App
+everything ────────────────────────► web app (+ Web Push), Claude
+settings ◄──────────────────────────── web app «Machine», Claude
 ```
 
 ## 3. Stack
@@ -49,16 +49,15 @@ settings ◄──────────────────────�
 |---|---|---|
 | Language | Python 3.12+, one asyncio process | Telethon exists only for Python; Tablo is built the same way (§1) |
 | Twin | Telethon (MTProto, a user account) | the only maintained userbot library for Python |
-| Bot | Telethon with a bot token | one library for both clients; over MTProto the bot uploads files up to 2 GB, not 50 MB |
-| HTTP | aiohttp | Mini App, API, HSE App X callback |
+| Bot | Telethon with a bot token | one library for both clients; the bot sends login codes and takes files for the library |
+| HTTP | aiohttp | the web app, the connector, the API, the HSE App X callback |
 | Storage | SQLite | as in Tablo, one file is enough |
 | LLM | `anthropic`, model `claude-haiku-5-5` | as in Tablo (§2.1) |
 | PDF | pypdf (text), page rendered to an image for scans | MIT licence; PyMuPDF is AGPL |
 | Spreadsheets | openpyxl | as in Tablo (§3.3) |
 | Calendar | icalendar | reading RUZ and publishing our own feed |
 | Text width | Pillow + the same Inter file as Tablo | line budgets (§2.1) |
-| Mini App | static HTML/JS + `telegram-web-app.js`, no build | few screens |
-| Web app | Preact + htm as vendored ES modules, no build; `webauthn` for passkeys; Web Push on `cryptography` | a home-screen app instead of the forum (§8.6, D61, D63); no Node in the image |
+| Web app | Preact + htm as vendored ES modules, no build; `webauthn` for passkeys; Web Push on `cryptography` | a home-screen app, the only interface besides Claude (§8.6, D61, D63, D69); no Node in the image |
 | External access | Tailscale Funnel | a permanent HTTPS address without a domain (D16) |
 | Deployment | Docker Compose on Tablo's server | like Tablo (D26) |
 
@@ -82,8 +81,11 @@ collectors/   telegram, mail, hseapp, ruz, grades       — collection only, sto
 processing/   batches, pdf, subjects, deadlines, grades,
               schedule, images                           — everything that computes
 llm/          client, budget, journal                    — the single entry to Haiku: limit + journal
-outputs/      forum (bot), miniapp, api, ical_feed
+outputs/      bot, deadlines (news to push), reminders, sheets (publishing), api, ical_feed
+actions.py    the owner's actions as handlers           — what the connector and the web app call
 connector/    oauth, mcp, tools, catalog, changes       — the MCP connector for claude.ai (§8.5)
+web/          the web app: server and static client     — §8.6
+library/      raw material and the knowledge base       — §6.8
 settings/     storing and validating settings
 ```
 
@@ -142,7 +144,7 @@ The logic moves over from Tablo unchanged:
 | Source | Where in Tablo | What changes |
 |---|---|---|
 | IMAP mail | §6.2 | letters go to the common `messages` table (`source=mail`) and are processed together with the chats |
-| HSE App X | §5.1 | the login page moves to the Mini App, the callback goes through Funnel |
+| HSE App X | §5.1 | the login starts in the web app («Machine»), the callback goes through Funnel |
 | RUZ iCal | §4.1–4.2 | the data becomes part of our feed (§6.5) instead of being served as is |
 | Google Sheets | §3 | unchanged; Dropbox links to `.xlsx` files are read the same way (§6.7) |
 | Course wiki | — | new (D60): course pages of a MediaWiki, listed in `wiki_pages` |
@@ -155,7 +157,7 @@ one whose row changed, becomes a notice in the mailbox: a letter from "Course wi
 the link and the row; its msg_id is negative, counting down, so it never meets a letter's UID. The batches read it as
 a letter: the PDF behind the link is fetched (D59), the model decides whether it is a sheet and takes the due date of
 the student's group, which it knows from `about_me` (D52). The first read is a baseline: only the last item of each
-section of tasks becomes a notice. A page failing for a day is told to the System topic once. The wiki refuses
+section of tasks becomes a notice. A page failing for a day is pushed once. The wiki refuses
 curl's user agent; the service sends its own.
 
 **Stage 5 details (HSE App X):**
@@ -165,10 +167,8 @@ curl's user agent; the service sends its own.
   discipline as HSE App X names it; the merge takes `abbr` from the dictionary, as for `deadlines.course`.
 - Polling is turned on by the common setting `hseapp_enabled` (yes by default, a switch on the HSE App X screen).
   Login links (PKCE states, the last 5) live in memory: after a restart a new one is needed.
-- A needed login is one message to System per change of state (remembered in `kv`, so a restart does not repeat it)
-  with a button. Web App buttons do not work in groups, so the button opens the chat with the bot
-  (`/start hseapp`), and the bot answers with a Mini App button for the HSE App X screen. A restored login is one
-  line. The API unavailable for 3 h (Tablo's threshold, §5.1) is one line, and one more when it is back.
+- A needed login is one push per change of state (remembered in `kv`, so a restart does not repeat it), leading to
+  «Machine → HSE App X». A restored login is one line. The API unavailable for 3 h (Tablo's threshold, §5.1) is one line, and one more when it is back.
 - Labels: a budget of 15 characters, checked in characters, as in batch parsing. If Haiku is unavailable, cached
   labels stay, and only deadlines without a label keep the Russian title (in Tablo a failure made them all Russian).
   A truncated or rejected answer is split in half; the deadline it breaks on keeps its Russian title, which is cached
@@ -207,15 +207,15 @@ As in §2.2: one dictionary, manual entries win, `resolve` runs under a lock. Ma
 App (D3).
 
 Stage 4 details: the title budget is 13 characters (what Tablo's column really holds: "Intro to Prog"); Haiku's
-answer can also be deleted in the Mini App, and then the course is named again. RUZ courses pass through the
+answer can also be deleted in the web app, and then the course is named again. RUZ courses pass through the
 dictionary after every poll, and the courses of deadlines and events after every batch run. The parsing model
 sees the whole dictionary, one line per course: `abbr`, `title` and every name it goes by. So a course is
 known under any name (a short form like «ВвП», a nickname, a translation): the parsing model names it as in the
 dictionary, and the deadline label and event title start with its `abbr`; it invents its own abbreviation only for a
 course not in the dictionary. Naming a new name, Haiku also sees the whole
 dictionary and gives a short form of a known course that course's `title` and `abbr`. A short form Haiku misses can
-be added in the Mini App as a manual entry with the course's `title` and `abbr`. `deadlines.course` keeps the source's name; `abbr` comes from the dictionary at merge time (stage 5).
-A Haiku error stays visible (`ruz.subjects_error`, the Mini App) while at least one of the names it failed on waits
+be added in the web app as a manual entry with the course's `title` and `abbr`. `deadlines.course` keeps the source's name; `abbr` comes from the dictionary at merge time (stage 5).
+A Haiku error stays visible (`ruz.subjects_error`, the web app) while at least one of the names it failed on waits
 for a translation; a manual entry or the course disappearing from the source clears it.
 
 ### 6.3 Problem sheets
@@ -226,11 +226,10 @@ for a translation; a manual entry or the course disappearing from the source cle
    separate call if the "urgent" trigger fired.
 3. If `pdf_content` is on, the model reads up to 10 pages and 30k tokens (whichever comes first) and writes a summary.
 4. Deadlines, news and events from the PDF go to the common tables (D14).
-5. The bot posts the file to the Sheets topic with a caption: course, number, due date, a link to the original
-   message, a course hashtag.
-6. **A new version** is detected by the rules of D14. The bot replaces the file in the old message (a media `edit`)
-   and replies to it with "sheet updated" and a short description of the changes. For that the difference of the
-   texts is computed locally, and only it goes to the model.
+5. The sheet is published (status `posted`, D69): the web app's shelves show it with its course, number, due date,
+   source and PDF (§8.6).
+6. **A new version** is detected by the rules of D14 and chained to the older one, with a short description of the
+   changes. For that the difference of the texts is computed locally, and only it goes to the model.
 
 **Sheets that are no PDF of a chat (D59).** A study chat's message or a letter without a PDF of its own may link to
 one: the first such link (at most three are tried) is downloaded before the batch (`collectors/links.py`) and its
@@ -241,7 +240,7 @@ PDF. Not tried: pages behind a login (Google Classroom, Smart LMS). What comes m
 cannot be read now is tried at the next runs, three times in all. A letter's first PDF attachment is kept when the
 letter arrives (`files` row of source `mail`), so its batch finds it; a sheet of a letter belongs to the mailbox
 (`chat_id` 0) and names the letter as its source. A message the model cannot answer for is tried at the next two runs
-of its chat before it is skipped, and the System topic's line about it names its PDF, so the owner can add the sheet
+of its chat before it is skipped, and the pushed line about it names its PDF, so the owner can add the sheet
 by hand.
 
 **Stage 6 details:**
@@ -259,18 +258,17 @@ by hand.
   per page.
 - The batch schema got a `sheets` array (`msg_id`, `course`, `number`, `due`) in every item, by analogy with
   `deadlines` and `events`, instead of a single `sheet` field. A sheet enters the `sheets` table in the batch's
-  transaction (status `new`) and the forum after the run; a Telegram failure leaves it queued until the next run.
+  transaction (status `new`) and is published after the run; a failure leaves it queued until the next run.
 - The same file (by `sha256`) a second time is not a sheet. A new version is the same message with the file replaced,
   or the same chat and course (by the dictionary's `abbr`) and the same number; if at least one has no number,
   almost the same file name (without the extension and version marks like `v2`, `final`, `(1)`, `исправленный`;
   the numbers in the name must match).
-- Full reading (`pdf_content`) is the task `pdf`: a summary in the forum's language (D41) in the caption and
+- Full reading (`pdf_content`) is the task `pdf`: a summary in the app's language (D41) and
   deadlines from all pages. They go to `deadlines` with the source `tg` and a `sheet_id`: editing the message text
   does not withdraw them, deleting the message does. Events and news are not taken from the full reading: batch
   parsing provides them from the message and the first page. For a new version only the difference of the texts goes
-  to the model, and the answer is "what changed" in a reply to the old message.
-- The reading limits are the common settings `pdf_pages` and `pdf_tokens`, edited on the Sheets screen (there was no
-  common settings screen yet).
+  to the model, and the answer is "what changed" of the new version.
+- The reading limits are the common settings `pdf_pages` and `pdf_tokens` («Machine»).
 
 **The assumed due date (stage 12, §11.1):**
 
@@ -284,18 +282,17 @@ by hand.
 - The date is the class's day (deadlines are dates); the sheet also keeps the class's start (`sheets.due_at`) and
   shows it. The sheet is marked `due_assumed`, and its date becomes a deadline of its own: source `tg`, the sheet's
   message, `sheet_id`, `assumed`, the label `<abbr> sheet <number>` (renamed once the dictionary knows the course).
-  Both are marked "≈ … (assumed)" in the forum's or the Mini App's language: the caption in the Sheets topic, the
-  Deadlines pin, its messages and reminders, the deadline's row and card and the sheet's card in the Mini App;
+  Both are marked as assumed in the web app (the deadline's row and card, the sheet's card) and in its pushes;
   `GET /api/deadlines` has `assumed`.
 - The assumed date follows the timetable while the class has not started: it is synced with the Midterms after every
   RUZ poll, batch run, correction by the owner and manual dictionary change (`Schedule.followers`). A moved class
-  moves the deadline (a move in the Deadlines topic), a cancelled one gives the next seminar, none left withdraws it;
-  the caption is edited. A deadline the owner hid stays as it is.
+  moves the deadline (a pushed move), a cancelled one gives the next seminar, none left withdraws it. A deadline the
+  owner hid stays as it is.
 - A real date wins, and the mark goes: the first page or the message (the batch gives the sheet's `due`), the sheet's
   pages (`pdf_content`), a later message (the batch model sees the deadline marked "assumed" and moves it, or gives
-  the same work with a date), or the owner (the sheet's due date in the Mini App, or the date of the deadline itself:
+  the same work with a date), or the owner (the sheet's due date in the web app, or the date of the deadline itself:
   with the same title and list it stays the chat's deadline and moves; otherwise it becomes an own copy as usual).
-  Clearing the sheet's date in the Mini App leaves it without one.
+  Clearing the sheet's date leaves it without one.
 - A new version of a sheet takes the older one's assumed deadline over (its message, so deleting the older message
   does not withdraw it), and its own date is found the same way, from the new message's time. Deleting the message
   withdraws the deadline, and the sheet stops assuming. Sheets saved before stage 12 are not assumed.
@@ -307,41 +304,32 @@ by hand.
 - **Merging and dropping completed and hidden ones** follows the algorithm of §5.5, plus D45: a letter or a chat
   moves HSE App X's date. **Picking for the
   screen** follows §5.6.
-- **Own and hidden** (`own_deadlines`, `hidden_deadlines`) live here and are managed in the Mini App and with the
-  forum buttons; HA has no to-do lists any more (D34).
-- **The Deadlines topic.** The bot edits the pinned message with the list of upcoming deadlines in place. Every new
-  or moved deadline arrives as its own message.
+- **Own and hidden** (`own_deadlines`, `hidden_deadlines`) live here and are managed in the web app and by Claude;
+  HA has no to-do lists any more (D34).
+- **News of the deadlines** (`outputs/deadlines.py`, D69): every new or moved deadline is pushed to the web app's
+  devices (§8.6).
 
-**Stage 5 details (the merge and the Deadlines topic):**
+**Stage 5 details (the merge and its news):**
 
-- There is one merge for everyone (`processing/merge.py`): `GET /api/deadlines`, the Deadlines pin and the Mini App
-  take one list in one order. `deadlines` rows (RUZ, mail, chats) are taken while in force and at most 3 days old,
-  like `news_deadlines` in Tablo; a row's `course` is the source's name, and the `abbr` for comparison comes from the
+- There is one merge for everyone (`processing/merge.py`): `GET /api/deadlines`, the web app and the connector take
+  one list in one order. `deadlines` rows (RUZ, mail, chats) are taken while in force and at most 3 days old, like
+  `news_deadlines` in Tablo; a row's `course` is the source's name, and the `abbr` for comparison comes from the
   dictionary or, without an entry, from the first word of the label, as in Tablo.
 - A hidden deadline remembers the row it came from (`hidden_deadlines.ref`: `dl:<id>`, `hseapp:<id>`) and stays
   hidden after that row is renamed (the English HSE App X label after Haiku answers, `<abbr> Midterm` after the
   dictionary). In Tablo hiding compared only the title and date, and a renamed deadline came back.
-- Topic messages come from the difference of lists: the new list is compared with the last one shown
-  (`kv["deadlines.shown"]`) by source row. New or moved means a message; withdrawn by the source (message deleted or
-  edited, the class is gone, gone from HSE App X) means "withdrawn"; gone otherwise (hidden, completed in HSE App X,
-  long past) means silence; a copy of the same task on the same date from another source is not news; a rename only
-  edits the pin.
-- Silently, into the pin only, come: everything on the first showing of the list, on the first HSE App X poll and on
-  the first RUZ poll (in stage 4 midterms of the first poll arrived as messages), and changes made by the owner (HA,
-  the Mini App, buttons).
-- Under a deadline message is **Hide** (**Delete** for an own one: it is deleted, as in HA), and under a hidden one
-  **Restore**. Until the second round a news notification had **Hide** too (the item left the pin and `/api/news`
-  for good, and an item that replaced a hidden one was hidden too); the notifications went with D55, and with them
-  the only way to hide a news item. A hidden item stays hidden.
-- New and moved deadlines and the reminders notify; the pin and a withdrawn deadline do not (D55).
+- The news come from the difference of lists: the new list is compared with the last one seen
+  (`kv["deadlines.shown"]`) by source row. New or moved means a push; gone means silence; a copy of the same task on
+  the same date from another source is not news; a rename is not news either.
+- Silent are: everything on the first comparison of the list, on the first HSE App X poll and on the first RUZ poll,
+  and changes made by the owner (HA, the web app, Claude).
 - A change of `RUZ_ICAL_URL` (the link's hash differs from the stored one) makes the next poll with classes the first
-  one: System reports the changed link, Timetable gets nothing, and the old classes' midterms are withdrawn silently.
-- A manual dictionary correction in the Mini App renames `<abbr> Midterm` at once, without waiting for a RUZ poll.
-- The pin is rebuilt after every batch run, RUZ and HSE App X poll, owner action, and at midnight ("today" and
-  "tomorrow" shift).
+  one, and the old classes' midterms are withdrawn silently.
+- A manual dictionary correction renames `<abbr> Midterm` at once, without waiting for a RUZ poll.
+- The comparison runs after every batch run, RUZ and HSE App X poll, owner action, and at midnight.
 - A sheet without a due date has an assumed one, its course's next seminar (§6.3, stage 12): a `tg` row with
-  `assumed` set, marked "≈ … (assumed)" in the pin, the messages, the reminders and the Mini App, and `assumed: true`
-  in `GET /api/deadlines`. It follows its class like a Midterm and gives way to a real date.
+  `assumed` set, marked as assumed in the web app and its pushes, and `assumed: true` in `GET /api/deadlines`. It
+  follows its class like a Midterm and gives way to a real date.
 
 ### 6.5 Timetable and the iCal feed
 
@@ -363,7 +351,7 @@ by hand.
   - `optional`: where one may go: optional consultations, events, meetings.
 
   The model decides where an event goes during batch parsing (the `required` field in `events`). A mistake can be
-  fixed with a button under the message in the Timetable topic or in the Mini App.
+  fixed on the event's card in the web app (§8.6).
 - **The feed for Tablo** is a third one, `tablo`: both calendars together, with marks on every event:
   - optional ones: `STATUS:TENTATIVE` and `X-INFOMASTER-OPTIONAL:TRUE`;
   - the source: `X-INFOMASTER-SOURCE`: `ruz`, `tg`, `mail`, `pdf` (for an icon, as with deadlines, §5.6);
@@ -373,8 +361,7 @@ by hand.
   The current `ical.py` skips only `CANCELLED`, so it reads `TENTATIVE` as an ordinary class and ignores the `X-`
   fields: the feed works in Tablo without changes. Showing the marks needs a small change (the checklist in
   [decisions.md](decisions.md)).
-- The feeds are served by a secret link inside the internal network only (§8). Timetable changes go to the Timetable
-  topic.
+- The feeds are served by a secret link inside the internal network only (§8).
 
 **Stage 4 details:**
 
@@ -386,7 +373,7 @@ by hand.
   failure. An empty feed while there are no classes yet (between terms) is not a "first poll": "RUZ connected" comes
   once, with the first feed that has classes. The status (`ruz.classes`) holds the number of classes of the last feed
   received, without stored past ones.
-- The RUZ link is a secret: a poll error reaches the status, the log and System without it (an HTTP error as the code
+- The RUZ link is a secret: a poll error reaches the status, the log and the pushes without it (an HTTP error as the code
   and status text, others with the link cut out).
 - Times in the feeds are in UTC: every calendar reads it, and Moscow has no daylight saving time. An event without an
   end lasts 80 minutes (one class).
@@ -408,15 +395,14 @@ by hand.
 
 Stage 7 made a daily summary of chats for a Summaries topic and the `/summary` command. They were removed in the
 second round (stage 11, D55): what matters reaches the news and the deadlines anyway, and the summaries were one more
-thing to read. The code, the topic, the command, the Mini App screen, the `summary_time` setting and the chats'
+thing to read. The code, the topic, the command, the web app screen, the `summary_time` setting and the chats'
 `summary` switch are gone. Old data stays where it is and is never read: the saved settings rows, the
-`messages.summarized_at` column and the `summary` rows of the LLM journal, which the Mini App still shows by task.
+`messages.summarized_at` column and the `summary` rows of the LLM journal, which the web app still shows by task.
 
 ### 6.7 Grades
 
 Unchanged from §3: tab layout by Haiku with a cache, a 0–10 scale, a snapshot on the first poll, placeholder zeros,
-a journal of new grades. New grades go to the API and the Mini App's Study tab; since the second round the forum
-gets none (D55).
+a journal of new grades. New grades go to the API and the course lenses of the web app; they are not pushed (D55).
 
 **Stage 8 details:**
 
@@ -434,9 +420,9 @@ gets none (D55).
   the tab changes.
 - The settings are common: `grades_student` (the full name), `grades_sheets` (`[{url, label}]`, where `label` is the
   course before the task label, up to 10 characters; empty means the first 8 characters of the sheet title),
-  `grades_window_days` (7). They are edited on the Grades screen of the Mini App; sheets are read right after an
-  edit and every 30 minutes after that. `include_baseline` was not carried over: the Grades screen shows all current
-  grades with the new ones marked.
+  `grades_window_days` (7). They are edited in «Machine → Gradebooks»; sheets are read right after an edit and every
+  30 minutes after that. `include_baseline` was not carried over: the lens shows all current grades with the new ones
+  marked.
 - Differences from Tablo. No own row in any tab is an error of the sheet, not an empty list: grades are not erased.
   A grade no longer in the sheet (the tab hidden, the row gone from one tab, the cell cleared) is remembered as gone
   (`grade_items.gone`): coming back with the same grade is not news, with a different one it is news with the
@@ -444,7 +430,7 @@ gets none (D55).
   those gone in the same read), not a new grade. A task the model named twice counts once. The layout answer gets at
   least 60 tokens per column (a tab of dates is not cut off). An answer the model cannot give (a refusal, a cut-off)
   is cached as a skipped tab so as not to pay for it every 30 minutes, and is visible in the status (`unread`) and
-  the Mini App; a network failure or the limit is a sheet error, the grades stay, and the tab is laid out on the next
+  «Machine»; a network failure or the limit is a sheet error, the grades stay, and the tab is laid out on the next
   poll. Removing a sheet or changing the name erases its grades: the next read is a snapshot again. A closed sheet (a
   login page instead of an xlsx) is a "not a workbook" error.
 - **Dropbox sheets (stage 15).** Some courses share the grade table as a Dropbox link to an `.xlsx` file. A link in
@@ -457,13 +443,11 @@ gets none (D55).
   extension, URL-decoded, or the name in `Content-Disposition` when the answer has one (a renamed file). Everything
   after the download is the same as for a Google Sheet; a deleted or private link answers with an HTML page, which is
   a "not a workbook" error. A folder link (`/scl/fo/`, `/sh/`), a file that is not `.xlsx` and any other Dropbox link
-  are refused when the sheet is added (in the Mini App's language); a file that turns out not to be `.xlsx` by its
+  are refused when the sheet is added (in the app's language); a file that turns out not to be `.xlsx` by its
   `Content-Disposition` is an error in the sheet's status. Code: `settings.grade_sheet_id` and `dropbox_file` (the
   link), `collectors/grades.download_url` (the download).
-- The forum: stage 8 posted new grades to a Grades topic, one message per sheet; the second round removed it
-  (D55), and `grade_events.post_id` is left from it. The first read of a sheet is a silent line in System
-  ("connected: tabs…, grades…"); a sheet that cannot be read for 12 h is one line in System with a notification, and
-  one more, silent, when it is read again.
+- Stage 8 posted new grades to a Grades topic of the forum; the second round removed it (D55), and
+  `grade_events.post_id` is left from it. A sheet that cannot be read for 12 h is pushed once (D69).
 - `GET /api/grades` (internal port, Bearer) is level C of §11.5: `{"items": [{key, label, value, bonus, seen_at}],
   "window_days"}`, the last event within the window for every task, newest first. In `GET /api/status` → `grades`:
   `configured`, `sheets` by sheet id (`title`, `ok_at`, `error`, `tabs`, `items`, `unread`; neither links nor names),
@@ -490,11 +474,10 @@ A new version is a draft first: its source and its PDF are uploaded, then it is 
 Every version is kept; only the newest can be taken back (an undo). The server never runs TeX: the PDF comes built.
 
 **Links** (`library/links.py`). A file goes in or out by a signed link that names one file and one direction:
-`GET /library/<token>/<name>` (24 hours), `PUT /library/<token>` (6 hours), on the public port, outside the Mini
-App's initData check (the signature is the check). The key is kept in `kv`, so links survive a restart. Claude Code
-uses them with `curl`; the Mini App opens a PDF by one (its Materials screen, §8.4).
+`GET /library/<token>/<name>` (24 hours), `PUT /library/<token>` (6 hours), on the public port (the signature is the check). The key is kept in `kv`, so links survive a restart. Claude Code
+uses them with `curl`; the web app opens a PDF by one (§8.6), a sheet's kept PDF too (`k`, D69).
 
-**Sources** (`library/feed.py`). Besides uploads from the Mini App and the connector, three sources feed the library
+**Sources** (`library/feed.py`). Besides uploads from the connector, three sources feed the library
 on their own:
 - *Study chats.* In a study chat the batch model (§6.1) also returns `materials`: messages that carry course
   material (a photo of the board or of notes, notes, slides, a recording, a link to one), each with its course as the
@@ -508,21 +491,21 @@ on their own:
 - *The web app* (§8.6, «+»). A photo of the board, a recording, a file, a note or a link of the owner (source
   `web`), at the class in progress or a recent one the owner picks, else in the inbox; Android's «Share» lands here
   too.
-- *Sheets* (§6.3). When a sheet or a new version of it is prepared for the forum, its PDF is copied in as kind
+- *Sheets* (§6.3). When a sheet or a new version of it is prepared, its PDF is copied in as kind
   `sheet` (source `sheet`, its message as the origin), at the class of its course that was on when it was sent, else
   at its course alone; once per file.
 - *The bot.* A private message of the owner to the bot that is no command goes to the inbox (source `bot`): a photo,
   a document, audio, a voice message or a video is downloaded by the bot itself; a text becomes a link (its first URL)
   or a text. A forward's origin is the author, the caption the title. Each message of an album is its own item; the
-  bot answers once, quietly, in the forum's language. Anyone else's messages are ignored.
+  bot answers once, quietly, in the app's language. Anyone else's messages are ignored.
 
 ## 7. LLM: the journal and the daily limit
 
 **The journal (D22).** Every call, failed ones included, is written to `llm_runs`: the time (UTC), the task (`batch`,
 `pdf`, `image`, `subjects`, `grades`, `hseapp_labels`, `quick` (one line of the web app's «+», §8.6); old rows may
 have `summary`, D55), the chat, the model,
-tokens (input, output, cache), the cost, the duration, the error. The Mini App shows spending for today, the week and the month, broken down
-by task and chat.
+tokens (input, output, cache), the cost, the duration, the error. «Machine → LLM» in the web app shows spending for today, the week and the month,
+broken down by task and chat.
 
 **The limit (D21).** A daily dollar limit for all calls together. Days are counted in Moscow time; prices are set in
 the settings.
@@ -530,17 +513,14 @@ the settings.
 - **Before a call** the budget reserves the worst case: an input estimate from the text length plus `max_tokens` for
   the output. If the reserve does not fit in what is left, the call is not made. After the answer the reserve is
   replaced by the real cost.
-- **80 % of the limit.** Optional tasks are switched off: images and whole-PDF reading. A warning goes to the
-  System topic, silently (D55).
-- **100 %.** All calls stop until midnight. Messages pile up in the queue and are processed the next day. The bot
-  reports this in System with a notification: new deadlines stop too. A button raises the limit for today.
+- **80 % of the limit.** Optional tasks are switched off: images and whole-PDF reading. Nothing is pushed (D55).
+- **100 %.** All calls stop until midnight. Messages pile up in the queue and are processed the next day. It is pushed: new
+  deadlines stop too. «Machine → LLM» raises the limit for today.
 - **Working through the queue after a pause** (D30):
   1. Order: study chats → mail → non-study chats and channels.
   2. Non-study messages older than `ttl_hours` (24 h) are marked processed without calling the model: their news
      would not be live anyway (as in Tablo, §6.3).
   3. Study messages are never thrown away: they hold deadlines and events.
-  4. If the limit hits the ceiling three days in a row, the bot suggests raising it in System and shows which chats
-     eat the most.
 - The limits on the number of images and on PDF pages and tokens work inside the common limit.
 
 ## 8. Outputs
@@ -554,7 +534,7 @@ iCloud subscriptions fetch the feed from their own servers and cannot reach the 
 
 | Port | Paths | Protection |
 |---|---|---|
-| public (Funnel) | `/app/*` (the Mini App), `/hseapp/callback`, `/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics` and `optional.ics` | Mini App: an `initData` check, only the owner's Telegram id is let in. Callback: the PKCE `state`. Feeds: the secret in the path; no `tablo.ics` here |
+| public (Funnel) | `/hseapp/callback`, `/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics` and `optional.ics`, `/library/<token>` | Callback: the PKCE `state`. Feeds: the secret in the path; no `tablo.ics` here. Library links: their signature (§6.8) |
 | public (Funnel) | `/mcp`, `/.well-known/oauth-protected-resource[/mcp]`, `/.well-known/oauth-authorization-server`, `/oauth/*` (the MCP connector, §8.5) | `/mcp`: an OAuth access token; the metadata is public; `/oauth/authorize` lets in only with a one-time code the bot sends to the owner |
 | public (Funnel) | `/web/*` (the web app, §8.6) | `/web/api/*`: a session cookie, got with a code the bot sends to the owner or with a passkey; a change must come from the app's own origin. The page, its files and the service worker are public |
 | internal | `/api/*`, `/calendar/<CALENDAR_SECRET>/main.ics`, `optional.ics`, `tablo.ics` | a Bearer token; the feeds use a secret in the path because calendars cannot send headers |
@@ -579,8 +559,8 @@ The API serves the full current state, with no cursors (D10). There is no "refre
 **Stage 10 details:**
 
 - `GET /api/news` returns `{"items": [{id, source, study, posted_at, full, short, importance}], "ttl_hours"}`: live
-  news in rank order, exactly what the News pin shows (`News.live`), without items replaced, withdrawn by the source
-  or hidden with the button. `id` is a stable number; `source` is `tg` or `mail`; `posted_at` is local time without a
+  news in rank order, exactly what the web app's news show (`News.live`), without items replaced, withdrawn by the source
+  or hidden. `id` is a stable number; `source` is `tg` or `mail`; `posted_at` is local time without a
   zone (§9). This is level B of §11.4 without `deadlines[]` and `replaced`: deadlines from news come already merged in
   `/api/deadlines`, and replaced items are not served. The lengths of `full` and `short` are checked in characters
   for now, not by the font (§2.1).
@@ -589,104 +569,45 @@ The API serves the full current state, with no cursors (D10). There is no "refre
   `sheets`, `grades`, `images`, plus `llm` (`spent_usd`, `limit_usd`, `raised_usd`, `level`). There is
   no separate `news` key as in Tablo: `batches` plays its role.
 - There are no write routes (`POST/PATCH/DELETE /api/deadlines` as in Tablo): own and hidden deadlines are managed in
-  the Mini App and with the forum buttons. infomaster is not connected to HA (D34): no to-do lists, no
+  the web app and by Claude. infomaster is not connected to HA (D34): no to-do lists, no
   `tablo_changed` events, and the internal port is not published on the host. Only Tablo reads it, by service name
   on the `infomaster` network.
 - **The move from Tablo** is the command `python -m infomaster import-tablo --tablo-db <tablo.db>`
   (`infomaster/tablo.py`), run once at the switch. From a read-only copy of Tablo's database it takes own deadlines
   (except those already present with the same title, date and list), hidden ones (by `uid`, which is computed the same
   way; they have no `ref`, so hiding is by title and date, as in Tablo) and the manual dictionary entries (a manual
-  entry from the Mini App wins; a Haiku answer gives way). Rows more than 30 days past their due date are skipped. If
-  the Deadlines pin has already shown something, the copied own deadlines are added to `kv["deadlines.shown"]` so
-  that they do not arrive as messages.
+  entry set by the owner wins; a Haiku answer gives way). Rows more than 30 days past their due date are skipped. If
+  the list was seen already, the copied own deadlines are added to `kv["deadlines.shown"]` so that they are not
+  pushed as new.
 
-### 8.3 Forum (the bot)
+### 8.3 The bot
 
-Topics of the forum group:
+Until stage 16 the bot kept a forum group with topics (Timetable, Deadlines, News, Sheets, System), and a Mini App
+in Telegram held the settings (§8.4). The web app (§8.6) took both places at step 16.10, and both are gone from the
+code (D69). The bot (`outputs/bot.py`) keeps two jobs:
 
-| Topic | What arrives | Notifies |
-|---|---|---|
-| Timetable | new events, moves and cancellations | no |
-| Deadlines | a pin with the list (edited) + new, moved and withdrawn deadlines + the reminders (D47) | new and moved deadlines, the reminders |
-| News | one message that the bot edits (see below) | no |
-| Sheets | PDFs with a caption, updates as replies to the old message | no |
-| System | source errors, "HSE App X login needed", the LLM budget, and lines about what went well | source failures and the spent LLM limit |
+- it sends the owner the login codes of the web app and of the connector, in the private chat;
+- it takes material for the library: a private message of the owner that is no command goes to the inbox (§6.8),
+  and the bot says so, quietly.
 
-**Quiet by default** (D55). Only deadlines notify: a new or moved deadline, a reminder, and a failure of a source in
-System (a source unavailable for 12 hours, a login needed, a grade sheet that cannot be read) or the spent LLM limit,
-since new deadlines stop then. Everything else is sent with `silent=True`: the timetable, the sheets, a withdrawn
-deadline, the lines of System about a recovery, a login or a connected sheet, the 80 % warning, the start of the
-service. Pins never notify. A collector marks a failure by making its line an `Alert` (`i18n.py`) instead of a
-`Phrase`. The Grades and Summaries topics of the first round are gone: grades are in the Mini App and Tablo, and
-the summaries were removed (§6.6). Topics created before stay in the forum and get nothing new.
+`/start` answers with the web app's address (an old link of a forum post or of the calendar lands here too), and the
+bot takes the Mini App's menu button away. Anyone else's messages are ignored. Notifications are Web Push (§8.6):
+only a new or moved deadline, a reminder, a failure of a source or a login it needs, and the spent LLM limit (D55).
 
-**The News message** (D23). A pinned message that the bot rebuilds after every run. The data is the same that
-`GET /api/news` serves Tablo: one `news` table and the same rules (§6.6):
+### 8.4 Mini App (removed)
 
-- live news: not replaced and not older than `ttl_hours` (24 h);
-- ranked by `importance + study`, the newer one higher on a tie;
-- **no space limit**: all live news is shown, `importance = 1` included, always as `full` text. Screen limits
-  (column height, `short`) stay only in Tablo;
-- if the text does not fit in one Telegram message (4096 characters), the bot keeps several messages in a row and
-  edits them all;
-- every item has a source icon and a link to the original message: `t.me/<channel>/<id>` or `t.me/c/<id>/<msg>`.
-  Letters have no link; the subject stands in its place.
-
-Editing the list does not notify, and nothing else goes to News: the first round also sent a short message for
-every new item of `importance` 4 or 5 and deleted it at the next rebuild; the second round removed them (D55), and
-those left from before are deleted at the next rebuild.
-
-Every bot message keeps a link to its original. Deadlines and events have a hide button, and hiding works the same
-way as hiding from HA did. News has none since D55: its button was under the removed notifications.
-
-### 8.4 Mini App
-
-Opened with a button in the bot. Reworked on 22.10.2026 (D44): four tabs at the bottom, each with one job, and every
-thing lives in one place. Lists only show; to change something, tap a row: a card slides up from the bottom (what
-it is, when, where from, with a link to the message) with the actions. Switches live only in the settings. **+** in
-the header of the Deadlines, Timetable and Study tabs adds a deadline, an event, a grade, a sheet or material. Links from the
-forum (`?screen=…`, `start_param`) open the right tab or screen.
-
-- **Deadlines:** the common list after the merge, in groups (overdue, today, tomorrow, this week, later), each with
-  its origin (a chat or a letter with a link to the message, HSE App X, RUZ, own). An own one can be edited or
-  deleted; someone else's can be edited (it becomes own, the original is hidden) or hidden. Hidden ones are on a
-  separate screen with **Restore**.
-- **Timetable:** what the feeds show (`Schedule.agenda`), four weeks ahead by day: RUZ classes with changes, events
-  from chats and mail, own ones. A class card: move or cancel (an own change), "the change is wrong, as in RUZ" for
-  a chat's change, "apply the change" for a disabled one. An event card: edit, required or optional, remove (delete
-  for an own one). Removed events are on a separate screen.
-- **Study:** "Grades", by sheet and own ones by course; tapping a grade edits it (a correction of a sheet's grade
-  holds until the sheet itself changes the grade) or deletes an own one. "Sheets": a card with the summary, editing
-  the course, number, due date and description (the message caption in the Sheets topic is edited), "this is a new
-  version of another one" (D14), and an own sheet can be uploaded as a PDF and deleted. "Materials" is the library
-  (§6.8, D58): the inbox with its count, the courses (documents, items, new ones) and a line of what the library
-  holds on disk. A course's page shows its knowledge base first (the book and the cheat sheet, then the lectures
-  and seminars, the last class first); a tap opens the newest PDF (a cheat sheet's Markdown) by a signed link in
-  Telegram's browser (`openLink`: on iOS Safari's view shows the PDF itself), and **Versions** lists the older
-  ones. Then the course's started classes with their raw items (kind, title, author, new or processed); a card
-  opens an item's file or link or shows its text, moves it to another course or class (or back to the inbox) and
-  removes it. **+** adds material to the inbox, a course or a class: photos from the camera, recordings, any files
-  at once (streamed to disk by `POST /app/api/library/files`, past the app's body limit, with the upload's
-  progress), a note, a link. Knowledge documents are not edited here: Claude makes them.
-- **Settings:** at the top, **Needs attention** lists everything broken (the twin, mail, RUZ, HSE App X, grade
-  sheets, images, the LLM limit, the iCal feeds), and the count shows on the tab's badge. Sources: the twin and chats
-  (the twin's login and logout, the chat list, chat settings and important people), mail, RUZ, HSE App X (login),
-  grade sheets. A grade sheet has its own screen: the name, the course before the grades, a check (when it was read,
-  by which name, how many grades, "read now"), and the tabs with their layout: which column is which task, what the
-  header says, the number in the own row and the 0–10 grade, all columns of the own row; a tab's layout can be
-  corrected (the own one overrides Haiku's answer) and handed back to Haiku. Processing: batches and news, deadline
-  reminders, whole PDFs, images per day, the course dictionary. **LLM spending** (§7, D40) is the only
-  place spending is visible: three period cards, a 30-day chart with the limit line, the period's tasks and chats,
-  the limit and a raise for today, model prices. The languages of the Mini App and the forum. `.env` holds only
-  secrets.
+The Mini App (D44) was removed at step 16.10 (D69). Its handlers stay in `infomaster/actions.py` as the owner's
+actions: the one place of the rules, which the connector's tools call (`connector/tools.call_action`) and «Machine»
+and the shelves of the web app call through the tools, or directly for what has no tool (a login, the LLM limit).
+`actions.public_app` builds the public port with the services under their keys.
 
 ### 8.5 MCP connector (claude.ai)
 
 Stage 13 of §11.1 (D53, D57). infomaster serves a remote MCP server on the public port, and the owner adds
 `https://infomaster.<tailnet>.ts.net/mcp` to claude.ai as a custom connector (Customize → Connectors, any plan). The
 same connector then works in the web, desktop and phone apps; Claude Code adds the same address. claude.ai connects
-from Anthropic's cloud through Funnel. Claude reads what the Mini App shows and changes almost everything the Mini
-App changes; infomaster keeps working without it (D53).
+from Anthropic's cloud through Funnel. Claude reads what the web app shows and changes almost everything the web
+app changes; infomaster keeps working without it (D53).
 
 **Protocol** (`connector/mcp.py`). Streamable HTTP: `POST /mcp`, one JSON-RPC message per request, a plain JSON answer
 (no SSE stream), no sessions; a notification gets 202, `GET` and `DELETE` get 405. The server is dual-era, as the
@@ -731,9 +652,8 @@ pages and the codes live in memory, so a restart only asks to sign in again.
 **Tools** (`connector/catalog.py`). Each has a JSON Schema of its arguments (checked before the call, unknown fields
 refused) and annotations: `readOnlyHint` for reads; `destructiveHint` for changes and removals, so that the client
 asks the owner first (adding a deadline, an event, a gradebook or a grade, restoring a hidden deadline and "read the
-gradebooks now" are not destructive). A change is the Mini App's own action: the tool calls the Mini App's handler,
-with the same checks and the same side effects (a sheet's caption edited, the reminders rescheduled), so no rule lives
-twice.
+gradebooks now" are not destructive). A change is the owner's own action: the tool calls its handler in `actions.py`,
+with the same checks and the same side effects (the reminders rescheduled), so no rule lives twice.
 
 | Reads | Writes |
 |---|---|
@@ -768,12 +688,12 @@ document is its sheet's topics and new notions; the tools' descriptions say its 
 **Journal and undo** (`connector/changes.py`). Every write through the connector is a row of `connector_changes`:
 the time, the connection, the tool, its arguments, one line about it, and the undo steps, which are calls of tools
 (and of a few steps no client sees, like putting Haiku's dictionary entry back as it was) worked out from the state
-before the change. The Mini App's **Settings → Claude connector** screen shows the address to copy, the connections
+before the change. «Machine → Claude connector» in the web app shows the address to copy, the connections
 with **Revoke**, and the last 50 changes with **Undo**. An undo runs at the time it is asked for: when what it acts on
 has changed since (a deadline its source dropped), it fails, keeps the error and changes nothing more. Some changes
 say what an undo does not bring back (removing a gradebook forgets its grades, own corrections and tab layouts), and
 some cannot be undone at all ("read now"). The last 200 changes are kept. The web app's changes go into the same
-journal through the same tools (`via` web, §8.6); the Mini App's screen lists Claude's only.
+journal through the same tools (`via` web, §8.6), and «Machine → Journal» lists both.
 
 **Prompt injection.** Claude reads messages strangers wrote. Tool results are JSON, never prose; a result that
 carries chat text or what a model made of it has an `untrusted` field saying that `text`, `full`, `short`, `summary`,
@@ -783,8 +703,8 @@ the owner can connect.
 
 ### 8.6 Web app
 
-Stage 16 of §11.1 (D61). A home-screen app (PWA) at `https://infomaster.<tailnet>.ts.net/web/` that takes the place
-of the forum and the Mini App. It lives in `infomaster/web/`: the server side next to the connector on the public
+Stage 16 of §11.1 (D61). A home-screen app (PWA) at `https://infomaster.<tailnet>.ts.net/web/` that took the place
+of the forum and the Mini App (D69). It lives in `infomaster/web/`: the server side next to the connector on the public
 port, the client in `web/static/`.
 
 **Client.** Plain ES modules and an import map, no build: Preact and its hooks and htm in `static/vendor/` (with
@@ -830,7 +750,7 @@ with the steps that undo it. After a change a note at the top of the screen offe
 
 - `POST /web/api/deadlines/{action}` `{uid, ...}`: `done` and `not-mine` hide a source's deadline with that reason
   (`hidden_deadlines.reason`; HA, Tablo and the merge see every reason the same, as hidden), and delete an own one;
-  `edit` `{title?, due?, category?}` is the Mini App's edit (a source's deadline becomes an own copy; a sheet's
+  `edit` `{title?, due?, category?}` is the owner's edit (a source's deadline becomes an own copy; a sheet's
   assumed date given another one is its real date, §6.3); `merge` `{keep}` hides `uid` as a duplicate of `keep`
   (`reason` duplicate, `kept`); `confirm` makes an assumed date real; `course` `{course: a lens key}` sets the course
   of a deadline from a chat, a letter or RUZ;
@@ -849,10 +769,9 @@ with the steps that undo it. After a change a note at the top of the screen offe
 **Notifications** (step 16.4, D63). Web Push to every device that turns it on; `web/push.py` sends, `web/notify.py`
 decides what:
 
-- the notifier is called where the forum is and pushes what the forum announces with a sound (D55): a new or moved
-  deadline (`DeadlineTopic.notify`; a withdrawn one goes quietly), the reminders of the evening before and the
-  morning (`DeadlineReminders.notify`), a failure of a source or a login it needs (an `Alert` of the System topic:
-  the twin, HSE App X, mail, RUZ, the wiki, a grade sheet) and the daily LLM limit spent (not the 80 % warning). A
+- the notifier is the service's only notification (D55, D69): a new or moved deadline (`DeadlineWatch.notify`, a
+  withdrawn one is not pushed), the reminders of the evening before and the morning (`DeadlineReminders.notify`), a
+  failure of a source (an `Alert`: the twin, HSE App X, mail, RUZ, the wiki, a grade sheet) or a login it needs and the daily LLM limit spent (not the 80 % warning). A
   message is {title, body, url, tag}: the url is the app's screen (a deadline's card, the feed, «Machine»), and a
   deadline's messages share a tag, so a move replaces its news on the device;
 - a subscription belongs to a web session (`web_push`): ending the session, or 90 days without it, ends the
@@ -896,7 +815,7 @@ needs the owner (`problems` in the feed):
   login, with the time of that read and a count;
 - `GET /web/api/machine/journal`: the connector's journal, the owner's changes in the app and Claude's through the
   connector in one list, the newest 100, each with its undo (`POST /web/api/changes/{id}/undo`);
-- the Mini App's settings, moved over. The screens read through the Mini App's handlers, so the two show the same; a
+- the Mini App's settings, moved over. The screens read through the owner's actions (`actions.py`), as Claude does; a
   change goes through the connector's write tool, journaled with its undo: a chat's settings
   (`PATCH /machine/chats/{id}`), the batches, news, about me and the wiki pages, the reminders, whole PDFs, images and
   the notifications (`PATCH /machine/settings/{group}`), the dictionary (`PUT /machine/courses`,
@@ -904,15 +823,15 @@ needs the owner (`problems` in the feed):
   (`/machine/grades...`). What has no tool is the owner's alone and is not journaled: the twin's login
   (`POST /machine/twin/login|cancel|logout`), HSE App X (`/machine/hseapp...`; the callback page now sends the owner
   back to infomaster), the LLM limit and its raise for today (`/machine/llm`), reading a gradebook now and revoking a
-  connection of Claude's (`/machine/connector`). The model prices stay in the Mini App and the defaults;
+  connection of Claude's (`/machine/connector`). The model prices stay in the code's defaults;
 - notifications: which kinds come (`push_kinds`: new and moved deadlines, reminders, failures and logins, the LLM
   limit) and the quiet hours (`push_quiet`, Moscow time, over midnight too), when a message comes without a sound or
   vibration rather than not at all. The connector's `update_notifications` changes them.
 
-**News** (step 16.7, D66): a third view next to the list and the week, the forum's «News» list in the app.
+**News** (step 16.7, D66): a third view next to the list and the week.
 
 - `GET /web/api/news`: the live news in rank order (`importance + study`, the newer first), the same items as Tablo's
-  `/api/news` and the forum's list, each with where it came from (a chat by its name, a letter by its subject while
+  `/api/news`, each with where it came from (a chat by its name, a letter by its subject while
   it is kept) and when; `ttl_hours` says how long news lives. The feed's `news` counts the live items of importance 4
   and 5, the mark on the view;
 - `GET /web/api/news/{id}`: an item with the message it came from (while it is kept, D29) and its link where the
@@ -925,15 +844,15 @@ the books button in the feed's header (a mark counts the inbox) and the course l
 
 - `GET /web/api/shelf`: what the entry shows: the sheets' count, the inbox's count and the courses with material;
 - `GET /web/api/shelf/sheets[?course=<key>]`: the sheets of a course (a lens's key) or all of them, each with its
-  versions' count, due date (marked when it is a guess), source and state (waiting for the forum, not read);
+  versions' count, due date (marked when it is a guess), source and state (not read yet, failed);
   `GET /shelf/sheets/{id}`: a sheet with every version, its summary, what each version changed and its PDF, and the
   sheets it may become a newer version of. A version's PDF opens by the library's copy (made when the sheet was read,
-  kept for good, a signed link), else by the file the sheets keep for 14 days (`GET /shelf/sheets/{id}/file`, behind
-  the session), else it is shown as gone;
+  kept for good, a signed link), else by the file the sheets keep for 14 days (a signed link, D69), else it is shown as
+  gone;
 - changes of a sheet: `PATCH /shelf/sheets/{id}` (course as a key, number, due, summary: `edit_sheet`, with its undo),
   `POST /shelf/sheets/{id}/join {previous}` (`join_sheet`), `DELETE /shelf/sheets/{id}` (`delete_sheet`, an own sheet
   only); the last two have no undo, and the journal says why. `POST /shelf/sheets` (multipart: course, number, due and
-  the PDF) adds an own sheet as the Mini App does and journals it with the undo that deletes it;
+  the PDF) adds an own sheet and journals it with the undo that deletes it;
 - raw material: `GET /shelf/raw?course=<key>` (a course's classes with their items, and the items of no class),
   `GET /shelf/inbox` (what has no course, and the courses to sort it into), `GET /shelf/classes?course=<key>` (where
   an item can go), `GET /shelf/items/{id}` (the whole text, its class, a signed link to its file, the items on it);
@@ -948,7 +867,20 @@ item's card over them with «Done», «Edit», «Not mine» (an own one: «Delet
 deadlines within two weeks to pick the one that stays) and, for an assumed date, «The date is right», and the «Check»
 queue one question at a time («Check · 1 of 3», «Later» puts one off for the visit). «Machine» with the sources, what
 needs attention, the journal and the settings (16.6), «+» (16.5), the news (16.7) and the shelves of sheets and raw
-material with the inbox (16.8), and the corrections (16.9). Still to come (D66): the switch (16.10).
+material with the inbox (16.8), and the corrections (16.9). Since the switch (16.10, D69) the app is the only
+interface besides Claude and Tablo.
+
+**The switch** (step 16.10, D69). The forum and the Mini App are removed (§8.3, §8.4): the bot only sends login
+codes and takes material. What their topics did besides posting stays: `DeadlineWatch` compares the list with the one
+seen last and pushes a new or moved deadline, the reminders are pushed, and a sheet is published without a message.
+What came with it:
+- the lens's «Knowledge» shelf links every published version of a document (`documents[].versions`: version, date,
+  note, link), the newest first;
+- «Machine» shows the library's disk and the free space (`library` in `GET /machine`, `Library.usage`);
+- a sheet's PDF the sheets keep for 14 days opens by a signed link (`/library/<token>/<name>`, payload `k`: its hash),
+  so it opens outside the session, as Safari does for an app on the iPhone's Home Screen; the session's route
+  (`GET /shelf/sheets/{id}/file`) stays for a port without the links;
+- the calendar's «Edit» link is the entry's card (`/web/#/c?uid=…`), which quotes the source message.
 
 **Corrections** (step 16.9, D68, `web/fixes.py`, client `fixes.js`): the card of a class or an event carries `fix`,
 what stands behind it with every field as it is now (a class: RUZ's time and room, the owner's correction, the chat's
@@ -987,7 +919,6 @@ Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Ta
 | `sheets` | problem sheets: message, file hash, course, number, due date, text, summary, previous version, the bot's message id |
 | `grade_sheets`, `grade_items`, `grade_events` | grades (§3.6); `kv` holds the view of every tab after a read and the own tab layouts (D44) |
 | `own_grades` | own grades and corrections of sheet grades (D44) |
-| `bot_posts` | what the bot published: topic, message id, what it refers to (for edits and hiding) |
 | `llm_runs` | the LLM journal |
 | `connector_clients`, `connector_grants`, `connector_tokens` | the MCP connector's OAuth (§8.5): registered clients, the connections the owner allowed with their refresh token, access tokens; tokens as SHA-256 |
 | `connector_changes` | the journal of changes made through the connector or the web app (`via`), with their undo steps (§8.5) |
@@ -997,7 +928,7 @@ Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Ta
 
 ## 10. Settings and secrets
 
-- **Settings** are stored in the database and edited in the Mini App. There is no config file for the user.
+- **Settings** are stored in the database and edited in the web app's «Machine» (or by Claude). There is no config file for the user.
 - **Secrets** live in `.env` (listed in `.gitignore`), except those that appear at run time: the HSE App X tokens and
   the twin's session are kept in `data/`, which is never committed.
 
@@ -1005,15 +936,14 @@ Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Ta
 |---|---|
 | `TG_API_ID`, `TG_API_HASH` | the Telegram application for the twin (my.telegram.org) |
 | `TG_BOT_TOKEN` | the bot |
-| `TG_OWNER_ID` | the owner's Telegram id, the only one the Mini App and the bot let in |
-| `TG_FORUM_ID` | the forum group |
+| `TG_OWNER_ID` | the owner's Telegram id, the only one the bot lets in and sends login codes to |
 | `ANTHROPIC_API_KEY` | Haiku |
 | `MAIL_USER`, `MAIL_PASSWORD` | IMAP |
 | `RUZ_ICAL_URL` | the RUZ feed |
 | `API_TOKEN` | Bearer for the internal API |
 | `CALENDAR_SECRET` | the path secret of the feeds on the internal port |
 | `CALENDAR_PUBLIC_SECRET` | another secret: the `main` and `optional` feeds for one's own calendar through Funnel (D43) |
-| `PUBLIC_URL` | the Funnel address of the public port (`https://infomaster.<tailnet>.ts.net`): the Mini App button, the HSE App X callback |
+| `PUBLIC_URL` | the Funnel address of the public port (`https://infomaster.<tailnet>.ts.net`): the web app, the HSE App X callback, the library's links |
 | `TS_AUTHKEY` | the personal tailnet's key for the sidecar, needed only on the first start |
 | `CONTAINER_DNS_1`, `CONTAINER_DNS_2` | DNS servers of the containers (`compose.yaml`) |
 | `HTTP_PUBLIC_PORT`, `HTTP_INTERNAL_PORT` | ports inside the container, 8080 and 8081 by default |
@@ -1082,7 +1012,7 @@ own; Claude is an optional door, not the brain (D53).
     writes the LaTeX, builds the PDF and uploads both. The server neither transcribes nor runs TeX.
 15. **New sources** (done, D54, D60). Sheets and homework from course wiki pages; grade sheets shared as Dropbox
     links.
-16. **An app instead of the forum** (in progress, §8.6, D61). A home-screen web app, built anew, with its own login and
+16. **An app instead of the forum** (done, §8.6, D61, D69). A home-screen web app, built anew, with its own login and
     Web Push for deadlines, reminders and failures. Then the forum is switched off; the bot stays to receive
     forwarded files and to send login codes. In steps:
     - 16.1 the frame and the login (done): the page, manifest, icons, fonts and service worker; a code from the bot,
@@ -1104,11 +1034,10 @@ own; Claude is an optional door, not the brain (D53).
       library's inbox; changes are the connector's tools, two of them new (`join_sheet`, `delete_sheet`);
     - 16.9 corrections (done, D68): moving, cancelling and changing a class, hiding a chat's event, the main or
       optional calendar, the hidden deadlines and events with «Restore», correcting grades;
-    - 16.10 the switch, once the app has everything the forum and the Mini App give (D66): the links of calendars
-      and cards lead to the app; the forum's topics and the Mini App are switched off. Still missing from the app,
-      to settle before the switch (D67): every version of a knowledge document with its own link (the lens's
-      «Knowledge» shelf links the newest only), the library's disk usage, and the fallback PDF of a sheet in an app
-      added to the iPhone's Home Screen.
+    - 16.10 the switch (done, D69): every version of a knowledge document with its own link, the library's disk in
+      «Machine», a signed link to a sheet's kept PDF, the calendar's links to the app's cards; then the forum and the
+      Mini App are removed from the code, the bot stays for login codes and material, and the deadlines' news, the
+      reminders and the sheets go on without posting.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

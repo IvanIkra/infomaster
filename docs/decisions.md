@@ -397,6 +397,25 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   Mini App would refuse when it is longer than ten characters. All of it goes through the connector's existing tools,
   journaled with their undo.
 
+- **D69. The switch: the web app takes the forum's and the Mini App's place, and both leave the code, 21.11.2026.**
+  This finishes stage 16 of §11.1 (step 16.10) and changes §1–§4, §6, §7, §8 and §10. First the app got what D67 left
+  for the switch: every published version of a knowledge document with a link of its own in the course's lens, the
+  library's disk in «Machine», and a signed link to a sheet's PDF the sheets keep for 14 days (`/library/<token>`, the
+  library's links), so it opens in Safari too, where an app on the iPhone's Home Screen sends a link and the session
+  is not shared. The calendar's «Edit» link opens the entry's card in the app (`/web/#/c?uid=…`); its source line
+  keeps the message's own link, as the card quotes the message, so the Mini App's page of a message is not rebuilt.
+  Then the forum and the Mini App are removed, not switched off: kept behind a switch they would be a second
+  interface to keep right with every change, and only the owner uses the service. The bot keeps two jobs, the login
+  codes and the material the owner sends it, and answers `/start` with the app's address. What the topics did besides
+  posting stays: the deadlines are compared with the list seen last and a new or moved one is pushed
+  (`DeadlineWatch`), the reminders are pushed, and a sheet is published without a message (`SheetPublisher`; the
+  status keeps the name `posted`, so versions chain as before). The Mini App's handlers were the one place of the
+  rules that the connector and «Machine» call, so they stay as `actions.py`, the owner's actions; its page, its
+  initData check and its routes go, and the tests mount the actions on their old paths. The setting
+  `miniapp_language` becomes `language` (the stored value moves once), `forum_language` and the `bot_posts` table
+  are dropped, and `TG_FORUM_ID` is no longer read. Web Push is now the only notification channel and has not yet
+  been seen on a real device, so the server keeps the old image until it has; a rollback is the previous commit.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.
