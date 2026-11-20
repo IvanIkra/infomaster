@@ -447,9 +447,9 @@ function TwinLogin({ twin, onTwin }) {
   <//>`;
 }
 
-const KINDS = { user: ["private", "личный"], bot: ["bot", "бот"], group: ["group", "группа"],
+const CHAT_KINDS = { user: ["private", "личный"], bot: ["bot", "бот"], group: ["group", "группа"],
                 supergroup: ["supergroup", "супергруппа"], forum: ["forum", "форум"], channel: ["channel", "канал"] };
-const kindOf = (kind) => (KINDS[kind] ? KINDS[kind][getLang() === "ru" ? 1 : 0] : kind);
+const kindOf = (kind) => (CHAT_KINDS[kind] ? CHAT_KINDS[kind][getLang() === "ru" ? 1 : 0] : kind);
 
 const chatFacts = (chat) => [kindOf(chat.kind), chat.settings.study && m("study"),
   chat.settings.filter === "important" && m("importantOnly")].filter(Boolean).join(" · ");
