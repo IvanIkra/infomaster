@@ -281,7 +281,7 @@ class Sheets:
     def file_gone(self) -> str:
         """The reason a sheet failed when its file is gone, for the web app: kept in the row, so in its language
         of now."""
-        return tr(self.settings.get("miniapp_language"), "the file is deleted already", "файл уже удалён")
+        return tr(self.settings.get("language"), "the file is deleted already", "файл уже удалён")
 
     def failed(self, sheet_id: int, error: str) -> None:
         with self.db:
@@ -586,7 +586,7 @@ class Sheets:
         """What changed against the older version, from the diff alone (D14)."""
         changed = pdf.diff(old, new, DIFF_CHARS)
         if not changed:  # a scan has no text to compare
-            return tr(self.settings.get("miniapp_language"), "The text is the same.", "Текст не изменился.") \
+            return tr(self.settings.get("language"), "The text is the same.", "Текст не изменился.") \
                 if old and new else None
         prompt = "\n".join(self._context(sheet) + ["", "Changed lines:", changed])
         try:
@@ -604,7 +604,7 @@ class Sheets:
 
     def _prompt(self, system: str) -> str:
         """A system prompt asking for the app's language."""
-        return system.format(**PROMPT_WORDS[self.settings.get("miniapp_language")])
+        return system.format(**PROMPT_WORDS[self.settings.get("language")])
 
     # --- the owner's joining (the web app) -------------------------------------------------------
 

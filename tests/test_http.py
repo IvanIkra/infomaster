@@ -56,10 +56,10 @@ async def test_actions_llm(aiohttp_client, budget, journal, store, schedule, mer
     assert today["by_task"] == [{"task": "batch", "runs": 2, "failed": 0, "cost_usd": 0.25, "tokens": 4},
                                 {"task": "subjects", "runs": 1, "failed": 0, "cost_usd": 0.05, "tokens": 2}]
     assert [(c["title"], c["cost_usd"]) for c in today["by_chat"]] == [("Матан", 0.2), ("Mail", 0.05)]
-    settings.set("miniapp_language", "ru")  # what the service names itself follows the web app's language (D41)
+    settings.set("language", "ru")  # what the service names itself follows the web app's language (D41)
     body = await (await client.get("/app/api/llm", headers=owner())).json()
     assert [c["title"] for c in body["periods"]["today"]["by_chat"]] == ["Матан", "Почта"]
-    settings.reset("miniapp_language")
+    settings.reset("language")
     assert len(body["days"]) == 30 and body["days"][-1] == {"day": "2026-10-20", "runs": 3, "failed": 0,
                                                             "cost_usd": 0.3, "stopped": False}
     assert body["days"][-4]["cost_usd"] == 0.3
@@ -118,11 +118,11 @@ async def test_actions_general(aiohttp_client, budget, journal, store, schedule,
     assert (await client.patch("/app/api/general", json={}, headers=owner())).status == 400
 
     # the language (D41): English by default
-    assert (body["miniapp_language"], body["languages"]) == ("en", ["en", "ru"]) and "forum_language" not in body
-    body = await (await client.patch("/app/api/general", json={"miniapp_language": "ru"}, headers=owner())).json()
-    assert body["miniapp_language"] == "ru"
-    bad = await client.patch("/app/api/general", json={"miniapp_language": "de"}, headers=owner())
-    assert bad.status == 400 and settings.get("miniapp_language") == "ru"
+    assert (body["language"], body["languages"]) == ("en", ["en", "ru"]) and "forum_language" not in body
+    body = await (await client.patch("/app/api/general", json={"language": "ru"}, headers=owner())).json()
+    assert body["language"] == "ru"
+    bad = await client.patch("/app/api/general", json={"language": "de"}, headers=owner())
+    assert bad.status == 400 and settings.get("language") == "ru"
     assert (await client.patch("/app/api/general", json={"forum_language": "ru"}, headers=owner())).status == 400
 
     # what the models are told about the student (D52)

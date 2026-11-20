@@ -64,7 +64,7 @@ SHEETS_KEY = web.AppKey("sheets", SheetPublisher)
 REMINDERS_KEY = web.AppKey("reminders", DeadlineReminders)
 GRADES_KEY = web.AppKey("grades", Grades)
 TWIN_KEY = web.AppKey("twin", Twin)
-GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "miniapp_language",
+GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "language",
            "about_me", "wiki_pages")  # of no other group
 GRADE_SETTINGS = {"student": "grades_student", "sheets": "grades_sheets", "window_days": "grades_window_days"}
 PDF_LIMITS = ("pdf_pages", "pdf_tokens")
@@ -89,7 +89,7 @@ DOC_ORDER = {"book": 0, "cheatsheet": 1}  # a course's own documents before its 
 def language(request: web.Request) -> str:
     """The app's language (D41); English where the app has no settings."""
     settings = request.app.get(SETTINGS_KEY)
-    return settings.get("miniapp_language") if settings is not None else "en"
+    return settings.get("language") if settings is not None else "en"
 
 
 def respond(request: web.Request, data) -> web.Response:

@@ -252,7 +252,7 @@ SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "grades_sheets": ([], _grade_sheets),
     "grades_window_days": (7, _whole(1, 60, "a number of days")),  # a grade is new this long: the API for Tablo
     # What the owner reads (D41): the app, the bot's answers and what the models write for them (a sheet's summary).
-    "miniapp_language": ("en", _language),
+    "language": ("en", _language),
     # What the student tells the batches about themselves (D52): group, subgroup, English group,
     # electives, so that what is meant for others does not count.
     "about_me": ("", _text(ABOUT_ME_CHARS)),
@@ -295,9 +295,20 @@ CHAT_SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
 }
 
 
+# Settings renamed or gone: the new name takes the old row's value once (D69); a gone one's row is dropped.
+RENAMED = {"miniapp_language": "language"}
+GONE = ("forum_language",)
+
+
 class Settings:
     def __init__(self, store: Store):
         self.db = store.db
+        with self.db:
+            for old, new in RENAMED.items():
+                self.db.execute("update settings set name = ? where name = ? and not exists "
+                                "(select 1 from settings where name = ?)", (new, old, new))
+                self.db.execute("delete from settings where name = ?", (old,))
+            self.db.executemany("delete from settings where name = ?", [(name,) for name in GONE])
 
     def get(self, name: str) -> Any:
         default, _ = self._spec(name)

@@ -69,7 +69,7 @@ class Service:
         self.journal = Journal(self.store)
         self.budget = Budget(self.settings, self.journal, self.store)
         self.llm = Haiku(self.budget, self.journal)
-        self.bot = Bot(env, session=data_dir / "bot", lang=lambda: self.settings.get("miniapp_language"))
+        self.bot = Bot(env, session=data_dir / "bot", lang=lambda: self.settings.get("language"))
         self.inbox = Inbox(self.store)
         self.chat_settings = ChatSettings(self.store)
         self.twin = Twin(env, self.inbox, self.chat_settings, session=twin_session(data_dir),
@@ -127,9 +127,9 @@ class Service:
         self.bot.on_material = lambda message, download: from_bot(self.library, message, download)
         # The MCP connector for claude.ai (§8.5, D57): its sign-in code comes from the bot to the owner's chat.
         self.connector = Connector(env, self.store, self.news, send_code=self._to_owner,
-                                   lang=lambda: self.settings.get("miniapp_language"))
+                                   lang=lambda: self.settings.get("language"))
         # The web app (§8.6, D61): its first login on a device is a code from the bot too.
-        language = lambda: self.settings.get("miniapp_language")  # noqa: E731
+        language = lambda: self.settings.get("language")  # noqa: E731
         self.web = WebApp(env, self.store, send_code=self._to_owner, lang=language,
                           data=Data(self.schedule, self.merged, self.library, self.grades, self.library_links,
                                     language, self.news, lambda: self.settings.get("news_ttl_hours")), llm=self.llm)

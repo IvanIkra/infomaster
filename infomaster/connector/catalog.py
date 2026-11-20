@@ -621,7 +621,7 @@ async def setting_change(ctx: Context, names: dict[str, str], args: dict, handle
                   [step(tool, **before)])
 
 
-GENERAL_NAMES = {name: name for name in ("batch_hours", "news_ttl_hours", "miniapp_language",
+GENERAL_NAMES = {name: name for name in ("batch_hours", "news_ttl_hours", "language",
                                          "about_me", "wiki_pages")}
 
 
@@ -1013,7 +1013,7 @@ def register(registry: Registry, app) -> None:
               "pages whose new sheets and homework come as notices in the mailbox (the whole list, addresses).",
               {"batch_hours": {"type": "integer", "enum": list(BATCH_HOURS)},
                "news_ttl_hours": {"type": "integer", "minimum": 1, "maximum": 168},
-               "miniapp_language": {"type": "string", "enum": ["en", "ru"]},
+               "language": {"type": "string", "enum": ["en", "ru"]},
                "about_me": {"type": "string", "maxLength": 500},
                "wiki_pages": {"type": "array", "items": {"type": "string"}}}, update_general_settings,
               idempotent=True)

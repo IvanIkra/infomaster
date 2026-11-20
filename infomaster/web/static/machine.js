@@ -353,7 +353,7 @@ function SourceRow({ s, llm }) {
 export function Machine({ onOut, onLang }) {
   const { data, error, run } = useMachine("/machine", onOut);
   const lang = (value) => run(async () => {
-    const answer = await api("PATCH", "/machine/settings/general", { miniapp_language: value });
+    const answer = await api("PATCH", "/machine/settings/general", { language: value });
     setLang(value); onLang();
     return { change: answer.change };
   });

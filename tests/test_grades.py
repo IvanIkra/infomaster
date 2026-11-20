@@ -581,10 +581,10 @@ async def test_api_and_miniapp(aiohttp_client, grades, settings, budget, journal
     assert response.status == 400 and "Google Sheet" in await response.text()
     response = await client.patch("/app/api/grades", headers=headers, json={"sheets": [{"url": FOLDER}]})
     assert response.status == 400 and "Dropbox folder" in await response.text()
-    settings.set("miniapp_language", "ru")
+    settings.set("language", "ru")
     response = await client.patch("/app/api/grades", headers=headers, json={"sheets": [{"url": FOLDER}]})
     assert response.status == 400 and "папку Dropbox" in await response.text()
-    settings.reset("miniapp_language")
+    settings.reset("language")
     response = await client.patch("/app/api/grades", headers=headers,
                                   json={"sheets": [{"url": URL, "label": "DM"}, {"url": SCL, "label": ""}]})
     assert [sheet["id"] for sheet in (await response.json())["sheets"]] == ["abc123", "dropbox-a1b2c3d4e5"]

@@ -270,7 +270,7 @@ async def test_same_message_new_file_is_a_version(batches, llm, sheets, topic, n
 async def test_reading_the_whole_sheet(batches, llm, sheets, topic, schedule):
     sheets.chat_settings.update(CHAT, {"pdf_content": True})
     sheets.settings.set("pdf_pages", 1)
-    sheets.settings.set("miniapp_language", "ru")  # the summary is written in the app's language (D41)
+    sheets.settings.set("language", "ru")  # the summary is written in the app's language (D41)
     await schedule.subjects.resolve(["Математический анализ"])
     llm.readings = [{"summary": "Ряды: 6 задач, сдать в LMS.",
                      "deadlines": [{"label": "Calc sheet 3", "due": "2026-10-29"},

@@ -117,16 +117,7 @@ create table if not exists hidden_deadlines (  -- deadlines of the sources hidde
     reason text,                -- done, not_mine, duplicate (the web app, §8.6); null: hidden elsewhere, no reason
     kept text                   -- of a duplicate: the uid of the deadline it was merged into
 );
-create table if not exists bot_posts (  -- what the forum's bot published, until D69: kept for old rows
-    id integer primary key,
-    topic text not null,
-    msg_id integer not null,
-    kind text not null,         -- news_board, news_alert, deadline_board, deadline, event, ruz
-    ref integer,                -- news, deadline or event id
-    key text,                   -- of a deadline post: the merged deadline its button acts on (dl:<id>, hseapp:<id>)
-    digest text,                -- of the text: an edit that changes nothing is skipped
-    at text not null
-);
+drop table if exists bot_posts;      -- the forum's posts (§8.3 until D69): the forum is gone
 
 create table if not exists subjects (   -- the course dictionary, one for everything (§6.2, §2.2)
     name text primary key,      -- as a source gives it, cleaned
@@ -264,7 +255,6 @@ create table if not exists own_grades (         -- the owner's grades (D44): add
 # (table, column, definition): columns added to a table that an earlier stage created already.
 UPGRADES = (
     ("news", "hidden", "integer not null default 0"),
-    ("bot_posts", "key", "text"),
     ("messages", "subject", "text"),
     ("deadlines", "sheet_id", "integer"),
     ("files", "kind", "text not null default 'pdf'"),

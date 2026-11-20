@@ -79,12 +79,12 @@ def test_bad_chat_settings(values):
 
 def test_languages(settings):
     """D41: English by default, only English or Russian; the forum's language went with the forum (D69)."""
-    assert settings.get("miniapp_language") == "en"
+    assert settings.get("language") == "en"
     with pytest.raises(SettingsError):
         settings.set("forum_language", "ru")
     for wrong in ("de", "RU", "", None):
         with pytest.raises(SettingsError):
-            settings.set("miniapp_language", wrong)
+            settings.set("language", wrong)
 
 
 def test_texts_for_the_models(settings):
@@ -112,3 +112,15 @@ def test_old_summary_settings_are_left_alone():
     assert "summary" not in chats.all(-1001) and chats.enabled_ids() == {-1001}
     with pytest.raises(SettingsError):
         Settings(store).get("summary_time")
+
+
+def test_renamed_and_gone_settings_move_once(store):
+    """D69: the Mini App's language becomes the app's, the forum's language is dropped; a set new name wins."""
+    with store.db:
+        store.db.execute("insert into settings(name, value) values('miniapp_language', '\"ru\"'), "
+                         "('forum_language', '\"ru\"')")
+    assert Settings(store).get("language") == "ru"
+    assert [row["name"] for row in store.db.execute("select name from settings")] == ["language"]
+    with store.db:
+        store.db.execute("insert into settings(name, value) values('miniapp_language', '\"en\"')")
+    assert Settings(store).get("language") == "ru"

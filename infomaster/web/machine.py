@@ -241,7 +241,7 @@ async def overview(request: web.Request) -> web.Response:
                 "grades": app.get(actions.GRADES_KEY) is not None, "reminders": app.get(actions.REMINDERS_KEY)
                 is not None, "pdf": app.get(actions.SHEETS_KEY) is not None, "connector": connector is not None,
                 "hseapp": app.get(actions.HSEAPP_KEY) is not None and SOURCES_KEY in app},
-        "lang": settings.get("miniapp_language") if settings else machine.web.lang()})
+        "lang": settings.get("language") if settings else machine.web.lang()})
 
 
 async def journal(request: web.Request) -> web.Response:
