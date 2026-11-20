@@ -2,15 +2,15 @@
 
 The app's own Keycloak client (public, no secret) gives a 3-hour access token and a refresh token whose 21-day window
 slides with every refresh. Both live in kv "hseapp.auth" and go nowhere else: not into the status, the log, the notices
-or the Mini App. The access token is refreshed when under 10 minutes are left, and at once on a 401; the refresh token
+or the web app. The access token is refreshed when under 10 minutes are left, and at once on a 401; the refresh token
 rotates, so every answer is saved at once. A refresh answered 400 or 401 (invalid_grant: three weeks without a
 refresh, or a logout) erases the tokens: a login is needed. Two clients refreshing one token chain throw each other
 out, so Tablo's own HSE App X must be off before this one runs (`hseapp_enabled` here).
 
-The login is PKCE in a browser, started from the Mini App. The client accepts any http(s) return address, so the
+The login is PKCE in a browser, started from the web app. The client accepts any http(s) return address, so the
 browser comes back to our public port behind Funnel, /hseapp/callback. That route has no initData: the PKCE `state`
 is its protection, and only the last 5 login links work (kept in memory: a restart asks for a new link). The
-fallback is the app's own ru.hse.hseappx:// address, with the return address pasted by hand in the Mini App.
+fallback is the app's own ru.hse.hseappx:// address, with the return address pasted by hand in «Machine → HSE App X».
 
 Every 15 minutes, when `hseapp_enabled` and logged in: POST /v2/deadlines with is_completed false, then true, up to
 10 pages each, 60 s per request. ACTIVE ones come from the first, COMPLETED* from the second; the discipline is cut at
@@ -155,7 +155,7 @@ class Auth:
 
     async def finish_login(self, session: aiohttp.ClientSession, returned: str) -> None:
         """`returned`: the return address with ?state=…&code=…, from the callback or pasted by hand. Raises
-        ValueError with the reason (a Phrase), for the Mini App and the callback page."""
+        ValueError with the reason (a Phrase), for the web app and the callback page."""
         query = parse_qs(urlsplit(returned.strip()).query)
         code, state = _first(query, "code"), _first(query, "state")
         if not code:
@@ -271,7 +271,7 @@ class HseApp:
         return {"enabled": enabled, "logged_in": logged_in, "ok_at": self.ok_at, "error": self.error,
                 "login_needed": enabled and not logged_in}
 
-    # --- the owner's side (the Mini App) ---------------------------------------------------
+    # --- the owner's side (the web app) ---------------------------------------------------
 
     def login_link(self, app: bool = False) -> str:
         """The HSE login page; the browser comes back to our callback, or with `app` to the app's own address,
@@ -326,7 +326,7 @@ class HseApp:
                 done = parse(await self._fetch(session, completed=True), completed=True)
         except LoginNeeded as e:
             self.error = f"{LOGIN_ERROR}{e}"
-            log.warning("HSE App X: login needed (%s); log in from the Mini App", e)
+            log.warning("HSE App X: login needed (%s); log in from the web app", e)
             self._tell_login()
             return False
         except (aiohttp.ClientError, TimeoutError, ValueError, OSError) as e:

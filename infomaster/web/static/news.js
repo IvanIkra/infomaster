@@ -1,4 +1,4 @@
-// News (stage 16.7): the live news in rank order, as Tablo and the forum's list have them, and an item's card with
+// News (stage 16.7): the live news in rank order, as Tablo has them, and an item's card with
 // the message it came from and «Hide» (journaled, with its undo).
 import { ICONS, api, changed, go, html, icon, toast } from "./common.js";
 import { day, t } from "./i18n.js";

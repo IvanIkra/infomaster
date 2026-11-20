@@ -53,7 +53,7 @@ def batches(store, now, schedule):
     batches = Batches(store, Settings(store), chat_settings, inbox, News(store), schedule.deadlines, schedule,
                       FakeLLM(), now=now)
     batches.notices = []
-    batches.notify = lambda line: batches.notices.append(line.ru)  # a Phrase: the forum picks its language
+    batches.notify = lambda line: batches.notices.append(line.ru)  # a Phrase: the notifier picks its language
     return batches
 
 

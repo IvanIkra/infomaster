@@ -403,7 +403,7 @@ class Data:
                     works += [{"id": i["id"], "label": i["label"], "value": i["value"], "new": i["new"],
                                "edited": i["edited"], "sheet_value": i["sheet_value"], "own": False}
                               for i in self.grades.items(sid)]
-            # the grades added by hand: their course is a title, as «+» and the Mini App give it
+            # the grades added by hand: their course is a title, as «+» gives it
             works += [{"id": g["id"], "label": g["label"], "value": g["value"], "new": g["new"], "edited": False,
                        "sheet_value": None, "own": True} for g in self.grades.manual()
                       if self.key(g["course"]) == key or any(self.schedule.same_course(g["course"], n) for n in names)]

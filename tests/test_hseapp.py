@@ -7,16 +7,16 @@ import json
 import logging
 from urllib.parse import parse_qs, urlsplit
 
+import actions_app
 import pytest
 from aiohttp import web
 from conftest import FakeNamer
-from test_http import env, init_data, owner
+from test_http import env, owner
 
 from infomaster.collectors import hseapp
 from infomaster.collectors.hseapp import HseApp, Raw, parse
 from infomaster.llm.budget import BudgetExceeded
 from infomaster.llm.client import BadAnswer, LLMError
-from infomaster.outputs import miniapp
 from infomaster.processing import hseapp as labels_module
 from infomaster.processing.hseapp import HseAppDeadlines
 from infomaster.processing.subjects import Subjects
@@ -127,7 +127,7 @@ async def fake(aiohttp_server, monkeypatch):
 def source(store, now) -> HseApp:
     src = HseApp(store, Settings(store), CALLBACK, now=now)
     src.notices, src.polls = [], []
-    src.notify = lambda text, login: src.notices.append((text.ru, login))  # a Phrase: the forum picks its language
+    src.notify = lambda text, login: src.notices.append((text.ru, login))  # a Phrase: the notifier picks its language
 
     async def on_poll(active, done):
         src.polls.append((active, done))
@@ -485,7 +485,7 @@ async def test_dictionary_down_labels_without_abbr(store, now):
     assert "(course: Дискретная математика)" in lists.llm.prompts[0] and subjects.error
 
 
-# --- the Mini App and the callback --------------------------------------------------------
+# --- the web app and the callback --------------------------------------------------------
 
 
 @pytest.fixture
@@ -494,18 +494,14 @@ async def client(aiohttp_client, fake, store, now, budget, journal, schedule, me
     lists = HseAppDeadlines(store, schedule.subjects, FakeLabeler(), now=now)
     sources = {"hseapp": lambda: {**src.status(), **lists.status()}}
     settings = Settings(store)
-    app = miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), sources, schedule.subjects,
+    app = actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), sources, schedule.subjects,
                              schedule, src, merged, settings)
     test_client = await aiohttp_client(app)
     test_client.src, test_client.settings = src, settings
     return test_client
 
 
-async def test_miniapp_screen(client, fake, store):
-    assert (await client.get("/app/api/hseapp")).status == 401
-    other = {"Authorization": "tma " + init_data(7)}
-    assert (await client.post("/app/api/hseapp/link", json={}, headers=other)).status == 403
-
+async def test_actions_screen(client, fake, store):
     body = await (await client.get("/app/api/hseapp", headers=owner())).json()
     assert body == {"callback": CALLBACK, "status": {
         "enabled": True, "logged_in": False, "ok_at": None, "error": None, "login_needed": True, "items": 0,
@@ -520,7 +516,7 @@ async def test_miniapp_screen(client, fake, store):
     bad = await client.post("/app/api/hseapp/login", json={"url": f"{CALLBACK}?state=x&code=y"}, headers=owner())
     assert bad.status == 400
     assert await bad.text() == "this login link is out of date: open a new one in Machine → HSE App X"
-    client.settings.set("miniapp_language", "ru")  # the reason in the Mini App's language (D41)
+    client.settings.set("miniapp_language", "ru")  # the reason in the web app's language (D41)
     bad = await client.post("/app/api/hseapp/login", json={"url": f"{CALLBACK}?state=x&code=y"}, headers=owner())
     assert bad.status == 400 and "устарела" in await bad.text()
     assert (await client.post("/app/api/hseapp/login", json={"url": " "}, headers=owner())).status == 400
@@ -536,7 +532,7 @@ async def test_miniapp_screen(client, fake, store):
     assert body["status"]["enabled"] is False and Settings(store).get("hseapp_enabled") is False
 
 
-async def test_callback_needs_no_init_data(client, fake):
+async def test_callback_needs_no_session(client, fake):
     url = client.src.login_link()
     fake["codes"]["code-1"] = query(url)["code_challenge"]
 
@@ -544,7 +540,7 @@ async def test_callback_needs_no_init_data(client, fake):
     assert forged.status == 400 and forged.headers["Cache-Control"] == "no-store"
     assert '<html lang="en">' in await forged.text() and "The login failed" in await forged.text()
     assert "This login link is out of date" in await forged.text()
-    client.settings.set("miniapp_language", "ru")  # the page in the Mini App's language (D41)
+    client.settings.set("miniapp_language", "ru")  # the page in the web app's language (D41)
     forged = await client.get("/hseapp/callback?state=forged&code=code-1")
     assert "Вход не удался" in await forged.text() and "Эта ссылка входа устарела" in await forged.text()
     denied = await client.get(f"/hseapp/callback?error=access_denied&error_description=%3Cscript%3Ex%3C/script%3E"

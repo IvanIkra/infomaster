@@ -1,12 +1,12 @@
 """The timetable (§6.5): RUZ classes, events from chats and the chat corrections of classes.
 
-One list of entries serves the iCal feeds, the batch prompt and the Mini App:
+One list of entries serves the iCal feeds, the batch prompt and the web app:
 - a RUZ class is always in the main calendar. A correction in force from a chat applies to it: a cancellation
   makes it cancelled, a move gives it the new time and room with a note. RUZ wins: when RUZ itself changes or
   removes the class, its corrections are gone (`after_poll`);
 - an event of its own goes to the main or the optional calendar by `required` (D28), unless the owner hid it.
 
-The owner adds events of their own and corrects classes in the Mini App (D44): an own correction wins over the chats'
+The owner adds events of their own and corrects classes in the web app (D44): an own correction wins over the chats'
 ones until it is undone or RUZ changes the class; a change of an event from a chat hides it and puts an own copy in its
 place, so the chat's next message changes only the hidden one (as a changed deadline does, §5.4). Every entry is
 changed the same way (D49): title, type, day or whole day, time, place, calendar, cancelled. An own correction of a
@@ -39,7 +39,6 @@ feeds leave out one saved before or one whose class came to RUZ later. Own event
 """
 
 import datetime as dt
-import hashlib
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -60,7 +59,7 @@ CLASS_DAYS = 21           # classes shown to the model, from today on: moves and
 SHEET_DAYS = 21           # a sheet's next seminar is looked for this long after its message (§6.3)
 SEMINARS = ("Seminar",)   # where a sheet is handed in: seminars, practical classes, tutorials (type_of)
 NOT_CLASSES = ("Interim assessment", "Exam")  # never a sheet's class, even of a course without seminars
-AGENDA_DAYS = 28          # the Mini App's timetable, from today on
+AGENDA_DAYS = 28          # the web app's timetable, from today on
 MIDTERM_KINDS = ("рубежный контроль", "interim assessment")  # §4.4
 REGULAR = ("Lecture", "Seminar", "Lab", "Class")  # types of an event that may only repeat a class
 
@@ -92,12 +91,6 @@ def all_day(start: str) -> bool:
     return len(start) == 10
 
 
-def event_key(uid: str) -> str:
-    """A short key of an entry for links into the Mini App (a Telegram start parameter allows 64 of A-Z a-z 0-9 _ -,
-    a UID has '@' and dots)."""
-    return hashlib.sha1(uid.encode()).hexdigest()[:12]
-
-
 def midterm(kind: str) -> bool:
     folded = (kind or "").casefold()
     return any(word in folded for word in MIDTERM_KINDS)
@@ -121,7 +114,7 @@ class Entry:
     of_class: bool = False      # a RUZ class: its own calendar marks its type in the title
     abbr: str | None = None     # a class's course abbreviation: an event may name the class by it
     origin: str | None = None   # who told it, in English: a chat's name, a letter's subject; None for RUZ itself
-    message: tuple[int, int] | None = None  # the message that told it, (chat_id, msg_id): its page in the Mini App
+    message: tuple[int, int] | None = None  # the message that told it, (chat_id, msg_id)
 
 
 @dataclass
@@ -141,7 +134,7 @@ def told_in(row: dict) -> tuple[int, int] | None:
 
 
 def message_ref(row: dict) -> dict | None:
-    """told_in for the Mini App: {chat, msg}, which its message page asks the server for (D50)."""
+    """told_in as {chat, msg}, for the connector and the web app (D50)."""
     told = told_in(row)
     return {"chat": told[0], "msg": told[1]} if told else None
 
@@ -283,7 +276,7 @@ class Schedule:
         return told.en if isinstance(told, Phrase) else told
 
     def told_by(self, event: dict) -> str | Phrase | None:
-        """Who told it (an event, or any row with source, chat_id, msg_ids), for the Mini App: the chat's name, or
+        """Who told it (an event, or any row with source, chat_id, msg_ids), for the web app: the chat's name, or
         the letter's subject (§8.3)."""
         if event["source"] == "mail":
             subject = self.inbox.subject(event["msg_ids"])
@@ -291,7 +284,7 @@ class Schedule:
         chat = self.inbox.chat(event["chat_id"]) if event["chat_id"] is not None else None
         return chat["title"] if chat else None
 
-    # --- for the batches and the Mini App -------------------------------------------------
+    # --- for the batches and the web app -------------------------------------------------
 
     def upcoming_classes(self, today: dt.date) -> list[dict]:
         """Classes of the next weeks with their titles and the correction in force, for the batch prompt. A class
@@ -359,7 +352,7 @@ class Schedule:
             event = corrections.get(entry.uid) if item is not None else events.get(entry.uid)
             # The room as the form edits it: LOCATION may be an online class's link instead.
             room = item["room"] if item is not None and not applies(item, event) else event["room"]
-            items.append({"uid": entry.uid, "key": event_key(entry.uid), "title": entry.title,
+            items.append({"uid": entry.uid, "title": entry.title,
                           "start": entry.start.date().isoformat() if entry.all_day else entry.start.isoformat(),
                           "end": None if entry.all_day else entry.end.isoformat(), "type": entry.type,
                           "location": entry.location, "room": room,
@@ -374,7 +367,7 @@ class Schedule:
         return event["end"] or (local(event["start"]) + DEFAULT_LENGTH).isoformat()
 
     def _behind(self, event: dict, item: dict | None, events: dict[str, dict]) -> dict:
-        """The event or correction behind an entry, as the Mini App acts on it: `class` is RUZ's own time, `original`
+        """The event or correction behind an entry, as the web app acts on it: `class` is RUZ's own time, `original`
         the chat's event an own copy stands in for (what «As it was» brings back)."""
         original = events.get(event["copy_of"]) if event["copy_of"] else None
         return {"id": event["id"], "correction": item is not None, "own": event["source"] == OWN,

@@ -5,7 +5,7 @@ chats: new ones live, edits, deletions and pins as they happen. After a restart 
 its `last_id`; edits and deletions made while the service was down are not caught up. A file (a PDF, an image) is
 downloaded only when a batch asks for it (collectors/files.py).
 
-The account logs in and out in the Mini App, Settings → Twin and chats: the phone, the code Telegram sends to the
+The account logs in and out in the web app, Machine → Twin and chats: the phone, the code Telegram sends to the
 account, the cloud password if it has one (`send_code`, `sign_in`, `logout`). The service runs on without it and
 starts reading as soon as the login is done, without a restart. A terminal works too: `python -m infomaster login`
 (see `login`).
@@ -36,7 +36,7 @@ LOGIN_HINT = "docker compose run --rm infomaster python -m infomaster login"
 
 
 class LoginError(ValueError):
-    """A step of the login that did not go; the text, a Phrase, is for the owner in the Mini App."""
+    """A step of the login that did not go; the text, a Phrase, is for the owner in the web app."""
 
 
 @dataclass
@@ -118,7 +118,7 @@ class Twin:
             f"(или на сервере: {LOGIN_HINT})."))
         return False
 
-    # --- login and logout from the Mini App ---------------------------------------
+    # --- login and logout from the web app ---------------------------------------
 
     async def send_code(self, phone: str) -> None:
         """Ask Telegram for a login code; it comes to the account's other sessions or by SMS."""

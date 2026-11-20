@@ -10,7 +10,7 @@ something else) brings back the newest version before it that is not withdrawn i
 one; a superseded version whose messages are deleted is withdrawn too, so it never comes back. The owner's choices
 (`required` once `chosen`, `hidden`) pass to every newer version.
 
-The owner's own events and corrections come from the Mini App (source `own`, D44). An own correction of a class wins
+The owner's own events and corrections come from the web app (source `own`, D44). An own correction of a class wins
 over the chats' corrections of it; the chats' versions go on under it, so they apply again once it is undone. The
 batches see the own events, marked, so a chat does not tell them again, but never move them, nor does a chat's message
 supersede them.

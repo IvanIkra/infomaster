@@ -4,6 +4,7 @@ raw material by course and the sorting of its inbox; every change is the connect
 
 import datetime as dt
 
+import actions_app
 import pytest
 from aiohttp import FormData
 from conftest import make_pdf
@@ -17,7 +18,6 @@ from infomaster.collectors.ruz import parse
 from infomaster.connector import Connector
 from infomaster.library import Library
 from infomaster.library.links import Links
-from infomaster.outputs import miniapp
 from infomaster.processing.news import News
 from infomaster.web import WebApp
 from infomaster.web.views import Data
@@ -48,7 +48,7 @@ async def build(aiohttp_client, store, budget, journal, schedule, merged, now, t
         sent.append(text)
 
     hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
-    app = miniapp.create_app(env(), budget, journal, schedule.inbox, sheets.chat_settings, {"sheets": sheets.status},
+    app = actions_app.app(env(), budget, journal, schedule.inbox, sheets.chat_settings, {"sheets": sheets.status},
                              schedule.subjects, schedule, hse, merged, sheets.settings, topic, library_links=links)
     connector = Connector(env(), store, News(store), now=now, seconds=seconds)
     connector.attach(app)

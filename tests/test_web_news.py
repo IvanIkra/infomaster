@@ -3,6 +3,7 @@ its undo, and the mark of the important ones on the feed."""
 
 import datetime as dt
 
+import actions_app
 import pytest
 from test_http import TWIN, env
 from test_web import FEED, Seconds, call, log_in
@@ -12,7 +13,6 @@ from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
 from infomaster.collectors.inbox import MAILBOX
 from infomaster.collectors.ruz import parse
 from infomaster.connector import Connector
-from infomaster.outputs import miniapp
 from infomaster.processing.news import News
 from infomaster.settings import ChatSettings, Settings
 from infomaster.web import WebApp
@@ -42,7 +42,7 @@ async def reader(aiohttp_client, store, budget, journal, schedule, merged, now):
     inbox.add(-1001, 11, {"sender_id": 5, "sender_name": "Assistant", "at": now() - dt.timedelta(hours=1),
                           "text": "The test moves to Thursday, 13:00"})
     hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
-    app = miniapp.create_app(env(), budget, journal, inbox, ChatSettings(store), TWIN, schedule.subjects, schedule,
+    app = actions_app.app(env(), budget, journal, inbox, ChatSettings(store), TWIN, schedule.subjects, schedule,
                              hse, merged, budget.settings)
     connector = Connector(env(), store, news, now=now, seconds=seconds)
     connector.attach(app)

@@ -7,7 +7,7 @@ call that also shows the whole dictionary, so the same course in Russian and in 
 «ВвП», gets the same answer (§10.1). Every prompt that names courses (the batches) gets the whole
 dictionary as `dictionary_lines()` gives it: one line per course with all the names it goes by.
 
-Entries set by hand in the Mini App are `manual`: Haiku never overwrites them, and deleting one lets Haiku name the
+Entries set by hand in the web app are `manual`: Haiku never overwrites them, and deleting one lets Haiku name the
 course again. A change by hand tells `on_manual`, so the Midterm labels follow it at once, not at the next RUZ poll
 (app.py). When Haiku is down or the limit is spent, names show as the source gives them and are asked again at the
 next RUZ poll, batch run or HSE App X poll. The error of a failed naming is kept for each caller with the names it
@@ -161,7 +161,7 @@ class Subjects:
         known = self.all()
         return sorted({name for name in map(clean, names) if name and name not in known})
 
-    # --- manual entries (the Mini App) -----------------------------------------------
+    # --- manual entries (the web app) -----------------------------------------------
 
     def set_manual(self, name: str, title: str, abbr: str) -> dict:
         """Add or change an entry by hand; it becomes manual. Returns the entry."""

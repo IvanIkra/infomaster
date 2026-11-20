@@ -4,11 +4,11 @@
   the images and the LLM limit, each ok, late, failing, off or waiting for a login, and what needs the owner with the
   screen that fixes it (`attention`; the feed's status dot counts it);
 - the journal: every change of the owner's in the app and of Claude's through the connector, with its undo;
-- the Mini App's settings, moved over: the twin's login and the chats, HSE App X, the gradebooks and their tabs, the
-  batches and news, the reminders, whole PDFs, images, the course dictionary, the LLM limit, the Claude connector and
-  the notifications.
+- the settings, moved over from the Mini App: the twin's login and the chats, HSE App X, the gradebooks and their
+  tabs, the batches and news, the reminders, whole PDFs, images, the course dictionary, the LLM limit, the Claude
+  connector and the notifications.
 
-The screens read through the Mini App's handlers, so the two show the same; a change of a setting is the connector's
+The screens read through the owner's actions (actions.py), as Claude does; a change of a setting is the connector's
 write tool (`Connector.act`): checked once, journaled with its undo like every other change. What has no tool is the
 owner's alone and is not journaled: the twin's and HSE App X's logins, the LLM limit, reading a gradebook now and
 revoking a connection of Claude's.
@@ -20,11 +20,10 @@ from functools import partial
 
 from aiohttp import web
 
-from .. import clock
-from ..connector.tools import ToolError, mini_app
+from .. import actions, clock
+from ..connector.tools import ToolError, call_action
 from ..i18n import json_default, say, tr
 from ..library.links import LIBRARY_KEY
-from ..outputs import miniapp
 from ..outputs.api import SOURCES_KEY
 
 # A source is late when its last good read is older than this many minutes (its poll and some slack).
@@ -92,7 +91,7 @@ class Machine:
             listed.append({"key": key, "state": state, "ok_at": ok_at, "error": error, "count": count})
 
         if (twin := status.get("telegram")) is not None:
-            inbox, chat_settings = app.get(miniapp.INBOX_KEY), app.get(miniapp.CHAT_SETTINGS_KEY)
+            inbox, chat_settings = app.get(actions.INBOX_KEY), app.get(actions.CHAT_SETTINGS_KEY)
             on = sum(chat_settings.enabled(c["id"]) for c in inbox.chats()) if inbox and chat_settings else None
             add("twin", "login" if not twin.get("account") else "error" if twin.get("error") else "ok",
                 twin.get("ok_at"), twin.get("error"), on)
@@ -123,7 +122,7 @@ class Machine:
         if (images := status.get("images")) is not None:
             add("images", "off" if not images.get("daily") else "error" if images.get("error") else "ok",
                 images.get("ok_at"), images.get("error"), images.get("today"))
-        if (budget := app.get(miniapp.BUDGET_KEY)) is not None:
+        if (budget := app.get(actions.BUDGET_KEY)) is not None:
             level = budget.status().get("level")
             add("llm", "error" if level == "hard" else "late" if level not in (None, "ok") else "ok")
         return listed
@@ -163,14 +162,14 @@ class Machine:
         if (images := status.get("images") or {}).get("error"):
             add(f"Reading images failed: {say(images['error'], lang)}",
                 f"Чтение картинок не удалось: {say(images['error'], lang)}", "machine/processing")
-        if (budget := app.get(miniapp.BUDGET_KEY)) is not None:
+        if (budget := app.get(actions.BUDGET_KEY)) is not None:
             level = budget.status().get("level")
             if level == "hard":
                 add("The LLM limit is spent: calls wait until midnight", "Лимит LLM исчерпан: вызовы стоят до полуночи",
                     "machine/llm")
             elif level not in (None, "ok"):
                 add("Over 80 % of the LLM limit is spent", "Потрачено больше 80 % лимита LLM", "machine/llm")
-        env = app.get(miniapp.ENV_KEY)
+        env = app.get(actions.ENV_KEY)
         if env is not None and not (env.calendar_secret or env.calendar_public_secret):
             add("The calendar feeds are off: no CALENDAR_SECRET in .env",
                 "Ленты календаря выключены: в .env нет CALENDAR_SECRET")
@@ -206,9 +205,9 @@ async def _body(request: web.Request) -> dict:
 
 
 async def _mini(request: web.Request, handler, body=None, query=None, **match_info):
-    """A Mini App handler's answer; its refusal as a 400 with its text."""
+    """An action's answer; its refusal as a 400 with its text."""
     try:
-        return await mini_app(request.app, handler, body, query, **match_info)
+        return await call_action(request.app, handler, body, query, **match_info)
     except ToolError as e:
         raise web.HTTPBadRequest(text=str(e)) from None
 
@@ -229,19 +228,19 @@ async def _act(request: web.Request, tool: str, arguments: dict) -> dict:
 
 async def overview(request: web.Request) -> web.Response:
     machine, app = _machine(request), request.app
-    budget = app.get(miniapp.BUDGET_KEY)
+    budget = app.get(actions.BUDGET_KEY)
     connector = machine.web.connector
-    settings = app.get(miniapp.SETTINGS_KEY)
+    settings = app.get(actions.SETTINGS_KEY)
     return answer(request, {
         "attention": machine.attention(app), "sources": machine.sources(app),
         "llm": {**budget.status(), "limit_usd": budget.settings.get("llm_daily_limit_usd")} if budget else None,
         "connections": len(connector.oauth.connections()) if connector else None,
         "push": len(machine.web.push.devices()),
         "library": library.usage() if (library := app.get(LIBRARY_KEY)) is not None else None,  # its disk (D69)
-        "has": {"twin": app.get(miniapp.TWIN_KEY) is not None, "settings": settings is not None,
-                "grades": app.get(miniapp.GRADES_KEY) is not None, "reminders": app.get(miniapp.REMINDERS_KEY)
-                is not None, "pdf": app.get(miniapp.SHEETS_KEY) is not None, "connector": connector is not None,
-                "hseapp": app.get(miniapp.HSEAPP_KEY) is not None and SOURCES_KEY in app},
+        "has": {"twin": app.get(actions.TWIN_KEY) is not None, "settings": settings is not None,
+                "grades": app.get(actions.GRADES_KEY) is not None, "reminders": app.get(actions.REMINDERS_KEY)
+                is not None, "pdf": app.get(actions.SHEETS_KEY) is not None, "connector": connector is not None,
+                "hseapp": app.get(actions.HSEAPP_KEY) is not None and SOURCES_KEY in app},
         "lang": settings.get("miniapp_language") if settings else machine.web.lang()})
 
 
@@ -260,7 +259,7 @@ async def journal(request: web.Request) -> web.Response:
 
 async def chats(request: web.Request) -> web.Response:
     _need(request, SOURCES_KEY)
-    return answer(request, await _mini(request, miniapp.chats))
+    return answer(request, await _mini(request, actions.chats))
 
 
 async def update_chat(request: web.Request) -> web.Response:
@@ -270,21 +269,21 @@ async def update_chat(request: web.Request) -> web.Response:
     except ValueError:
         raise web.HTTPNotFound() from None
     change = await _act(request, "update_chat_settings", {"chat_id": chat_id, **await _body(request)})
-    return answer(request, {"settings": request.app[miniapp.CHAT_SETTINGS_KEY].all(chat_id), "change": change})
+    return answer(request, {"settings": request.app[actions.CHAT_SETTINGS_KEY].all(chat_id), "change": change})
 
 
 async def senders(request: web.Request) -> web.Response:
-    return answer(request, await _mini(request, miniapp.senders, chat_id=request.match_info["chat_id"]))
+    return answer(request, await _mini(request, actions.senders, chat_id=request.match_info["chat_id"]))
 
 
 async def twin(request: web.Request) -> web.Response:
     """POST /twin/login {phone} | {code} | {password}, /twin/cancel, /twin/logout: the twin's status after it."""
-    _need(request, miniapp.TWIN_KEY)
-    handler = {"login": miniapp.twin_login, "cancel": miniapp.twin_cancel,
-               "logout": miniapp.twin_logout}.get(request.match_info["step"])
+    _need(request, actions.TWIN_KEY)
+    handler = {"login": actions.twin_login, "cancel": actions.twin_cancel,
+               "logout": actions.twin_logout}.get(request.match_info["step"])
     if handler is None:
         raise web.HTTPNotFound(text="no such step")
-    data = await _body(request) if handler is miniapp.twin_login else None
+    data = await _body(request) if handler is actions.twin_login else None
     return answer(request, await _mini(request, handler, data))
 
 
@@ -292,35 +291,35 @@ async def twin(request: web.Request) -> web.Response:
 
 async def hseapp(request: web.Request) -> web.Response:
     _need(request, SOURCES_KEY)
-    return answer(request, await _mini(request, miniapp.hseapp))
+    return answer(request, await _mini(request, actions.hseapp))
 
 
 async def update_hseapp(request: web.Request) -> web.Response:
-    return answer(request, await _mini(request, miniapp.update_hseapp, await _body(request)))
+    return answer(request, await _mini(request, actions.update_hseapp, await _body(request)))
 
 
 async def hseapp_link(request: web.Request) -> web.Response:
-    return answer(request, await _mini(request, miniapp.hseapp_link, await _body(request)))
+    return answer(request, await _mini(request, actions.hseapp_link, await _body(request)))
 
 
 async def hseapp_login(request: web.Request) -> web.Response:
-    return answer(request, await _mini(request, miniapp.hseapp_login, await _body(request)))
+    return answer(request, await _mini(request, actions.hseapp_login, await _body(request)))
 
 
 # --- settings ---------------------------------------------------------------------------------------------
 
 def _settings(request: web.Request) -> dict:
     """Every setting of the «Processing» and «Notifications» screens, by the group its tool changes."""
-    _need(request, miniapp.SETTINGS_KEY)
-    settings = request.app[miniapp.SETTINGS_KEY]
-    data = {"general": {name: settings.get(name) for name in miniapp.GENERAL if name != "llm_prices"},
-            "batch_choices": list(miniapp.BATCH_HOURS),
+    _need(request, actions.SETTINGS_KEY)
+    settings = request.app[actions.SETTINGS_KEY]
+    data = {"general": {name: settings.get(name) for name in actions.GENERAL if name != "llm_prices"},
+            "batch_choices": list(actions.BATCH_HOURS),
             "images": {"daily": settings.get("images_daily")},
             "notifications": {"kinds": settings.get("push_kinds"), "quiet": settings.get("push_quiet")}}
-    if request.app.get(miniapp.REMINDERS_KEY) is not None:
-        data["reminders"] = {key: settings.get(name) for key, name in miniapp.REMINDER_FIELDS.items()}
-    if request.app.get(miniapp.SHEETS_KEY) is not None:
-        data["pdf"] = {name: settings.get(name) for name in miniapp.PDF_LIMITS}
+    if request.app.get(actions.REMINDERS_KEY) is not None:
+        data["reminders"] = {key: settings.get(name) for key, name in actions.REMINDER_FIELDS.items()}
+    if request.app.get(actions.SHEETS_KEY) is not None:
+        data["pdf"] = {name: settings.get(name) for name in actions.PDF_LIMITS}
     statuses = request.app.get(SOURCES_KEY) or {}
     if "wiki" in statuses:
         data["wiki"] = statuses["wiki"]()["pages"]
@@ -346,42 +345,42 @@ async def update_settings(request: web.Request) -> web.Response:
 # --- the course dictionary ----------------------------------------------------------------------------------
 
 async def courses(request: web.Request) -> web.Response:
-    return answer(request, await _mini(request, miniapp.subjects))
+    return answer(request, await _mini(request, actions.subjects))
 
 
 async def put_course(request: web.Request) -> web.Response:
     """{name, title, abbr}: a manual entry (the connector's set_course)."""
     data = await _body(request)
     change = await _act(request, "set_course", {key: data.get(key) for key in ("name", "title", "abbr")})
-    return answer(request, {**await _mini(request, miniapp.subjects), "change": change})
+    return answer(request, {**await _mini(request, actions.subjects), "change": change})
 
 
 async def remove_course(request: web.Request) -> web.Response:
     """{name}: the entry dropped; Haiku names the course again when a source brings it."""
     change = await _act(request, "delete_course", {"name": (await _body(request)).get("name")})
-    return answer(request, {**await _mini(request, miniapp.subjects), "change": change})
+    return answer(request, {**await _mini(request, actions.subjects), "change": change})
 
 
 # --- the LLM limit ------------------------------------------------------------------------------------------
 
 async def llm(request: web.Request) -> web.Response:
-    return answer(request, await _mini(request, miniapp.llm))
+    return answer(request, await _mini(request, actions.llm))
 
 
 async def update_llm(request: web.Request) -> web.Response:
-    _need(request, miniapp.SETTINGS_KEY)
-    return answer(request, await _mini(request, miniapp.update_llm, await _body(request)))
+    _need(request, actions.SETTINGS_KEY)
+    return answer(request, await _mini(request, actions.update_llm, await _body(request)))
 
 
 async def raise_llm(request: web.Request) -> web.Response:
-    return answer(request, await _mini(request, miniapp.raise_llm))
+    return answer(request, await _mini(request, actions.raise_llm))
 
 
 # --- the gradebooks -----------------------------------------------------------------------------------------
 
 async def grades(request: web.Request) -> web.Response:
-    _need(request, miniapp.GRADES_KEY)
-    return answer(request, await _mini(request, miniapp.grade_sheets))
+    _need(request, actions.GRADES_KEY)
+    return answer(request, await _mini(request, actions.grade_sheets))
 
 
 async def add_gradebook(request: web.Request) -> web.Response:
@@ -389,30 +388,30 @@ async def add_gradebook(request: web.Request) -> web.Response:
     data = await _body(request)
     change = await _act(request, "add_gradebook", {key: data[key] for key in ("url", "label", "name") if data.get(key)
                                                    or key == "url"})
-    return answer(request, {**await _mini(request, miniapp.grade_sheets), "change": change})
+    return answer(request, {**await _mini(request, actions.grade_sheets), "change": change})
 
 
 async def gradebook(request: web.Request) -> web.Response:
-    _need(request, miniapp.GRADES_KEY)
-    return answer(request, await _mini(request, miniapp.gradebook, sid=request.match_info["sid"]))
+    _need(request, actions.GRADES_KEY)
+    return answer(request, await _mini(request, actions.gradebook, sid=request.match_info["sid"]))
 
 
 async def update_gradebook(request: web.Request) -> web.Response:
     """{name?, label?}"""
     sid = request.match_info["sid"]
     change = await _act(request, "update_gradebook", {"sheet_id": sid, **await _body(request)})
-    return answer(request, {**await _mini(request, miniapp.gradebook, sid=sid), "change": change})
+    return answer(request, {**await _mini(request, actions.gradebook, sid=sid), "change": change})
 
 
 async def remove_gradebook(request: web.Request) -> web.Response:
     change = await _act(request, "remove_gradebook", {"sheet_id": request.match_info["sid"]})
-    return answer(request, {**await _mini(request, miniapp.grade_sheets), "change": change})
+    return answer(request, {**await _mini(request, actions.grade_sheets), "change": change})
 
 
 async def read_gradebook(request: web.Request) -> web.Response:
     """The gradebooks read at once instead of in 30 minutes; nothing to journal."""
-    _need(request, miniapp.GRADES_KEY)
-    return answer(request, await _mini(request, miniapp.read_gradebook, sid=request.match_info["sid"]))
+    _need(request, actions.GRADES_KEY)
+    return answer(request, await _mini(request, actions.read_gradebook, sid=request.match_info["sid"]))
 
 
 async def set_tab(request: web.Request) -> web.Response:
@@ -421,13 +420,13 @@ async def set_tab(request: web.Request) -> web.Response:
     data = await _body(request)
     change = await _act(request, "set_tab_layout", {"sheet_id": sid, "tab": tab, "skip": data.get("skip"),
                                                     "works": data.get("works")})
-    return answer(request, {**await _mini(request, miniapp.gradebook, sid=sid), "change": change})
+    return answer(request, {**await _mini(request, actions.gradebook, sid=sid), "change": change})
 
 
 async def reset_tab(request: web.Request) -> web.Response:
     sid, tab = request.match_info["sid"], request.match_info["tab"]
     change = await _act(request, "reset_tab_layout", {"sheet_id": sid, "tab": tab})
-    return answer(request, {**await _mini(request, miniapp.gradebook, sid=sid), "change": change})
+    return answer(request, {**await _mini(request, actions.gradebook, sid=sid), "change": change})
 
 
 # --- the Claude connector -----------------------------------------------------------------------------------

@@ -186,13 +186,13 @@ def test_overdue_rows_leave_the_list(merged):
         ("TG yesterday", True), ("HSE 3 days ago", True), ("Midterm 3 days ago", True)]
 
 
-# --- the owner's changes (HA's to-do lists, the Mini App, the forum) ---------------------------
+# --- the owner's changes (HA's to-do lists, the web app, Claude) ---------------------------
 
 def test_own_and_hidden(merged):
     calc = add(merged, "Calc HW 3", "2026-10-21", course="Математический анализ")
     prog = add(merged, "Prog HW 1", "2026-10-18")
     own = merged.add("Dentist", D(2026, 10, 25), "personal")
-    assert own.key == "ha-1" and merged.changes == [{"ha-1"}]  # it came by the owner: quiet in the forum
+    assert own.key == "ha-1" and merged.changes == [{"ha-1"}]  # it came by the owner: no news
     with pytest.raises(ValueError, match="title is empty"):
         merged.add("  ", D(2026, 10, 25), "personal")
     with pytest.raises(ValueError, match="category"):
@@ -220,7 +220,7 @@ def test_own_and_hidden(merged):
     assert [(d.title, d.source, d.due.isoformat()) for d in merged.all()] == [
         ("Dentist 10:00", "ha", "2026-10-25"), ("Prog HW 1", "ha", "2026-10-29")]
 
-    # «Вернуть»: by the hidden row (the Mini App) or by the deadline (the forum's button).
+    # «Вернуть»: by the hidden row (the web app) or by the deadline (Claude).
     assert merged.unhide(uid(item)) and not merged.unhide(uid(item))
     assert any(d.ref == f"dl:{calc}" for d in merged.all())
     merged.remove(item)

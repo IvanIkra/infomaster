@@ -2,6 +2,7 @@
 correction ignored, an event changed, hidden and deleted, the hidden lists with «Restore», and grades corrected; each
 through the connector's tools, with its undo."""
 
+import actions_app
 import pytest
 from test_grades import URL, item
 from test_http import TWIN, add_row, env
@@ -11,7 +12,6 @@ from test_web_actions import Seconds
 from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
 from infomaster.collectors.ruz import parse
 from infomaster.connector import Connector
-from infomaster.outputs import miniapp
 from infomaster.processing.grades import Grades
 from infomaster.processing.news import News
 from infomaster.processing.todo import uid
@@ -35,7 +35,7 @@ async def fixer(aiohttp_client, store, budget, journal, schedule, merged, now):
     settings = budget.settings
     grades = Grades(store, settings, None, now=now)
     hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
-    app = miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
+    app = actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
                              schedule, hse, merged, settings, None, grades)
     connector = Connector(env(), store, News(store), now=now, seconds=seconds)
     connector.attach(app)

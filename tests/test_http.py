@@ -1,12 +1,8 @@
 import datetime as dt
-import hashlib
-import hmac
-import json
-import time
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import urlencode
 
+import actions_app
 import pytest
 
 from infomaster import clock
@@ -14,7 +10,7 @@ from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
 from infomaster.collectors.inbox import Inbox
 from infomaster.collectors.ruz import parse
 from infomaster.config import ConfigError, Env
-from infomaster.outputs import api, miniapp
+from infomaster.outputs import api
 from infomaster.outputs.ical_feed import CalendarFeed
 from infomaster.processing.news import News
 from infomaster.settings import ChatSettings, Settings
@@ -33,45 +29,16 @@ def env(**extra) -> Env:
 
 def mini(budget, journal, store, schedule, inbox=None, merged=None, sources=None):
     hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
-    return miniapp.create_app(env(), budget, journal, inbox or schedule.inbox, ChatSettings(store), sources or TWIN,
+    return actions_app.app(env(), budget, journal, inbox or schedule.inbox, ChatSettings(store), sources or TWIN,
                               schedule.subjects, schedule, hse, merged)
 
 
-def init_data(user_id: int = OWNER, auth_date: int | None = None, token: str = BOT_TOKEN) -> str:
-    """initData signed the way Telegram signs it."""
-    fields = {"auth_date": str(auth_date or int(time.time())), "query_id": "AAE",
-              "user": json.dumps({"id": user_id, "first_name": "Ivan"}), "signature": "sig"}
-    check = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()))
-    secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
-    return urlencode({**fields, "hash": hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()})
-
-
-def test_init_data():
-    assert miniapp.check_init_data(init_data(), BOT_TOKEN)["id"] == OWNER
-    assert miniapp.check_init_data(init_data(token="other:token"), BOT_TOKEN) is None
-    assert miniapp.check_init_data(init_data(auth_date=int(time.time()) - 2 * 86400), BOT_TOKEN) is None
-    assert miniapp.check_init_data(init_data().replace("Ivan", "Eve"), BOT_TOKEN) is None
-    assert miniapp.check_init_data("", BOT_TOKEN) is None
-
-
 def owner() -> dict:
-    return {"Authorization": "tma " + init_data()}
+    """No header is needed: the actions have no login of their own, the web app and the connector check who calls."""
+    return {}
 
 
-async def test_miniapp(aiohttp_client, budget, journal, store, schedule, merged):
-    client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
-    assert (await client.get("/app/api/me")).status == 401
-    assert (await client.get("/app/api/me", headers={"Authorization": "tma " + init_data(7)})).status == 403
-    response = await client.get("/app/api/me", headers={"Authorization": "tma " + init_data()})
-    assert response.status == 200
-    body = await response.json()
-    assert body["first_name"] == "Ivan" and body["llm"]["limit_usd"] == 0.5 and body["language"] == "en"
-    page = await client.get("/app/")
-    assert page.status == 200 and "telegram-web-app.js" in await page.text()
-
-
-
-async def test_miniapp_llm(aiohttp_client, budget, journal, store, schedule, merged, now):
+async def test_actions_llm(aiohttp_client, budget, journal, store, schedule, merged, now):
     """The «Расход LLM» screen: periods by task and chat, 30 days, the limit changed and raised."""
     from conftest import spend
 
@@ -81,16 +48,15 @@ async def test_miniapp_llm(aiohttp_client, budget, journal, store, schedule, mer
     spend(journal, 0.05, now(), task="batch", chat_id=0)        # the mailbox
     spend(journal, 0.05, now(), task="subjects")                # no chat
     spend(journal, 0.30, now() - dt.timedelta(days=3), task="image", chat_id=-1001)
-    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, inbox, ChatSettings(store), TWIN,
+    client = await aiohttp_client(actions_app.app(env(), budget, journal, inbox, ChatSettings(store), TWIN,
                                                      schedule.subjects, schedule, None, merged, settings))
-    assert (await client.get("/app/api/llm")).status == 401
     body = await (await client.get("/app/api/llm", headers=owner())).json()
     today, month = body["periods"]["today"], body["periods"]["month"]
     assert today["cost_usd"] == 0.3 and today["runs"] == 3 and month["cost_usd"] == 0.6
     assert today["by_task"] == [{"task": "batch", "runs": 2, "failed": 0, "cost_usd": 0.25, "tokens": 4},
                                 {"task": "subjects", "runs": 1, "failed": 0, "cost_usd": 0.05, "tokens": 2}]
     assert [(c["title"], c["cost_usd"]) for c in today["by_chat"]] == [("Матан", 0.2), ("Mail", 0.05)]
-    settings.set("miniapp_language", "ru")  # what the service names itself follows the Mini App's language (D41)
+    settings.set("miniapp_language", "ru")  # what the service names itself follows the web app's language (D41)
     body = await (await client.get("/app/api/llm", headers=owner())).json()
     assert [c["title"] for c in body["periods"]["today"]["by_chat"]] == ["Матан", "Почта"]
     settings.reset("miniapp_language")
@@ -108,7 +74,7 @@ async def test_miniapp_llm(aiohttp_client, budget, journal, store, schedule, mer
 
 
 
-async def test_miniapp_twin_login(aiohttp_client, budget, journal, store, schedule, merged, tmp_path, monkeypatch):
+async def test_actions_twin_login(aiohttp_client, budget, journal, store, schedule, merged, tmp_path, monkeypatch):
     """Phone, code, logout from the «Чаты» screen; the twin's errors come back as 400 with their text."""
     from test_telegram import FakeClient
 
@@ -118,10 +84,9 @@ async def test_miniapp_twin_login(aiohttp_client, budget, journal, store, schedu
     monkeypatch.setattr(telegram, "TelegramClient", FakeClient)
     twin = telegram.Twin(SimpleNamespace(api_id=1, api_hash="h", owner_id=OWNER), schedule.inbox, ChatSettings(store),
                          tmp_path / "twin", lambda text: None)
-    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store),
+    client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store),
                                                      {**TWIN, "telegram": twin.status}, schedule.subjects, schedule,
                                                      None, merged, twin=twin))
-    assert (await client.post("/app/api/twin/login", json={"phone": "+79161234567"})).status == 401
     bad = await client.post("/app/api/twin/login", json={"code": "1"}, headers=owner())
     assert bad.status == 400 and await bad.text() == "ask for a code first"
     assert (await client.post("/app/api/twin/login", json={"x": 1}, headers=owner())).status == 400
@@ -136,9 +101,9 @@ async def test_miniapp_twin_login(aiohttp_client, budget, journal, store, schedu
     assert (await client.post("/app/api/twin/logout", headers=owner())).status == 400
 
 
-async def test_miniapp_general(aiohttp_client, budget, journal, store, schedule, merged):
+async def test_actions_general(aiohttp_client, budget, journal, store, schedule, merged):
     settings = budget.settings
-    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN,
+    client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN,
                                                      schedule.subjects, schedule, None, merged, settings))
     body = await (await client.get("/app/api/general", headers=owner())).json()
     assert body["batch_hours"] == 3 and body["news_ttl_hours"] == 24 and 24 in body["batch_choices"]
@@ -156,7 +121,6 @@ async def test_miniapp_general(aiohttp_client, budget, journal, store, schedule,
     assert (body["miniapp_language"], body["languages"]) == ("en", ["en", "ru"]) and "forum_language" not in body
     body = await (await client.patch("/app/api/general", json={"miniapp_language": "ru"}, headers=owner())).json()
     assert body["miniapp_language"] == "ru"
-    assert (await (await client.get("/app/api/me", headers=owner())).json())["language"] == "ru"
     bad = await client.patch("/app/api/general", json={"miniapp_language": "de"}, headers=owner())
     assert bad.status == 400 and settings.get("miniapp_language") == "ru"
     assert (await client.patch("/app/api/general", json={"forum_language": "ru"}, headers=owner())).status == 400
@@ -169,13 +133,12 @@ async def test_miniapp_general(aiohttp_client, budget, journal, store, schedule,
     assert (await client.patch("/app/api/general", json={"about_me": "x" * 501}, headers=owner())).status == 400
 
 
-async def test_miniapp_chats(aiohttp_client, budget, journal, store, schedule, merged):
+async def test_actions_chats(aiohttp_client, budget, journal, store, schedule, merged):
     inbox = Inbox(store)
     inbox.put_chat(-1001, "Матан", "supergroup", None, 10)
     inbox.put_chat(-1002, "Болталка", "group", None, 5)
     inbox.add(-1001, 11, {"sender_id": 7, "sender_name": "Староста", "at": clock.now_utc(), "text": "Дедлайн"})
     client = await aiohttp_client(mini(budget, journal, store, schedule, inbox, merged=merged))
-    assert (await client.get("/app/api/chats")).status == 401
 
     response = await client.patch("/app/api/chats/-1002", json={"enabled": True, "people": [7, 7, 3]},
                                   headers=owner())
@@ -258,11 +221,10 @@ def test_env():
             Env.from_environ({**base, **bad})
 
 
-async def test_miniapp_subjects(aiohttp_client, budget, journal, store, schedule, merged):
+async def test_actions_subjects(aiohttp_client, budget, journal, store, schedule, merged):
     client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
     subjects = schedule.subjects
     await subjects.resolve(["Алгебра (рус)"])
-    assert (await client.get("/app/api/subjects")).status == 401
 
     body = await (await client.get("/app/api/subjects", headers=owner())).json()
     assert body["subjects"] == [{"name": "Алгебра", "title": "Algebra", "abbr": "Alg", "manual": False}]
@@ -286,7 +248,7 @@ async def test_miniapp_subjects(aiohttp_client, budget, journal, store, schedule
     assert (await client.delete("/app/api/subjects", json={"name": "Алгебра"}, headers=owner())).status == 404
 
 
-async def test_miniapp_agenda(aiohttp_client, budget, journal, store, schedule, now, merged):
+async def test_actions_agenda(aiohttp_client, budget, journal, store, schedule, now, merged):
     """The Расписание screen: the timetable as the feeds have it; the chats' events switched and hidden, the
     owner's own events added, changed and deleted, classes moved by the owner (D44)."""
     schedule.ruz._sync(parse(FEED))
@@ -296,7 +258,6 @@ async def test_miniapp_agenda(aiohttp_client, budget, journal, store, schedule, 
         told = events.add({"uid": "tg-1@infomaster", "source": "tg", "chat_id": None, "msg_ids": [5],
                            "course": "Алгебра", "title": "Alg consult", "kind": "consultation",
                            "start": "2026-10-23T18:10:00", "end": None, "room": "R205", "required": True}, now())
-    assert (await client.get("/app/api/agenda")).status == 401
 
     body = await (await client.get("/app/api/agenda", headers=owner())).json()
     assert body["today"] == "2026-10-20" and body["calendar"] is False and body["ruz"]["error"]
@@ -342,7 +303,7 @@ async def test_miniapp_agenda(aiohttp_client, budget, journal, store, schedule, 
     assert (await client.patch("/app/api/events/x", json={"hidden": False}, headers=owner())).status == 404
 
 
-async def test_miniapp_hiding_a_correction_moves_its_midterm(aiohttp_client, budget, journal, store, schedule, now,
+async def test_actions_hiding_a_correction_moves_its_midterm(aiohttp_client, budget, journal, store, schedule, now,
                                                              merged):
     schedule.inbox.put_chat(-1001, "Матан", "supergroup", None, 0)
     await schedule.after_poll(schedule.ruz._sync(parse(FEED)))
@@ -368,7 +329,7 @@ async def test_miniapp_hiding_a_correction_moves_its_midterm(aiohttp_client, bud
     assert schedule.deadlines.get(back)["due"] == "2026-10-29"
 
 
-# --- deadlines: HA's to-do lists and the Mini App ------------------------------------------------
+# --- deadlines: HA's to-do lists and the web app ------------------------------------------------
 
 AUTH = {"Authorization": "Bearer tok"}
 
@@ -402,10 +363,9 @@ async def test_deadlines_api(aiohttp_client, budget, schedule, merged):
     assert {d.title for d in merged.all()} == {"Calc HW 3", "Prog HW 1"} and merged.changes == []
 
 
-async def test_miniapp_deadlines(aiohttp_client, budget, journal, store, schedule, merged):
+async def test_actions_deadlines(aiohttp_client, budget, journal, store, schedule, merged):
     sources = {**TWIN, "hseapp": lambda: {"login_needed": True, "error": None, "enabled": True}}
     client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged, sources=sources))
-    assert (await client.get("/app/api/deadlines")).status == 401
     schedule.inbox.put_chat(-1001, "Матан", "group", None, 0)
     row = add_row(merged, "Calc HW 3", "2026-10-21")
     letter = add_row(merged, "Phil essay", "2026-10-22", "mail", "Философия")
@@ -456,25 +416,25 @@ async def test_miniapp_deadlines(aiohttp_client, budget, journal, store, schedul
     assert [own["uid"] for own in body["own"]] == ["ha-1"] and row
 
 
-async def test_miniapp_has_no_summaries(aiohttp_client, budget, journal, store, schedule, merged):
+async def test_actions_has_no_summaries(aiohttp_client, budget, journal, store, schedule, merged):
     """The summaries are gone (D55): no screen, and a chat's old «Summary» flag is not a setting any more."""
     inbox, chat_settings, settings = schedule.inbox, ChatSettings(store), Settings(store)
     inbox.put_chat(-1001, "Матан", "supergroup", None, 0)
     hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
-    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, inbox, chat_settings, TWIN,
+    client = await aiohttp_client(actions_app.app(env(), budget, journal, inbox, chat_settings, TWIN,
                                                      schedule.subjects, schedule, hse, merged, settings))
     assert (await client.get("/app/api/summaries", headers=owner())).status == 404
     response = await client.patch("/app/api/chats/-1001", json={"summary": True}, headers=owner())
     assert response.status == 400
 
 
-async def test_miniapp_reminders(aiohttp_client, budget, journal, store, schedule, merged, now):
+async def test_actions_reminders(aiohttp_client, budget, journal, store, schedule, merged, now):
     from infomaster.outputs.reminders import DeadlineReminders
 
     settings = Settings(store)
     reminders = DeadlineReminders(store, merged, settings, now=now)
     hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
-    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store),
+    client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store),
                                                      TWIN, schedule.subjects, schedule, hse, merged, settings,
                                                      deadline_reminders=reminders))
     response = await client.get("/app/api/reminders", headers=owner())
@@ -485,10 +445,9 @@ async def test_miniapp_reminders(aiohttp_client, budget, journal, store, schedul
     response = await client.patch("/app/api/reminders", json={"day": "8:00", "eve": "25:00"}, headers=owner())
     assert response.status == 400 and settings.get("reminder_day") == "09:00"  # nothing kept from a bad request
     assert (await client.patch("/app/api/reminders", json={"x": 1}, headers=owner())).status == 400
-    assert (await client.get("/app/api/reminders")).status == 401
 
 
-async def test_miniapp_one_form_for_every_entry(aiohttp_client, budget, journal, store, schedule, now, merged):
+async def test_actions_one_form_for_every_entry(aiohttp_client, budget, journal, store, schedule, now, merged):
     """A class, a chat's event and an own one are changed by the same fields (D49), and «As it was» undoes it."""
     schedule.ruz._sync(parse(FEED))
     client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
@@ -540,7 +499,7 @@ async def test_miniapp_one_form_for_every_entry(aiohttp_client, budget, journal,
         assert (await client.post("/app/api/events", json=bad, headers=owner())).status == 400
 
 
-async def test_miniapp_message(aiohttp_client, budget, journal, store, schedule, now, merged):
+async def test_actions_message(aiohttp_client, budget, journal, store, schedule, now, merged):
     """A source message's page (D50): as the twin read it, what it answers, its t.me link; a letter; one not kept."""
     client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
     inbox = schedule.inbox
@@ -550,7 +509,6 @@ async def test_miniapp_message(aiohttp_client, budget, journal, store, schedule,
                                   "text": "Консультация завтра в S301",
                                   "files": [{"kind": "pdf", "name": "plan.pdf", "mime": "application/pdf", "size": 1}]})
     inbox.add_letter(7, {"sender_name": "Office", "at": now(), "text": "Choose an elective", "subject": "Electives"})
-    assert (await client.get("/app/api/message?chat=-1001234567890&msg=5")).status == 401
 
     body = await (await client.get("/app/api/message?chat=-1001234567890&msg=5", headers=owner())).json()
     assert (body["source"], body["chat"]["title"], body["link"], body["stored"]) == (
@@ -568,122 +526,3 @@ async def test_miniapp_message(aiohttp_client, budget, journal, store, schedule,
     assert (await client.get("/app/api/message?chat=x&msg=1", headers=owner())).status == 400
 
 
-async def test_miniapp_library(aiohttp_client, budget, journal, store, schedule, merged, tmp_path):
-    """The Materials screen (D58): courses and the inbox, a course's documents and classes, uploads streamed to disk
-    past the app's body limit, notes and links, moving and removing."""
-    from aiohttp import FormData
-    from test_library import NOW, add_class
-
-    from infomaster.collectors.files import UPLOAD_MAX_SIZE
-    from infomaster.library import Library
-    from infomaster.library.links import Links
-
-    add_class(store, "calc-1", "Calculus", "2026-11-18T09:30:00", "Лекция")
-    add_class(store, "calc-2", "Calculus", "2026-11-19T11:10:00", "Семинар")
-    add_class(store, "alg-1", "Algebra", "2026-11-20T11:10:00", "Lecture")
-    library = Library(store, tmp_path, now=lambda: NOW)
-    links = Links(store, library, env().public_url)
-    hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
-    app = miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
-                             schedule, hse, merged, library_links=links)
-    client = await aiohttp_client(app)
-    local = lambda url: url.removeprefix(env().public_url)  # noqa: E731
-    assert (await client.get("/app/api/library")).status == 401
-    body = await (await client.get("/app/api/library", headers=owner())).json()
-    assert [c["course"] for c in body["courses"]] == ["Algebra", "Calculus"] and body["inbox"] == 0
-    assert body["usage"]["items"] == 0
-
-    # Files: the fields first, then the files; a recording bigger than the app's client_max_size still goes in.
-    form = FormData()
-    form.add_field("course", "Calculus")
-    form.add_field("class_uid", "calc-1")
-    form.add_field("file", b"jpeg-bytes", filename="board.jpg", content_type="image/jpeg")
-    form.add_field("file", b"a" * (UPLOAD_MAX_SIZE + 2**21), filename="lecture.m4a", content_type="audio/mp4")
-    response = await client.post("/app/api/library/files", data=form, headers=owner())
-    assert response.status == 200, await response.text()
-    photo, audio = (await response.json())["added"]
-    assert (library.get(photo)["kind"], library.get(photo)["source"], library.get(photo)["author"]) == (
-        "photo", "miniapp", "owner")
-    assert library.get(audio)["size"] == UPLOAD_MAX_SIZE + 2**21 and library.get(audio)["class_uid"] == "calc-1"
-
-    form = FormData()
-    form.add_field("file", b"%PDF-notes", filename="notes.pdf", content_type="application/pdf")
-    inboxed = (await (await client.post("/app/api/library/files", data=form, headers=owner())).json())["added"][0]
-    form = FormData()
-    form.add_field("class_uid", "nope")
-    form.add_field("file", b"x", filename="x.txt", content_type="text/plain")
-    bad = await client.post("/app/api/library/files", data=form, headers=owner())
-    assert bad.status == 400 and await bad.text() == "no such class in the timetable"
-    form = FormData()
-    form.add_field("course", "Algebra")
-    form.add_field("class_uid", "calc-1")
-    form.add_field("file", b"x", filename="x.txt", content_type="text/plain")
-    assert (await client.post("/app/api/library/files", data=form, headers=owner())).status == 400
-    form = FormData()
-    form.add_field("file", b"", filename="empty.txt", content_type="text/plain")
-    assert (await client.post("/app/api/library/files", data=form, headers=owner())).status == 400
-    assert (await client.post("/app/api/library/files", json={}, headers=owner())).status == 400
-    assert library.usage()["items"] == 3
-
-    # A note and a link.
-    note = await (await client.post("/app/api/library/items", json={"kind": "text", "text": "Limits: " + "ε" * 700,
-                                                                    "class_uid": "calc-2"}, headers=owner())).json()
-    assert note["course"] == "Calculus" and note["text_cut"] and len(note["text"]) == miniapp.LIBRARY_PREVIEW
-    link = await (await client.post("/app/api/library/items", json={"kind": "link", "url": "https://example.org/rec",
-                                                                    "title": "Recording"}, headers=owner())).json()
-    assert link["course"] is None and link["title"] == "Recording"
-    for wrong in ({"kind": "link", "url": "ftp://x"}, {"kind": "text", "text": " "}, {"kind": "photo"},
-                  {"kind": "text", "text": "x", "extra": 1}):
-        assert (await client.post("/app/api/library/items", json=wrong, headers=owner())).status == 400
-    whole = await (await client.get(f"/app/api/library/items/{note['id']}", headers=owner())).json()
-    assert not whole["text_cut"] and len(whole["text"]) == 708 and whole["children"] == []
-
-    # The knowledge base: a lecture with two versions and a cheat sheet; a document with a draft alone is not listed.
-    for text in ("v1", "v2"):
-        draft = library.draft("Calculus", "lecture", class_uid="calc-1", title="Limits")
-        await library.put_text(draft["id"], "source", text)
-        await library.put_text(draft["id"], "pdf", "%PDF-" + text)
-        library.publish(draft["id"])
-    cheat = library.draft("Calculus", "cheatsheet")
-    await library.put_text(cheat["id"], "source", "# Notation")
-    library.publish(cheat["id"])
-    library.draft("Calculus", "book")
-
-    body = await (await client.get("/app/api/library/course?name=Calculus", headers=owner())).json()
-    assert [(d["kind"], len(d["versions"])) for d in body["documents"]] == [("cheatsheet", 1), ("lecture", 2)]
-    newest = body["documents"][1]["versions"][0]
-    assert newest["version"] == 2
-    pdf = await client.get(local(newest["url"]))
-    assert pdf.status == 200 and await pdf.read() == b"%PDF-v2"
-    assert await (await client.get(local(body["documents"][0]["versions"][0]["url"]))).read() == b"# Notation"
-    assert [(c["uid"], [i["id"] for i in c["items_list"]]) for c in body["classes"]] == [
-        ("calc-2", [note["id"]]), ("calc-1", [audio, photo])]
-    shown = body["classes"][1]["items_list"][1]
-    assert await (await client.get(local(shown["file_url"]))).read() == b"jpeg-bytes"
-    assert (await client.get("/app/api/library/course", headers=owner())).status == 400
-
-    inbox = await (await client.get("/app/api/library/inbox", headers=owner())).json()
-    assert [i["id"] for i in inbox["items"]] == [link["id"], inboxed]
-    assert inbox["items"][0]["file_url"] is None and inbox["items"][0]["url"] == "https://example.org/rec"
-    classes = await (await client.get("/app/api/library/classes?course=Algebra", headers=owner())).json()
-    assert [c["uid"] for c in classes["classes"]] == ["alg-1"]
-
-    # Sorting the inbox by hand, and back; a class of another course is refused.
-    path = f"/app/api/library/items/{inboxed}"
-    moved = await (await client.patch(path, json={"course": "Algebra", "class_uid": "alg-1"}, headers=owner())).json()
-    assert (moved["course"], moved["class_uid"]) == ("Algebra", "alg-1")
-    assert (await client.patch(path, json={"course": "Calculus", "class_uid": "alg-1"}, headers=owner())).status == 400
-    moved = await (await client.patch(path, json={"course": None}, headers=owner())).json()
-    assert moved["course"] is None and library.inbox_count() == 2
-    assert (await client.patch("/app/api/library/items/999", json={"course": None}, headers=owner())).status == 404
-
-    assert (await client.delete(f"/app/api/library/items/{photo}", headers=owner())).status == 200
-    assert library.get(photo) is None
-    assert (await client.delete(f"/app/api/library/items/{photo}", headers=owner())).status == 404
-    assert (await client.get(f"/app/api/library/items/{photo}", headers=owner())).status == 404
-
-
-async def test_miniapp_without_library(aiohttp_client, budget, journal, store, schedule, merged):
-    """Without the library's links the Materials screen has no API: the page says so."""
-    client = await aiohttp_client(mini(budget, journal, store, schedule, merged=merged))
-    assert (await client.get("/app/api/library", headers=owner())).status == 404

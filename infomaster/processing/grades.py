@@ -22,7 +22,7 @@ sheet removed in the settings, or a new name, drops its grades, so the next read
 The API gives the newest event of each work still on its sheet within grades_window_days, newest first (Tablo's
 §3.7); the web app shows the grades.
 
-The owner's hand (D44). Every read keeps a view of each tab for the Mini App: the own row's cells under their headers
+The owner's hand (D44). Every read keeps a view of each tab for the web app: the own row's cells under their headers
 and the works laid out in them, never another student's row. The owner may lay out a tab themselves: that layout stands
 over Haiku's, whatever the header does, until given back. The owner adds grades by hand and changes a sheet's grade:
 a changed one stands until the sheet itself changes that grade. Both go to the API with the sheets' new grades.
@@ -48,9 +48,9 @@ log = logging.getLogger(__name__)
 LABEL_BUDGET = 23       # characters of "<course> <work>": the grades block of Tablo (§3.7)
 MIN_BUDGET = 8
 LAYOUT_VERSION = 3      # bump when the prompt changes, to drop the cached layouts
-VIEW = "grades.view:"   # + the sheet's id: what its last read found in each tab, for the Mini App
+VIEW = "grades.view:"   # + the sheet's id: what its last read found in each tab, for the web app
 OWN_LAYOUT = "grades.own_layout:"  # + the sheet's id, "|", the tab: the owner's layout of a tab
-HEADER_GUESS = 3        # top rows that head a column for the Mini App when no layout names the header
+HEADER_GUESS = 3        # top rows that head a column for the web app when no layout names the header
 MAX_TOKENS = 4000
 TOKENS_PER_WORK = 60    # {"column", "label", "max", "bonus_column"}: a tab of dates must not cut the answer
 SETTINGS = ("grades_student", "grades_sheets", "grades_window_days")
@@ -167,7 +167,7 @@ def works(items: list[dict], cells: list[dict]) -> list[dict]:
 
 
 def describe(view: TabView, spec: dict) -> dict:
-    """A tab as the Mini App shows it."""
+    """A tab as the web app shows it."""
     header_rows = spec.get("header_rows") or []
     cells = columns(view, header_rows)
     return {"tab": view.tab, "own_row": view.own_row, "skip": bool(spec.get("skip")), "reason": spec.get("reason"),
@@ -318,7 +318,7 @@ class Grades:
                        (sid, title, now))
         return first
 
-    # --- the API, the status and the Mini App -----------------------------------------------------
+    # --- the API, the status and the web app -----------------------------------------------------
 
     def new(self) -> list[dict]:
         """The newest event of each work within the window, newest first (Tablo's §3.7); the owner's grades of the

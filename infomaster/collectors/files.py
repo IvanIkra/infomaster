@@ -13,7 +13,7 @@ A letter's PDF attachment is kept when the letter arrives (collectors/mail.py), 
 is not asked again. A message of a study chat or a letter without a PDF of its own may link to one (D59): the batch
 asks for it (`fetch_link`), and the row keeps the link it came from. A download that fails for another reason than a
 gone or broken file is tried again at the next runs, MAX_TRIES times in all. And the PDFs the owner uploads in the
-Mini App as sheets of their own (D44): kept the same way, in rows of source `own` of the chat OWN_CHAT.
+web app as sheets of their own (D44): kept the same way, in rows of source `own` of the chat OWN_CHAT.
 """
 
 import asyncio

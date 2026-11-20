@@ -4,9 +4,10 @@ its reading within the limits and its posts in «Листочки»."""
 import datetime as dt
 from types import SimpleNamespace
 
+import actions_app
 import pytest
 from conftest import make_pdf
-from test_http import env, init_data
+from test_http import env
 
 from infomaster import clock
 from infomaster.collectors.files import Files
@@ -15,7 +16,6 @@ from infomaster.collectors.ruz import Class
 from infomaster.library import Library
 from infomaster.llm.budget import BudgetExceeded
 from infomaster.llm.client import Document, Haiku
-from infomaster.outputs import miniapp
 from infomaster.outputs.deadlines import DeadlineWatch
 from infomaster.outputs.sheets import SheetPublisher
 from infomaster.processing import pdf
@@ -388,18 +388,17 @@ async def test_a_deleted_message_withdraws_the_deadlines_of_its_sheet(batches, l
     assert batches.deadlines.get(gone)["sheet_id"] == 1
 
 
-# --- the Mini App ------------------------------------------------------------------------------------
+# --- the web app ------------------------------------------------------------------------------------
 
-async def test_miniapp_screen(aiohttp_client, batches, llm, sheets, topic, budget, journal, store, schedule, merged):
+async def test_actions_screen(aiohttp_client, batches, llm, sheets, topic, budget, journal, store, schedule, merged):
     await found(batches, llm, 1, SHEET3)
     await found(batches, llm, 2, make_pdf(["Sheet 4"]), number="4", name="list4.pdf")
     await topic.publish()
     hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
-    app = miniapp.create_app(env(), budget, journal, sheets.inbox, sheets.chat_settings, {"sheets": sheets.status},
+    app = actions_app.app(env(), budget, journal, sheets.inbox, sheets.chat_settings, {"sheets": sheets.status},
                              schedule.subjects, schedule, hse, merged, sheets.settings, topic)
     client = await aiohttp_client(app)
-    owner = {"Authorization": "tma " + init_data()}
-    assert (await client.get("/app/api/sheets")).status == 401
+    owner = {}
 
     state = await (await client.get("/app/api/sheets", headers=owner)).json()
     assert state["limits"] == {"pdf_pages": 10, "pdf_tokens": 30000}
@@ -427,10 +426,10 @@ async def test_owner_changes_and_adds_sheets(aiohttp_client, batches, llm, sheet
     await found(batches, llm, 1, SHEET3)
     await topic.publish()
     hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
-    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, sheets.inbox, sheets.chat_settings,
+    client = await aiohttp_client(actions_app.app(env(), budget, journal, sheets.inbox, sheets.chat_settings,
                                                      {"sheets": sheets.status}, schedule.subjects, schedule, hse,
                                                      merged, sheets.settings, topic))
-    owner = {"Authorization": "tma " + init_data()}
+    owner = {}
 
     change = {"course": "Линейная алгебра", "number": " 3b ", "due": "2026-11-02", "summary": "Series, 6 tasks."}
     [listed] = (await (await client.patch("/app/api/sheets/1", json=change, headers=owner)).json())["sheets"]
@@ -602,10 +601,10 @@ async def test_the_owner_clears_the_mark(aiohttp_client, batches, llm, sheets, t
     await posted(batches, llm, 2, make_pdf(["Sheet 4"]), due="", number="4", name="list4.pdf")
     await topic.publish()
     hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
-    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, sheets.inbox, sheets.chat_settings,
+    client = await aiohttp_client(actions_app.app(env(), budget, journal, sheets.inbox, sheets.chat_settings,
                                                      {"sheets": sheets.status}, timetable.subjects, timetable, hse,
                                                      merged, sheets.settings, topic))
-    owner = {"Authorization": "tma " + init_data()}
+    owner = {}
     listed = {s["id"]: s for s in (await (await client.get("/app/api/sheets", headers=owner)).json())["sheets"]}
     assert (listed[1]["due_assumed"], listed[1]["due_at"]) == (True, "2026-10-22T09:30:00")
     items = (await (await client.get("/app/api/deadlines", headers=owner)).json())["items"]
@@ -645,7 +644,7 @@ async def test_the_assumed_date_follows_the_timetable(batches, llm, sheets, topi
     assert (row["due"], batches.deadlines.get(first["id"])["moved_by"]) == ("2026-10-23", row["id"])
     assert changes.moved == [(first["id"], row["id"])] and sheets.get(1)["due_at"] == "2026-10-23T11:10:00"
 
-    # The owner moves the class in the Mini App: the date follows the feeds as they are.
+    # The owner moves the class in the web app: the date follows the feeds as they are.
     await timetable.correct_class(TIMETABLE[1].uid, "2026-10-24T10:00:00", "2026-10-24T11:20:00", "R101", False)
     assert assumed_rows(batches)[0]["due"] == "2026-10-24"
 

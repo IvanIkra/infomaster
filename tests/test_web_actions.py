@@ -3,6 +3,7 @@ date, a course for a deadline without one, the «Check» queue, and the journal 
 
 import datetime as dt
 
+import actions_app
 import pytest
 from aiohttp import web
 from test_http import TWIN, add_row, env
@@ -11,7 +12,6 @@ from test_web import FEED, IPHONE, call, log_in
 from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
 from infomaster.collectors.ruz import parse
 from infomaster.connector import Connector
-from infomaster.outputs import miniapp
 from infomaster.processing.news import News
 from infomaster.processing.todo import Deadline, uid
 from infomaster.settings import ChatSettings, Settings
@@ -30,7 +30,7 @@ class Seconds:
 
 @pytest.fixture
 async def actor(aiohttp_client, store, budget, journal, schedule, merged, now):
-    """The service's public port as it runs: the Mini App, the connector and the web app on one app; today is
+    """The service's public port as it runs: the web app, the connector and the web app on one app; today is
     Tuesday 20.10.2026, a logged-in device."""
     schedule.ruz._sync(parse(FEED))
     schedule.subjects.set_manual("Discrete Mathematics", "Discrete Mathematics", "DM")
@@ -41,7 +41,7 @@ async def actor(aiohttp_client, store, budget, journal, schedule, merged, now):
         sent.append(text)
 
     hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
-    app = miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
+    app = actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
                              schedule, hse, merged, budget.settings)
     connector = Connector(env(), store, News(store), now=now, seconds=seconds)
     connector.attach(app)
@@ -99,7 +99,7 @@ async def test_done_not_mine_and_undo(actor, merged):
     await post(actor, f"/changes/{gone['change']['id']}/undo", {})
     assert [d.title for d in merged.todo.own()] == ["Dentist"]
 
-    # Every change is in the connector's journal as the web app's; the Mini App's connector screen lists Claude's.
+    # Every change is in the connector's journal as the web app's; the web app's connector screen lists Claude's.
     assert {c["via"] for c in actor.connector.changes.recent()} == {"web"}
     assert actor.connector.state()["changes"] == []
 

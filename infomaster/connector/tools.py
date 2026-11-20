@@ -4,8 +4,8 @@ A tool is a name, a description and a JSON Schema for the model, and a coroutine
 `write`: the endpoint journals every call of it (connector/changes.py) with the steps that undo it. The steps are calls
 of other tools, or of an `undo op` that no client sees (restoring a row the tools cannot bring back as it was).
 
-Most tools act through the Mini App's own handlers (`mini_app`): a tool is a tap in the Mini App, with the same checks
-and the same side effects (the caption of a sheet's message edited, the reminders rescheduled), so no rule lives twice.
+Most tools act through the owner's actions (infomaster/actions.py, `call_action`), the handlers the web app's
+screens call too, with the same checks and the same side effects (the reminders rescheduled), so no rule lives twice.
 The library's tools (stage 14: raw material and the knowledge base) are in connector/library.py, in the same
 registry.
 """
@@ -36,7 +36,7 @@ class ToolError(Exception):
 class Output:
     """What a tool gives: `data` for the model; a write also says what it did and how to undo it."""
     data: Any
-    summary: str = ""                      # a write: one line for the journal in the Mini App
+    summary: str = ""                      # a write: one line for the journal in «Machine»
     undo: list[dict] | None = None         # a write: [{tool, arguments}] that put it back; None when nothing can
     note: str = ""                         # why it cannot be undone, or what an undo does not bring back
     images: list[tuple[bytes, str]] = field(default_factory=list)  # (data, media type)
@@ -67,8 +67,8 @@ class Tool:
 
 @dataclass
 class Context:
-    """What a tool runs with: the public port's app (its keys hold the services of the Mini App), the connector's
-    own services, and the connection it was called on (None for an undo from the Mini App)."""
+    """What a tool runs with: the public port's app (its keys hold the services, actions.py), the connector's own
+    services, and the connection it was called on (None for an undo from «Machine» or the web app)."""
     app: web.Application
     services: Any
     grant_id: int | None = None
@@ -155,14 +155,13 @@ def schema(properties: dict | None = None, required: tuple[str, ...] = ()) -> di
             "additionalProperties": False}
 
 
-# --- through the Mini App ------------------------------------------------------------------------
+# --- through the actions -------------------------------------------------------------------------
 
 class Call(dict):
-    """A Mini App request made by a tool: the handlers read `app`, `match_info`, `query` and `json()` of it, and the
-    owner's user from it as a dict."""
+    """A request to an action: the handlers read `app`, `match_info`, `query` and `json()` of it."""
 
     def __init__(self, app: web.Application, body=None, match_info: dict | None = None, query: dict | None = None):
-        super().__init__(user={"first_name": "connector"})
+        super().__init__()
         self.app, self._body = app, body
         self.match_info = {key: str(value) for key, value in (match_info or {}).items()}
         self.query = {key: str(value) for key, value in (query or {}).items()}
@@ -171,9 +170,9 @@ class Call(dict):
         return self._body
 
 
-async def mini_app(app: web.Application, handler: Callable[[web.Request], Awaitable[web.Response]], body=None,
-                   query: dict | None = None, **match_info) -> Any:
-    """A Mini App handler's answer as JSON; its refusal (a 400 or 404 with its text) as ToolError."""
+async def call_action(app: web.Application, handler: Callable[[web.Request], Awaitable[web.Response]], body=None,
+                      query: dict | None = None, **match_info) -> Any:
+    """An action's answer as JSON; its refusal (a 400 or 404 with its text) as ToolError."""
     try:
         response = await handler(Call(app, body, match_info, query))  # type: ignore[arg-type]
     except web.HTTPException as e:

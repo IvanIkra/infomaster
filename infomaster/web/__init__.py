@@ -1,5 +1,5 @@
-"""The web app (§8.6, D61, stage 16): a home-screen app on the public port that takes the place of the forum and
-the Mini App.
+"""The web app (§8.6, D61, stage 16): a home-screen app on the public port that took the place of the forum and
+the web app (D69).
 
 On the public port, next to the connector:
 - /web/: the app's page; /web/static/*: its scripts, styles, fonts and icons; /web/sw.js: the service worker, whose

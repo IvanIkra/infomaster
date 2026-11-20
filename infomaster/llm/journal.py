@@ -36,7 +36,7 @@ class Journal:
         return row["n"]
 
     def totals(self, since: dt.datetime) -> dict:
-        """Runs, cost and tokens since a moment, overall and by task and chat (for the Mini App, §8.4)."""
+        """Runs, cost and tokens since a moment, overall and by task and chat (for the web app, §8.4)."""
         sums = ("count(*) runs, coalesce(sum(ok = 0), 0) failed, coalesce(sum(cost_usd), 0) cost, "
                 "coalesce(sum(input_tokens + output_tokens + cache_write + cache_read), 0) tokens")
         since_utc = clock.utc_iso(since)

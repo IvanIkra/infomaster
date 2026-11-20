@@ -1,6 +1,6 @@
-"""General and chat settings (§5.1, §10): kept in SQLite, edited in the Mini App. A setting never set has its default.
+"""General and chat settings (§5.1, §10): kept in SQLite, edited in the web app. A setting never set has its default.
 
-General settings arrive with the stages that use them. Chat settings are all here from the start, so the Mini App can
+General settings arrive with the stages that use them. Chat settings are all here from the start, so the web app can
 set a chat up once; the twin uses `enabled`, the batches `study`, `filter`, `people`, `urgent`, `batch_hours` and
 `images` and `note`, the sheets `pdf_content`. A saved setting no longer listed here (the summaries' `summary_time`
 and `summary`, removed with them, D55) stays in its table and is never read.
@@ -138,7 +138,7 @@ def grade_sheet_id(url: str) -> str:
 
 def _grade_sheets(value: Any) -> list[dict]:
     """[{url, label, name?}]: Google Sheets open to anyone with the link, or Dropbox share links to .xlsx files;
-    label is the course's short name, "" for the start of the sheet's title; name is the owner's for the Mini App
+    label is the course's short name, "" for the start of the sheet's title; name is the owner's for the web app
     (D44), kept only when given."""
     if not isinstance(value, list):
         raise SettingsError("expected a list of {url, label}")

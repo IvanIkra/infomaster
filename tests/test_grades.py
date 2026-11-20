@@ -3,6 +3,7 @@
 import datetime as dt
 import io
 
+import actions_app
 import pytest
 from aiohttp import web
 from openpyxl import Workbook
@@ -14,7 +15,7 @@ from infomaster.collectors.grades import GradeSheets, Read, Sheet
 from infomaster.i18n import Alert
 from infomaster.llm.budget import BudgetExceeded
 from infomaster.llm.client import BadAnswer
-from infomaster.outputs import api, miniapp
+from infomaster.outputs import api
 from infomaster.processing import grades as g
 from infomaster.processing.grades import Grades, Item
 from infomaster.settings import Settings, SettingsError
@@ -370,11 +371,11 @@ async def google(aiohttp_server, monkeypatch):
 
 
 async def test_poll_end_to_end(google, grades, settings, llm, now):
-    """New grades reach the API's list; the forum hears only that the sheet is connected (D55)."""
+    """New grades reach the API's list; the owner hears only that the sheet is connected (D55)."""
     source = GradeSheets(settings, now=now)
     source.on_sheet = grades.apply
     system = []
-    source.notify = lambda line: system.append(line.ru)  # a Phrase: the forum picks its language
+    source.notify = lambda line: system.append(line.ru)  # a Phrase: the notifier picks its language
 
     await source.poll()  # the baseline
     status = source.status()["sheets"]["abc123"]
@@ -537,7 +538,7 @@ async def test_api_and_miniapp(aiohttp_client, grades, settings, budget, journal
                                "seen_at": clock.local_iso(now())}], "window_days": 7}
     assert (await client.get("/api/grades")).status == 401
 
-    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, None, sources,
+    client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, None, sources,
                                                      schedule.subjects, schedule, None, merged, settings,
                                                      grade_list=grades))
     headers = owner()
@@ -662,19 +663,18 @@ def test_the_owners_grades(grades, now):
     assert grades.db.execute("select count(*) n from own_grades").fetchone()["n"] == 0
 
 
-async def test_miniapp_gradebook(aiohttp_client, grades, settings, budget, journal, schedule, merged):
+async def test_actions_gradebook(aiohttp_client, grades, settings, budget, journal, schedule, merged):
     from urllib.parse import quote
 
     await grades.apply(sheet())
     status = {"sheets": {"abc123": {"title": "ДМ ПИ", "ok_at": "2026-10-20T12:00:00", "error": None, "tabs": 2,
                                     "items": 2}}, "llm": True}
-    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, None,
+    client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, None,
                                                      {**TWIN, "grades": lambda: status}, schedule.subjects, schedule,
                                                      None, merged, settings, grade_list=grades))
     headers, woken = owner(), []
     grades.wake = lambda: woken.append(1)
     path = "/app/api/grades/sheets/abc123"
-    assert (await client.get(path)).status == 401
     body = await (await client.get(path, headers=headers)).json()
     assert (body["title"], body["course"], body["label_budget"], body["student"], body["items"]) == (
         "ДМ ПИ", "DM", 20, "Иванов Иван", 2)

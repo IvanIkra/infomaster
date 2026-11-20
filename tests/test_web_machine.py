@@ -1,10 +1,11 @@
 """«Machine» of the web app (§8.6, stage 16.6, D65): the sources and their freshness, what needs attention, the journal
-with its undo, the Mini App's settings changed through the connector's tools, and the notifications' kinds and quiet
+with its undo, the web app's settings changed through the connector's tools, and the notifications' kinds and quiet
 hours."""
 
 import asyncio
 import datetime as dt
 
+import actions_app
 import pytest
 from aiohttp import web
 from test_http import env
@@ -17,7 +18,6 @@ from infomaster.collectors.ruz import parse
 from infomaster.collectors.telegram import LoginError
 from infomaster.connector import Connector
 from infomaster.i18n import Alert, Phrase
-from infomaster.outputs import miniapp
 from infomaster.processing.grades import VIEW, Grades, works
 from infomaster.processing.news import News
 from infomaster.processing.todo import Deadline
@@ -91,7 +91,7 @@ async def machine(aiohttp_client, store, budget, journal, schedule, merged, now)
         "batches": lambda: {"ok_at": "2026-10-20T11:00:00", "error": None, "queue": 2},
         "grades": lambda: {"configured": True, "sheets": {}},
     }
-    app = miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), statuses, schedule.subjects,
+    app = actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), statuses, schedule.subjects,
                              schedule, hse, merged, settings, None, grades, twin, None, reminders)
     connector = Connector(env(), store, News(store), now=now, seconds=seconds)
     connector.attach(app)

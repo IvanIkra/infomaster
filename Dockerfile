@@ -13,6 +13,6 @@ RUN uv sync --locked --no-dev --no-install-project --no-cache
 
 COPY infomaster infomaster
 
-# 8080: public (Mini App, behind Funnel); 8081: internal (API for Tablo and HA)
+# 8080: public (the web app and the connector, behind Funnel); 8081: internal (API for Tablo and HA)
 EXPOSE 8080 8081
 CMD ["python", "-m", "infomaster", "--data", "data"]

@@ -78,11 +78,11 @@ class Todo:
                               ref=r["ref"] or "") for r in rows)
 
     def hidden_rows(self) -> list[dict]:
-        """For the Mini App: by date, the newest first."""
+        """For the web app: by date, the newest first."""
         return [dict(row) for row in self.db.execute("select * from hidden_deadlines order by due desc, title")]
 
     def add(self, title: str, due: dt.date, category: str, course: str | None = None) -> Deadline:
-        """`course`: its key (the abbr), as the web app gives it; HA and the Mini App give none."""
+        """`course`: its key (the abbr), as the web app gives it; HA and the web app give none."""
         title = check(title, due, category)
         course = " ".join((course or "").split()) or None
         cursor = self.db.execute("insert into own_deadlines(title, due, category, course) values(?, ?, ?, ?)",
@@ -114,7 +114,7 @@ class Todo:
         return Deadline(title, due, category, "ha", d.course, key=d.key, ref=d.key)
 
     def unhide(self, hidden_uid: str) -> bool:
-        """«Вернуть» in the Mini App: the source's deadline is back unless another hidden row matches it."""
+        """«Вернуть» in the web app: the source's deadline is back unless another hidden row matches it."""
         return bool(self.db.execute("delete from hidden_deadlines where uid = ?", (hidden_uid,)).rowcount)
 
     def prune(self, today: dt.date) -> None:

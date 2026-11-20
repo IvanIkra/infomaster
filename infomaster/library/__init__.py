@@ -656,7 +656,7 @@ class Library:
         return removed
 
     def usage(self) -> dict:
-        """Items, documents and bytes on disk: the Mini App's status."""
+        """Items, documents and bytes on disk: «Machine»."""
         size = sum(p.stat().st_size for p in self.root.rglob("*") if p.is_file()) if self.root.exists() else 0
         items = self.db.execute("select count(*) n, sum(status = 'new') new from materials where removed_at is null "
                                 "and status != 'uploading'").fetchone()

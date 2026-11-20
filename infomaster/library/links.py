@@ -1,8 +1,8 @@
 """Links to the library's files (D58): a file goes in and out by a signed link, never inside a tool's call.
 
-Claude Code on the owner's machine moves a lecture's recording or a built PDF with `curl`; the Mini App opens a PDF
+Claude Code on the owner's machine moves a lecture's recording or a built PDF with `curl`; the web app opens a PDF
 the same way. A link names one file and one direction and expires; it is signed with a key kept in the database, so
-the service's restart keeps the links it gave. On the public port, next to the Mini App:
+the service's restart keeps the links it gave. On the public port, next to the web app:
 - GET /library/<token>/<name>: a material's file, a version's source or PDF, or a sheet's PDF the sheets keep for 14
   days (D69: it opens outside the app's session, as an iPhone's Home Screen app opens a link in Safari);
 - PUT /library/<token>: the bytes of a draft material or of a draft version's source or PDF (POST too).
@@ -157,7 +157,7 @@ async def upload(request: web.Request) -> web.Response:
 
 
 def add_routes(app: web.Application, links: Links) -> None:
-    """The links' routes; the library and its links under LIBRARY_KEY and LINKS_KEY for the Mini App and the tools."""
+    """The links' routes; the library and its links under LIBRARY_KEY and LINKS_KEY for the web app and the tools."""
     app[LINKS_KEY], app[LIBRARY_KEY] = links, links.library
     app.router.add_get("/library/{token}/{name}", download)
     app.router.add_get("/library/{token}", download)

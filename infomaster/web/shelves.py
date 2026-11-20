@@ -4,7 +4,7 @@ raw material by course, and the sorting of the library's inbox.
 The screens read through the sheets' store and the library; every change is the connector's write tool
 (`Connector.act`), so it is checked once, journaled with `via` web and undone from the journal like the others:
 `edit_sheet`, `join_sheet`, `delete_sheet`, `sort_material`, `update_material`, `remove_material`. An own sheet's PDF
-is a multipart upload that no tool can take; it is kept as the Mini App keeps it and journaled by hand, with the undo
+is a multipart upload that no tool can take; it is kept as the sheets keep a chat's and journaled by hand, with the undo
 that deletes it again.
 
 Two names of a course meet here. A sheet keeps the course as the model named it and is matched to a lens by the
@@ -23,11 +23,10 @@ from functools import partial
 
 from aiohttp import web
 
-from .. import clock
+from .. import actions, clock
 from ..collectors.files import UPLOAD_MAX_SIZE
 from ..connector.tools import ToolError
 from ..i18n import json_default, reason
-from ..outputs import miniapp
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +85,7 @@ def _library(request: web.Request):
 
 
 def _topic(request: web.Request):
-    topic = request.app.get(miniapp.SHEETS_KEY)
+    topic = request.app.get(actions.SHEETS_KEY)
     if topic is None:
         raise web.HTTPNotFound(text="the sheets are off")
     return topic
@@ -173,7 +172,7 @@ def _file_url(request: web.Request, version: dict) -> str | None:
 
 async def home(request: web.Request) -> web.Response:
     """The shelves' entry: how many sheets, what waits in the inbox, and the courses with raw material."""
-    data, library, topic = _data(request), _data(request).library, request.app.get(miniapp.SHEETS_KEY)
+    data, library, topic = _data(request), _data(request).library, request.app.get(actions.SHEETS_KEY)
     courses = []
     if library is not None:
         for course in library.courses():

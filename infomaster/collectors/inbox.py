@@ -198,7 +198,7 @@ class Inbox:
         return row["subject"] if row else None
 
     def senders(self, chat_id: int) -> list[dict]:
-        """Who wrote in a chat, most active first: the Mini App picks the important people from them."""
+        """Who wrote in a chat, most active first: the web app picks the important people from them."""
         rows = self.db.execute(
             "select sender_id id, sender_name name, count(*) messages from messages "
             "where source = 'tg' and chat_id = ? and sender_id is not null "

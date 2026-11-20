@@ -1,5 +1,5 @@
 # Production run on the Tablo host: docker compose up -d --build
-# No port is published on the host (§3). The Mini App goes out only through the Tailscale sidecar's Funnel;
+# No port is published on the host (§3). The public port goes out only through the Tailscale sidecar's Funnel;
 # Tablo reaches the internal port by service name over the shared network.
 # Bridge network with explicit DNS, as Tablo: the host's routing sends container traffic into AmneziaWG.
 services:

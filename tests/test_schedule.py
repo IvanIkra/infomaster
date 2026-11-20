@@ -227,7 +227,7 @@ async def test_a_failing_midterm_post_does_not_stop_hiding(loaded, now):
     await loaded.after_poll(Diff(first=True))
 
     async def broken(midterms):
-        raise RuntimeError("the forum is down")
+        raise RuntimeError("the deadlines are down")
 
     loaded.on_midterms = broken
     moved = correction(loaded, now, "2000007@ruz.hse.ru", start="2026-11-05T10:00:00", end="2026-11-05T13:00:00")
@@ -344,5 +344,3 @@ def test_all_day_event_in_the_agenda(loaded, now):
     assert (item["start"], item["end"], item["event"]["start"], item["event"]["end"]) == (
         "2026-10-21", None, "2026-10-21", None)
     assert item["event"]["id"] == event_id
-    from infomaster.processing.schedule import event_key
-    assert item["key"] == event_key(item["uid"]) and len(item["key"]) == 12  # a link from the calendar finds it

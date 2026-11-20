@@ -279,7 +279,7 @@ class Sheets:
             self.db.execute("update sheets set status = 'posted' where id = ?", (sheet_id,))
 
     def file_gone(self) -> str:
-        """The reason a sheet failed when its file is gone, for the Mini App: kept in the row, so in its language
+        """The reason a sheet failed when its file is gone, for the web app: kept in the row, so in its language
         of now."""
         return tr(self.settings.get("miniapp_language"), "the file is deleted already", "файл уже удалён")
 
@@ -606,7 +606,7 @@ class Sheets:
         """A system prompt asking for the app's language."""
         return system.format(**PROMPT_WORDS[self.settings.get("miniapp_language")])
 
-    # --- the owner's joining (the Mini App) -------------------------------------------------------
+    # --- the owner's joining (the web app) -------------------------------------------------------
 
     async def join(self, sheet_id: int, previous_id: int) -> dict:
         """Make a sheet published as new a newer version of another one: the sheet now. ValueError (with a Phrase)

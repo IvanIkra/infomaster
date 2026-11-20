@@ -220,7 +220,7 @@ class DeadlineList:
         return self._change(lambda: self.todo.edit(d, title, due, category))
 
     def unhide(self, hidden_uid: str) -> bool:
-        """«Вернуть» of the Mini App: one hidden row less."""
+        """«Вернуть» of the web app: one hidden row less."""
         return self._change(lambda: self.todo.unhide(hidden_uid))
 
     def restore(self, d: Deadline) -> bool:

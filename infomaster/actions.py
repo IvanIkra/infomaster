@@ -1,69 +1,54 @@
-"""Mini App on the public port, the only one behind Funnel (§8.1, §8.4).
+"""The owner's actions and readings, shaped as aiohttp handlers (§8.5, §8.6, D69).
 
-Every /app/api/ request carries Telegram's initData in `Authorization: tma <initData>`. It is signed with the bot
-token, and only the owner's Telegram id gets in (D16).
+They were the Mini App's API; the Mini App is gone (D69) and its handlers stay as the one place of the rules: the
+connector's tools call them (connector/tools.py, `call_action`), and so do the web app's screens, «Machine» and the
+shelves, through the tools or directly for what has no tool. A handler reads the services from the public port's
+app by the keys below and answers JSON, a refusal as a 400 or 404 with its text, in the app's language (D41).
 
-Screens (D44: four tabs, every change an action on a card): the merged deadlines with the owner's own ones and the
-hidden ones (§5.4, §5.5), the timetable as the feeds have it, with the main/optional switch and hiding of the chats'
-events and corrections, the owner's own events and corrections of classes (§6.5), the grades and the sheets (§6.7,
-§6.3, D14), the library's materials and knowledge base (§6.8, D58), and the settings: the twin's account with its
-login and logout and the chats with their settings and the daily number of images read in them (D12), the course
-dictionary with manual entries (D3, D33), the HSE App X login (§5.2, D7), the limits of reading a PDF, the gradebooks:
-the name, the sheets and what was read in them, the LLM spending (§7, D40): today, this week and this month by task
-and by chat, the cost of each of the last 30 days and the daily limit, which can be changed or raised for today. Tablo
-and HA show no spending: this screen is the one place. The general settings: the batches' N, how long news lives, the
-prices of the models, the languages of the forum and the Mini App (D41) and what the student tells the models about
-themselves (D52). Every setting is here (D33); only the secrets of .env are not. The Mini App's texts are the page's
-own; what the service says here (errors, the reasons of a failed login, the statuses) comes in the Mini App's language
-too.
+What they cover: the merged deadlines with the owner's own ones and the hidden ones (§5.4, §5.5), the timetable as the
+feeds have it with the owner's own events and corrections (§6.5), the grades and the sheets (§6.7, §6.3, D14), the
+library's materials (§6.8, D58), and the settings: the twin's account with its login and logout, the chats and their
+settings (D12), the course dictionary (D3, D33), the HSE App X login (§5.2, D7), the limits of reading a PDF, the
+gradebooks, the LLM spending and its daily limit (§7, D40), the general settings (D41, D52).
 
-The same port serves /hseapp/callback, where the browser comes back after the HSE login. It has no initData: the
-PKCE state of the login link is its protection, and it answers with a short page in the Mini App's language. And
-/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics and optional.ics for one's own calendar (see ical_feed, D43).
+The public port (`public_app`) also serves /hseapp/callback, where the browser comes back after the HSE login: the
+PKCE state of the login link is its protection, and it answers with a short page in the app's language. And
+/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics and optional.ics for one's own calendar (see ical_feed, D43), and the
+library's signed links.
 """
 
 import calendar
 import datetime as dt
-import hashlib
-import hmac
 import html
 import json
 import re
-import time
 from functools import partial
-from pathlib import Path
-from urllib.parse import parse_qsl
 
-from aiohttp import BodyPartReader, web
-from aiohttp.hdrs import CONTENT_TYPE
+from aiohttp import web
 
-from .. import clock
-from ..collectors.files import UPLOAD_MAX_SIZE
-from ..collectors.grades import sheet_id, short_course
-from ..collectors.hseapp import CALLBACK_PATH, HseApp
-from ..collectors.inbox import MAILBOX, Inbox, message_link
-from ..collectors.telegram import LoginError, Twin
-from ..config import Env
-from ..i18n import LANGUAGES, json_default, reason, tr
-from ..library import CHUNK, Library, LibraryError
-from ..library.links import LIBRARY_KEY, LINKS_KEY, Links
-from ..library.links import add_routes as add_library_routes
-from ..llm.budget import SOFT_SHARE, Budget
-from ..llm.journal import Journal
-from ..processing.grades import Grades, budget
-from ..processing.merge import DeadlineList
-from ..processing.schedule import Schedule, message_ref
-from ..processing.sheets import SUMMARY_CHARS
-from ..processing.subjects import ABBR_CHARS, TITLE_CHARS, SubjectError, Subjects
-from ..processing.todo import CATEGORIES, uid
-from ..settings import BATCH_HOURS, SHEET_LABEL_CHARS, SPECS, ChatSettings, Settings, SettingsError
-from . import ical_feed
-from .api import SOURCES_KEY, Sources
-from .reminders import DeadlineReminders
-from .sheets import SheetPublisher
-
-STATIC = Path(__file__).with_name("miniapp")
-INIT_DATA_TTL = 24 * 3600  # seconds; Telegram signs initData once, when the Mini App opens
+from . import clock
+from .collectors.files import UPLOAD_MAX_SIZE
+from .collectors.grades import sheet_id, short_course
+from .collectors.hseapp import CALLBACK_PATH, HseApp
+from .collectors.inbox import MAILBOX, Inbox, message_link
+from .collectors.telegram import LoginError, Twin
+from .config import Env
+from .i18n import LANGUAGES, json_default, reason, tr
+from .library.links import Links
+from .library.links import add_routes as add_library_routes
+from .llm.budget import SOFT_SHARE, Budget
+from .llm.journal import Journal
+from .outputs import ical_feed
+from .outputs.api import SOURCES_KEY, Sources
+from .outputs.reminders import DeadlineReminders
+from .outputs.sheets import SheetPublisher
+from .processing.grades import Grades, budget
+from .processing.merge import DeadlineList
+from .processing.schedule import Schedule, message_ref
+from .processing.sheets import SUMMARY_CHARS
+from .processing.subjects import ABBR_CHARS, TITLE_CHARS, SubjectError, Subjects
+from .processing.todo import CATEGORIES, uid
+from .settings import BATCH_HOURS, SHEET_LABEL_CHARS, SPECS, ChatSettings, Settings, SettingsError
 
 ENV_KEY = web.AppKey("env", Env)
 BUDGET_KEY = web.AppKey("budget", Budget)
@@ -80,7 +65,7 @@ REMINDERS_KEY = web.AppKey("reminders", DeadlineReminders)
 GRADES_KEY = web.AppKey("grades", Grades)
 TWIN_KEY = web.AppKey("twin", Twin)
 GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "miniapp_language",
-           "about_me", "wiki_pages")  # of no other screen
+           "about_me", "wiki_pages")  # of no other group
 GRADE_SETTINGS = {"student": "grades_student", "sheets": "grades_sheets", "window_days": "grades_window_days"}
 PDF_LIMITS = ("pdf_pages", "pdf_tokens")
 TITLE_LIMIT = 200  # characters of an own deadline's title
@@ -101,35 +86,14 @@ LIBRARY_URL = 2000      # characters of a link
 DOC_ORDER = {"book": 0, "cheatsheet": 1}  # a course's own documents before its classes'
 
 
-def check_init_data(init_data: str, bot_token: str, now: float | None = None) -> dict | None:
-    """The Telegram user from valid, fresh initData; None for anything else."""
-    fields = dict(parse_qsl(init_data, keep_blank_values=True))
-    received = fields.pop("hash", None)
-    if not received:
-        return None
-    check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
-    secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
-    expected = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, received):
-        return None
-    try:
-        auth_date = int(fields["auth_date"])
-        user = json.loads(fields["user"])
-    except (KeyError, ValueError):
-        return None
-    if (now if now is not None else time.time()) - auth_date > INIT_DATA_TTL:
-        return None
-    return user if isinstance(user, dict) else None
-
-
 def language(request: web.Request) -> str:
-    """The Mini App's language (D41); English where the app has no settings."""
+    """The app's language (D41); English where the app has no settings."""
     settings = request.app.get(SETTINGS_KEY)
     return settings.get("miniapp_language") if settings is not None else "en"
 
 
 def respond(request: web.Request, data) -> web.Response:
-    """JSON with every Phrase in it (a status error, a letter's subject) in the Mini App's language."""
+    """JSON with every Phrase in it (a status error, a letter's subject) in the app's language."""
     return web.json_response(data, dumps=partial(json.dumps, default=json_default(language(request))))
 
 
@@ -137,43 +101,8 @@ def bad_request(request: web.Request, en: str, ru: str) -> web.HTTPBadRequest:
     return web.HTTPBadRequest(text=tr(language(request), en, ru))
 
 
-@web.middleware
-async def owner_only(request: web.Request, handler):
-    if not request.path.startswith("/app/api/") or request.match_info.http_exception is not None:
-        return await handler(request)  # not the Mini App's API, or no such route (none at all without it, D69)
-    scheme, _, init_data = request.headers.get("Authorization", "").partition(" ")
-    env = request.app[ENV_KEY]
-    user = check_init_data(init_data, env.bot_token) if scheme == "tma" else None
-    if user is None:
-        raise web.HTTPUnauthorized(text="open the app from the bot")
-    if user.get("id") != env.owner_id:
-        raise web.HTTPForbidden(text="not your app")
-    request["user"] = user
-    return await handler(request)
-
-
-async def index(request: web.Request) -> web.FileResponse:
-    return web.FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
-
-
-async def to_web(request: web.Request) -> web.Response:
-    """Without the forum the web app has the Mini App's place (D69): an old link or menu button leads there."""
-    raise web.HTTPFound("/web/")
-
-
-async def to_index(request: web.Request) -> web.Response:
-    raise web.HTTPFound("/app/")
-
-
-async def me(request: web.Request) -> web.Response:
-    """The stub screen: who is in and what the LLM cost today."""
-    today = request.app[JOURNAL_KEY].usage(clock.now_utc())["today"]
-    return respond(request, {"first_name": request["user"].get("first_name", ""), "language": language(request),
-                             "llm": {**request.app[BUDGET_KEY].status(), "runs_today": today["runs"]}})
-
-
 async def chats(request: web.Request) -> web.Response:
-    """The Chats screen (§8.4): every chat of the twin with its settings, enabled ones first."""
+    """The chats: every chat of the twin with its settings, enabled ones first."""
     chat_settings = request.app[CHAT_SETTINGS_KEY]
     listed = [{**chat, "settings": chat_settings.all(chat["id"])} for chat in request.app[INBOX_KEY].chats()]
     listed.sort(key=lambda chat: not chat["settings"]["enabled"])
@@ -235,7 +164,7 @@ async def senders(request: web.Request) -> web.Response:
 
 
 async def subjects(request: web.Request) -> web.Response:
-    """The Словарь screen (§8.4): every entry; Haiku's can be overridden by hand, manual ones edited or deleted."""
+    """The course dictionary: every entry; Haiku's can be overridden by hand, manual ones edited or deleted."""
     dictionary = request.app[SUBJECTS_KEY]
     entries = [{"name": name, "title": s.title, "abbr": s.abbr, "manual": s.manual}
                for name, s in dictionary.all().items()]
@@ -270,8 +199,8 @@ def _agenda_state(request: web.Request) -> dict:
 
 
 async def agenda(request: web.Request) -> web.Response:
-    """The Расписание screen: the classes with their corrections and the events, as the feeds have them, from today
-    on; every change of the screen answers it anew."""
+    """The timetable: the classes with their corrections and the events, as the feeds have them, from today on;
+    every change answers it anew."""
     return respond(request, _agenda_state(request))
 
 
@@ -286,7 +215,7 @@ def _moment(request: web.Request, value) -> dt.datetime:
 
 
 def _event_fields(request: web.Request, values: dict, names: set[str]) -> dict:
-    """The checked `names` of an event from the screen: title, kind, start and end (Moscow), room, required,
+    """The checked `names` of an event: title, kind, start and end (Moscow), room, required,
     cancelled."""
     fields = {}
     if "title" in names:
@@ -438,7 +367,7 @@ def _origin(request: web.Request, d) -> dict:
 
 
 def _deadlines_state(request: web.Request) -> dict:
-    """The Дедлайны screen: the merged list as Tablo and HA get it, the own ones, the hidden ones."""
+    """The deadlines: the merged list as Tablo and HA get it, the own ones, the hidden ones."""
     merged = request.app[DEADLINES_KEY]
     today = merged.today()
     items = [{"uid": uid(d), "title": d.title, "due": d.due.isoformat(), "category": d.category, "source": d.source,
@@ -454,7 +383,7 @@ def _deadlines_state(request: web.Request) -> dict:
 
 
 def _own_fields(request: web.Request, values: dict, some: bool) -> dict:
-    """title, due and category of an own deadline from the screen; every one of them, unless `some`."""
+    """title, due and category of an own deadline; every one of them, unless `some`."""
     fields = {}
     if not some or "title" in values:
         title = values.get("title")
@@ -517,7 +446,7 @@ async def edit_deadline(request: web.Request) -> web.Response:
 
 
 def _assumed_sheet(request: web.Request, d) -> int | None:
-    """The sheet whose assumed date a deadline is, when the Mini App has the sheets."""
+    """The sheet whose assumed date a deadline is, when the sheets are wired."""
     if not d.assumed or not d.ref.startswith("dl:") or request.app.get(SHEETS_KEY) is None:
         return None
     row = request.app[DEADLINES_KEY].deadlines.get(int(d.ref[3:]))
@@ -531,7 +460,7 @@ async def delete_deadline(request: web.Request) -> web.Response:
 
 
 async def unhide_deadline(request: web.Request) -> web.Response:
-    """«Вернуть»: one hidden row less; the deadline is back if its source still has it."""
+    """«Restore»: one hidden row less; the deadline is back if its source still has it."""
     if not request.app[DEADLINES_KEY].unhide(request.match_info["uid"]):
         raise web.HTTPNotFound(text=tr(language(request), "no such hidden deadline", "такого скрытого дедлайна нет"))
     return respond(request, _deadlines_state(request))
@@ -546,7 +475,7 @@ def _sheets_state(request: web.Request) -> dict:
 
 
 async def sheets(request: web.Request) -> web.Response:
-    """The Листочки screen: the sheets with their versions and the limits of reading them."""
+    """The sheets: with their versions and the limits of reading them."""
     return respond(request, _sheets_state(request))
 
 
@@ -651,7 +580,7 @@ async def join_sheet(request: web.Request) -> web.Response:
 # --- HSE App X ------------------------------------------------------------------------------
 
 def _hseapp_state(request: web.Request) -> dict:
-    """The screen's state: the source's status (never the tokens) and where the browser comes back to."""
+    """HSE App X: the source's status (never the tokens) and where the browser comes back to."""
     return {"status": request.app[SOURCES_KEY]["hseapp"](), "callback": request.app[HSEAPP_KEY].callback_url}
 
 
@@ -740,7 +669,7 @@ def _reminders_state(request: web.Request) -> dict:
 
 
 async def reminders(request: web.Request) -> web.Response:
-    """The reminders' screen (D47): on or off, the eve's time and the morning's."""
+    """The reminders (D47): on or off, the eve's time and the morning's."""
     return respond(request, _reminders_state(request))
 
 
@@ -848,7 +777,7 @@ def _llm_state(request: web.Request) -> dict:
 
 
 async def llm(request: web.Request) -> web.Response:
-    """The «Расход LLM» screen."""
+    """The LLM spending: today, the week, the month, by task and chat, and the limit."""
     return respond(request, _llm_state(request))
 
 
@@ -866,7 +795,7 @@ async def update_llm(request: web.Request) -> web.Response:
 
 
 async def raise_llm(request: web.Request) -> web.Response:
-    """One more daily limit until midnight, as the button in «Система»."""
+    """One more daily limit until midnight («Machine → LLM»)."""
     budget = request.app[BUDGET_KEY]
     budget.raise_today(budget.settings.get("llm_daily_limit_usd"))
     return respond(request, _llm_state(request))
@@ -886,7 +815,7 @@ def _grades_state(request: web.Request) -> dict:
 
 
 async def grade_sheets(request: web.Request) -> web.Response:
-    """The Оценки screen: the name, the sheets with what was read in them, the window of new grades."""
+    """The grades: the name, the sheets with what was read in them, the window of new grades."""
     return respond(request, _grades_state(request))
 
 
@@ -913,7 +842,7 @@ def _configured(request: web.Request) -> tuple[list[dict], dict]:
 
 
 def _gradebook_state(request: web.Request) -> dict:
-    """A gradebook's screen (D44): its name and course, how its last read went, and each tab with the own row's
+    """A gradebook (D44): its name and course, how its last read went, and each tab with the own row's
     cells, the works laid out in them, and whose the layout is."""
     grades, (_, sheet) = request.app[GRADES_KEY], _configured(request)
     sid = request.match_info["sid"]
@@ -945,7 +874,7 @@ async def update_gradebook(request: web.Request) -> web.Response:
 
 
 async def read_gradebook(request: web.Request) -> web.Response:
-    """«Прочитать сейчас»: the gradebooks are read at once, not in 30 minutes."""
+    """«Read now»: the gradebooks are read at once, not in 30 minutes."""
     _configured(request)
     grades = request.app[GRADES_KEY]
     if grades.wake is not None:
@@ -1035,319 +964,35 @@ async def drop_grade(request: web.Request) -> web.Response:
     return respond(request, _grades_state(request))
 
 
-# --- the library (D58) ---------------------------------------------------------------------------
-
-def _library(request: web.Request) -> Library:
-    """The library of the app, looked up when asked: it is attached with its links (links.add_routes)."""
-    library = request.app.get(LIBRARY_KEY)
-    if library is None:
-        raise web.HTTPNotFound(text="the library is off")
-    return library
-
-
-def _item_view(request: web.Request, row: dict, whole: bool = False) -> dict:
-    """An item for the screen: its file by a signed link (the page opens it outside the Mini App, where no initData
-    goes along), a text cut to LIBRARY_PREVIEW characters unless `whole`."""
-    text = row["text"] or ""
-    view = {name: row[name] for name in ("id", "kind", "title", "author", "url", "name", "media_type", "size", "status",
-                                         "day", "created_at", "course", "class_uid", "note", "parent", "source")}
-    view["text"] = text if whole else text[:LIBRARY_PREVIEW]
-    view["text_cut"] = not whole and len(text) > LIBRARY_PREVIEW
-    view["file_url"] = request.app[LINKS_KEY].material(row) if _library(request).path(row) else None
-    return view
-
-
-def _item_id(request: web.Request) -> int:
-    try:
-        return int(request.match_info["item_id"])
-    except ValueError:
-        raise web.HTTPNotFound() from None
-
-
-async def library_home(request: web.Request) -> web.Response:
-    """The Materials screen: the courses with their counts, the inbox's count, and what the library takes on disk."""
-    library = _library(request)
-    return respond(request, {"courses": library.courses(), "inbox": library.inbox_count(), "usage": library.usage()})
-
-
-def _document_view(request: web.Request, doc: dict) -> dict:
-    """A document with its versions, the newest first, each with a link to its PDF (a cheat sheet: its Markdown)."""
-    links, library = request.app[LINKS_KEY], _library(request)
-    versions = []
-    for version in doc["versions"]:
-        version = {**version, "kind": doc["kind"], "title": doc["title"]}
-        part = "source" if doc["kind"] == "cheatsheet" else "pdf"
-        versions.append({"id": version["id"], "version": version["version"], "note": version["note"],
-                         "published_at": version["published_at"],
-                         "url": links.version(version, part) if library.part_path(version, part) else None})
-    return {name: doc[name] for name in ("id", "kind", "title", "day", "class_uid")} | {"versions": versions}
-
-
-async def library_course(request: web.Request) -> web.Response:
-    """A course's page (?name=): its knowledge documents (the book and the cheat sheet first, then the classes' ones,
-    the last class first), its started classes with their items, and the items of no listed class."""
-    library = _library(request)
-    course = library.course(request.query.get("name"))
-    if course is None:
-        raise bad_request(request, "which course?", "какой курс?")
-    docs = [library.document(doc["id"]) for doc in library.documents(course) if doc["version"]]
-    docs.sort(key=lambda d: d["day"] or "", reverse=True)
-    docs.sort(key=lambda d: DOC_ORDER.get(d["kind"], len(DOC_ORDER)))
-    classes = library.classes(course)
-    by_class = {c["uid"]: [] for c in classes}
-    loose = []
-    for row in library.items(course=course, limit=LIBRARY_ITEMS):
-        by_class.get(row["class_uid"], loose).append(_item_view(request, row))
-    return respond(request, {"course": course, "documents": [_document_view(request, d) for d in docs],
-                             "classes": [{**c, "items_list": by_class[c["uid"]]} for c in classes], "items": loose})
-
-
-async def library_inbox(request: web.Request) -> web.Response:
-    """The inbox: what came without a course, the newest first; Claude sorts it, the owner may too."""
-    library = _library(request)
-    return respond(request, {"items": [_item_view(request, row)
-                                       for row in library.items(inbox=True, limit=LIBRARY_ITEMS)]})
-
-
-async def library_classes(request: web.Request) -> web.Response:
-    """A course's started classes (?course=), the last first: where an item can be moved to."""
-    library = _library(request)
-    course = library.course(request.query.get("course"))
-    return respond(request, {"course": course, "classes": library.classes(course) if course else []})
-
-
-async def library_item(request: web.Request) -> web.Response:
-    """One item with its whole text and the items that hang on it (a recording's transcript)."""
-    library = _library(request)
-    row = library.get(_item_id(request))
-    if row is None:
-        raise web.HTTPNotFound(text=tr(language(request), "no such item", "такого материала нет"))
-    return respond(request, {**_item_view(request, row, whole=True),
-                             "children": [_item_view(request, child) for child in library.children(row["id"])]})
-
-
-def _place(request: web.Request, library: Library, course, class_uid) -> tuple[str | None, str | None]:
-    """A checked (course, class_uid) of an upload, before its bytes are written: a class of the timetable, of that
-    course when both are given."""
-    if not isinstance(course, str | None) or not isinstance(class_uid, str | None):
-        raise web.HTTPBadRequest(text="course and class_uid are texts")
-    course, class_uid = library.course(course), (class_uid or "").strip() or None
-    if class_uid is not None:
-        found = library.class_of(class_uid)
-        if found is None:
-            raise bad_request(request, "no such class in the timetable", "такого занятия в расписании нет")
-        if course is not None and course != found["subject"]:
-            raise bad_request(request, f"the class is of {found['subject']}, not {course}",
-                              f"это занятие по курсу {found['subject']}, а не {course}")
-    return course, class_uid
-
-
-async def _field(part) -> str:
-    """A form's text field, LIBRARY_FIELD bytes at most: the fields are read before the files they place."""
-    data = b""
-    while chunk := await part.read_chunk(LIBRARY_FIELD):
-        data += chunk
-        if len(data) > LIBRARY_FIELD:
-            raise web.HTTPBadRequest(text=f"{part.name}: up to {LIBRARY_FIELD} bytes")
-    return data.decode(errors="replace").strip()
-
-
-async def _chunks(part):
-    while chunk := await part.read_chunk(CHUNK):
-        yield chunk
-
-
-async def library_upload(request: web.Request) -> web.Response:
-    """Files from the phone (multipart): `course` and `class_uid` first, then any number of `file` parts. Each file is
-    written to disk as it comes (a recording may be hundreds of megabytes: the app's client_max_size is no limit here),
-    then kept as a new item from the Mini App. A refused file stops the upload; the files before it stay added."""
-    library = _library(request)
-    try:
-        reader = await request.multipart()
-    except (AssertionError, ValueError, KeyError):
-        raise web.HTTPBadRequest(text="expected multipart/form-data") from None
-    fields, added = {}, []
-    while (part := await reader.next()) is not None:
-        if not isinstance(part, BodyPartReader):
-            raise web.HTTPBadRequest(text="nested multipart")
-        if part.filename is None:
-            if part.name not in ("course", "class_uid"):
-                raise web.HTTPBadRequest(text=f"unknown field {part.name}")
-            if added:
-                raise web.HTTPBadRequest(text="course and class_uid come before the files")
-            fields[part.name] = await _field(part) or None
-            continue
-        course, class_uid = _place(request, library, fields.get("course"), fields.get("class_uid"))
-        try:
-            item = await library.add_stream(_chunks(part), name=part.filename,
-                                            media_type=part.headers.get(CONTENT_TYPE), course=course,
-                                            class_uid=class_uid, source="miniapp", author="owner")
-        except LibraryError as e:
-            done = tr(language(request), f" ({len(added)} added before it)", f" (до него добавлено: {len(added)})")
-            raise web.HTTPBadRequest(text=f"{part.filename}: {e}" + (done if added else "")) from None
-        added.append(item)
-    if not added:
-        raise bad_request(request, "choose a file", "выберите файл")
-    return respond(request, {"added": added})
-
-
-async def library_add(request: web.Request) -> web.Response:
-    """{kind: text, text} or {kind: link, url}, with title?, course?, class_uid?: a note or a link from the owner. A
-    link is remembered, never fetched."""
-    library = _library(request)
-    values = await _json(request)
-    if values.get("kind") not in ("text", "link") or set(values) - {"kind", "text", "url", "title", "course",
-                                                                     "class_uid"}:
-        raise web.HTTPBadRequest(text="expected {kind: text|link, text?, url?, title?, course?, class_uid?}")
-    course, class_uid = _place(request, library, values.get("course"), values.get("class_uid"))
-    title = values.get("title") or ""
-    if not isinstance(title, str) or len(title) > LIBRARY_TITLE:
-        raise web.HTTPBadRequest(text=f"title: up to {LIBRARY_TITLE} characters")
-    fields = {"course": course, "class_uid": class_uid, "title": " ".join(title.split()), "source": "miniapp",
-              "author": "owner"}
-    if values["kind"] == "text":
-        text = values.get("text")
-        if not isinstance(text, str) or not text.strip():
-            raise bad_request(request, "write the note", "напишите заметку")
-        fields["text"] = text.strip()
-    else:
-        url = values.get("url")
-        if not isinstance(url, str) or not re.fullmatch(r"https?://\S+", url.strip()) or len(url) > LIBRARY_URL:
-            raise bad_request(request, "a link starts with https://", "ссылка начинается с https://")
-        fields["url"] = url.strip()
-    try:
-        item = library.add(values["kind"], **fields)
-    except LibraryError as e:
-        raise web.HTTPBadRequest(text=str(e)) from None
-    return respond(request, _item_view(request, library.get(item)))
-
-
-async def library_move(request: web.Request) -> web.Response:
-    """{course, class_uid?}: an item moved to a course (and a class of it), or back to the inbox (course null)."""
-    library = _library(request)
-    values = await _json(request)
-    if "course" not in values or set(values) - {"course", "class_uid"}:
-        raise web.HTTPBadRequest(text="expected {course, class_uid?}")
-    course, class_uid = _place(request, library, values["course"], values.get("class_uid"))
-    try:
-        library.update(_item_id(request), course=course, class_uid=class_uid)
-    except LibraryError as e:
-        raise web.HTTPNotFound(text=str(e)) from None
-    return respond(request, _item_view(request, library.get(_item_id(request))))
-
-
-async def library_remove(request: web.Request) -> web.Response:
-    """An item out of every list (its transcripts with it); its file is kept 30 days more (Library.restore)."""
-    try:
-        _library(request).remove(_item_id(request))
-    except LibraryError as e:
-        raise web.HTTPNotFound(text=str(e)) from None
-    return respond(request, {"removed": _item_id(request)})
-
-
 def page(lang: str, title: str, text: str, hint: str, status: int = 200) -> web.Response:
     body = PAGE.format(lang=lang, title=html.escape(title), text=html.escape(text), hint=html.escape(hint))
     return web.Response(text=body, status=status, content_type="text/html",
                         headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
-def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_settings: ChatSettings,
+def public_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_settings: ChatSettings,
                sources: Sources, dictionary: Subjects, timetable: Schedule, hse: HseApp,
                merged: DeadlineList, settings: Settings | None = None,
-               sheet_topic: SheetPublisher | None = None, grade_list: Grades | None = None, twin: Twin | None = None,
+               sheets: SheetPublisher | None = None, grade_list: Grades | None = None, twin: Twin | None = None,
                calendar_feed: ical_feed.CalendarFeed | None = None,
                deadline_reminders: DeadlineReminders | None = None,
-               library_links: Links | None = None, ui: bool = True) -> web.Application:
-    """The Mini App's port; without the settings and the sheets' topic the Листочки screen has no API, without the
-    grades the Оценки screen has none, without the calendar feed there are no public feeds. With the library's links
-    come their routes (/library/<token>) and the Materials screen's API.
-
-    Without `ui` (no FORUM=on, D69) the web app has the Mini App's place: its page and API are not served and /app
-    leads to /web/, but the port keeps what the rest leans on: the services under their keys (the web app's «Machine»
-    and the connector's tools call the handlers here), the HSE App X callback, the library's links and the feeds."""
-    app = web.Application(middlewares=[owner_only], client_max_size=UPLOAD_MAX_SIZE + 2**20)  # an own sheet's PDF
+               library_links: Links | None = None) -> web.Application:
+    """The public port's app with the services under their keys, for the actions here, the connector and the web app
+    (which attach themselves to it); the HSE App X callback; the library's links (/library/<token>) with them; the
+    feeds for one's own calendar with the calendar feed."""
+    app = web.Application(client_max_size=UPLOAD_MAX_SIZE + 2**20)  # an own sheet's PDF
     app[ENV_KEY], app[BUDGET_KEY], app[JOURNAL_KEY] = env, budget, journal
     app[INBOX_KEY], app[CHAT_SETTINGS_KEY], app[SOURCES_KEY] = inbox, chat_settings, sources
     app[SUBJECTS_KEY], app[SCHEDULE_KEY], app[HSEAPP_KEY], app[DEADLINES_KEY] = dictionary, timetable, hse, merged
-    app[SETTINGS_KEY], app[SHEETS_KEY] = settings, sheet_topic
-
-    def route(method: str, path: str, handler) -> None:
-        if ui:
-            app.router.add_route(method.upper(), path, handler)
-
-    if not ui:
-        app.router.add_get("/app", to_web)
-        app.router.add_get("/app/", to_web)
-    route("get", "/app", to_index)
-    route("get", "/app/", index)
-    route("get", "/app/api/me", me)
-    route("get", "/app/api/chats", chats)
-    route("patch", "/app/api/chats/{chat_id}", update_chat)
-    route("get", "/app/api/chats/{chat_id}/senders", senders)
+    app[SETTINGS_KEY], app[SHEETS_KEY] = settings, sheets
     if twin is not None:
         app[TWIN_KEY] = twin
-        route("post", "/app/api/twin/login", twin_login)
-        route("post", "/app/api/twin/cancel", twin_cancel)
-        route("post", "/app/api/twin/logout", twin_logout)
-    route("get", "/app/api/llm", llm)
-    route("post", "/app/api/llm/raise", raise_llm)
-    if settings is not None:
-        route("patch", "/app/api/images", update_images)
-        route("patch", "/app/api/llm", update_llm)
-        route("get", "/app/api/general", general)
-        route("patch", "/app/api/general", update_general)
-    route("get", "/app/api/subjects", subjects)
-    route("put", "/app/api/subjects", put_subject)
-    route("delete", "/app/api/subjects", delete_subject)
-    route("get", "/app/api/agenda", agenda)
-    route("get", "/app/api/message", message)
-    route("post", "/app/api/events", add_event)
-    route("patch", "/app/api/events/{event_id}", update_event)
-    route("delete", "/app/api/events/{event_id}", delete_event)
-    route("post", "/app/api/corrections", correct_class)
-    route("get", "/app/api/deadlines", deadlines)
-    route("post", "/app/api/deadlines", add_deadline)
-    route("patch", "/app/api/deadlines/{uid}", edit_deadline)
-    route("delete", "/app/api/deadlines/{uid}", delete_deadline)
-    route("delete", "/app/api/hidden/{uid}", unhide_deadline)
-    if settings is not None and sheet_topic is not None:
-        route("get", "/app/api/sheets", sheets)
-        route("patch", "/app/api/sheets", update_sheets)
-        route("post", "/app/api/sheets", add_sheet)
-        route("patch", "/app/api/sheets/{sheet_id}", edit_sheet)
-        route("delete", "/app/api/sheets/{sheet_id}", delete_sheet)
-        route("post", "/app/api/sheets/{sheet_id}/join", join_sheet)
-    if settings is not None and deadline_reminders is not None:
+    if deadline_reminders is not None:
         app[REMINDERS_KEY] = deadline_reminders
-        route("get", "/app/api/reminders", reminders)
-        route("patch", "/app/api/reminders", update_reminders)
     if grade_list is not None:
         app[GRADES_KEY] = grade_list
-        route("get", "/app/api/grades", grade_sheets)
-        route("patch", "/app/api/grades", update_grades)
-        route("post", "/app/api/grades/items", add_grade)
-        route("patch", "/app/api/grades/items/{grade}", change_grade)
-        route("delete", "/app/api/grades/items/{grade}", drop_grade)
-        route("get", "/app/api/grades/sheets/{sid}", gradebook)
-        route("patch", "/app/api/grades/sheets/{sid}", update_gradebook)
-        route("post", "/app/api/grades/sheets/{sid}/read", read_gradebook)
-        route("put", "/app/api/grades/sheets/{sid}/tabs/{tab}", set_layout)
-        route("delete", "/app/api/grades/sheets/{sid}/tabs/{tab}", clear_layout)
     if library_links is not None:
         add_library_routes(app, library_links)  # the library and its links under LIBRARY_KEY and LINKS_KEY
-        route("get", "/app/api/library", library_home)
-        route("get", "/app/api/library/course", library_course)
-        route("get", "/app/api/library/inbox", library_inbox)
-        route("get", "/app/api/library/classes", library_classes)
-        route("post", "/app/api/library/files", library_upload)
-        route("post", "/app/api/library/items", library_add)
-        route("get", "/app/api/library/items/{item_id}", library_item)
-        route("patch", "/app/api/library/items/{item_id}", library_move)
-        route("delete", "/app/api/library/items/{item_id}", library_remove)
-    route("get", "/app/api/hseapp", hseapp)
-    route("patch", "/app/api/hseapp", update_hseapp)
-    route("post", "/app/api/hseapp/link", hseapp_link)
-    route("post", "/app/api/hseapp/login", hseapp_login)
     app.router.add_get(CALLBACK_PATH, hseapp_callback)
     if calendar_feed is not None:
         ical_feed.add_routes(app, env.calendar_public_secret, calendar_feed, ical_feed.PUBLIC_FEEDS)

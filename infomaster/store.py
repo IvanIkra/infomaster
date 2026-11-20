@@ -100,7 +100,7 @@ create table if not exists deadlines (  -- deadlines from the chats, mail and RU
     assumed integer not null default 0  -- a sheet's due date the service assumed: its course's next seminar (§6.3)
 );
 create index if not exists deadlines_due on deadlines(due);
-create table if not exists own_deadlines (     -- the owner's own, from HA's to-do lists or the Mini App (§5.4, D8)
+create table if not exists own_deadlines (     -- the owner's own: HA, the web app, Claude (§5.4, D8)
     id integer primary key,     -- the uid is ha-<id>
     title text not null,
     due text not null,          -- YYYY-MM-DD
@@ -132,7 +132,7 @@ create table if not exists subjects (   -- the course dictionary, one for everyt
     name text primary key,      -- as a source gives it, cleaned
     title text not null,        -- short English: the timetable, the iCal feed
     abbr text not null,         -- at most 6 characters: the prefix of deadline labels
-    manual integer not null default 0  -- set in the Mini App (D3): Haiku never overwrites it
+    manual integer not null default 0  -- set by the owner (D3): Haiku never overwrites it
 );
 create table if not exists classes (    -- the RUZ timetable (§5.2, §4.2): the current feed and the past classes
     id integer primary key,     -- c<id> in the batch prompt

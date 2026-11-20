@@ -1,6 +1,6 @@
 """The language of what the owner reads (D41): English or Russian, English by default.
 
-One general setting, `miniapp_language` (its name is kept from the Mini App's time): the web app, the bot's answers,
+One general setting, `miniapp_language` (its name is kept from the web app's time): the web app, the bot's answers,
 what the models write for the owner (a sheet's summary and what changed in it) and the page the browser comes back
 to after the HSE login. What Tablo and the iCal feeds get is English either way, so the news, the deadline labels and
 the course titles the models write stay English.

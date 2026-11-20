@@ -1,7 +1,7 @@
 [project]
 name = "infomaster"
 version = "0.1.0"
-description = "Study chats, mail and university sources processed for Tablo, a Telegram forum and a Mini App"
+description = "Study chats, mail and university sources processed for a home-screen web app, Claude and Tablo"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -42,7 +42,6 @@ build-backend = "setuptools.build_meta"
 include = ["infomaster*"]
 
 [tool.setuptools.package-data]
-"infomaster.outputs" = ["miniapp/*", "emoji-pack/*"]
 "infomaster.web" = ["static/*", "static/*/*"]
 
 [tool.pytest.ini_options]

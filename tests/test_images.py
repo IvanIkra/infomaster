@@ -1,19 +1,19 @@
 """Images (D12): the image of a message fetched for its batch, read by Haiku within the daily number and the budget,
-what was read in the batch's prompt; the daily number on the Mini App's «Чаты»."""
+what was read in the batch's prompt; the daily number on the web app's «Чаты»."""
 
 import datetime as dt
 from types import SimpleNamespace
 
+import actions_app
 import pytest
 from conftest import spend
-from test_http import OWNER, env, init_data
+from test_http import env
 
 from infomaster.collectors import files as files_module
 from infomaster.collectors.files import Files, NotNow, image_file, media_type
 from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
 from infomaster.llm.budget import IMAGE_TOKENS, BudgetExceeded
 from infomaster.llm.client import BadAnswer, Haiku, Image, LLMError, Rejected
-from infomaster.outputs import miniapp
 from infomaster.processing.batches import Batches, Changes
 from infomaster.processing.images import Images
 from infomaster.processing.news import News
@@ -313,15 +313,15 @@ async def test_client_sends_images_and_reserves_for_them(budget, journal, monkey
     assert journal.runs()[0]["task"] == "image"
 
 
-# --- the Mini App -------------------------------------------------------------------------------
+# --- the web app -------------------------------------------------------------------------------
 
-async def test_miniapp_daily_number(aiohttp_client, budget, journal, store, schedule, merged, images):
+async def test_actions_daily_number(aiohttp_client, budget, journal, store, schedule, merged, images):
     settings = images.settings
     hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
     sources = {"telegram": lambda: {"ok_at": None, "error": None, "login_needed": False}, "images": images.status}
-    client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store),
+    client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store),
                                                      sources, schedule.subjects, schedule, hse, merged, settings))
-    owner = {"Authorization": "tma " + init_data(OWNER)}
+    owner = {}
     state = await (await client.get("/app/api/chats", headers=owner)).json()
     assert state["images"] == {"ok_at": None, "error": None, "daily": 30, "today": 0}
     response = await client.patch("/app/api/images", json={"daily": 5}, headers=owner)

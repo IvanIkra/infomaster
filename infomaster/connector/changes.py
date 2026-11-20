@@ -1,5 +1,5 @@
 """The journal of what the connector changed (§8.5): every write tool's call with a line about it and the steps that
-undo it. The Mini App's «Claude connector» screen lists it with **Undo**: Claude reads messages strangers wrote, and
+undo it. «Machine → Claude connector» in the web app lists it with **Undo**: Claude reads messages strangers wrote, and
 a change it was talked into must be easy to see and to take back. The web app's changes (§8.6) go through the same
 tools and into the same journal (`via` web), so the owner's taps can be undone the same way.
 
@@ -22,7 +22,7 @@ create table if not exists connector_changes (  -- every write through the MCP c
     grant_id integer,           -- the connection it came through (connector_grants)
     tool text not null,
     arguments text not null,    -- JSON, as the client sent them
-    summary text not null,      -- one line for the Mini App
+    summary text not null,      -- one line for the web app
     undo text,                  -- JSON [{tool, arguments}]; null when it cannot be undone
     note text not null default '',  -- why not, or what an undo does not bring back
     undone_at text,

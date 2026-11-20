@@ -101,7 +101,7 @@ def test_stopped_days_and_a_changed_limit(budget, journal, now):
     with pytest.raises(BudgetExceeded):
         budget.reserve("batch", 0.25)
     assert budget.stopped_days() == {"2026-10-20": 0.5}
-    budget.settings.set("llm_daily_limit_usd", 1.0)  # the Mini App's limit: calls run again at once
+    budget.settings.set("llm_daily_limit_usd", 1.0)  # the web app's limit: calls run again at once
     assert budget.level() is Level.HARD
     budget.limit_changed()
     assert budget.level() is Level.OK and budget.stopped_days() == {"2026-10-20": 0.5}  # the day stays stopped

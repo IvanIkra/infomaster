@@ -430,7 +430,7 @@ class OAuth:
         return bool(done)
 
     def connections(self) -> list[dict]:
-        """For the Mini App: the connections in force, the newest first."""
+        """For the web app: the connections in force, the newest first."""
         rows = self.db.execute(
             "select g.id, g.created_at, g.used_at, c.name, c.redirect_uris from connector_grants g "
             "left join connector_clients c on c.id = g.client_id where g.revoked_at is null and g.refresh_until > ? "

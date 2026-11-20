@@ -3,6 +3,7 @@ a deadline, an event or a grade by hand; every one journaled with its undo."""
 
 import datetime as dt
 
+import actions_app
 import pytest
 from aiohttp import FormData
 from test_http import TWIN, env
@@ -15,7 +16,6 @@ from infomaster.connector import Connector
 from infomaster.library import Library
 from infomaster.library import links as library_links
 from infomaster.llm.budget import BudgetExceeded
-from infomaster.outputs import miniapp
 from infomaster.processing.news import News
 from infomaster.settings import ChatSettings, Settings
 from infomaster.web import WebApp
@@ -66,7 +66,7 @@ async def adder(aiohttp_client, store, budget, journal, schedule, merged, now, t
         sent.append(text)
 
     hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
-    app = miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
+    app = actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
                              schedule, hse, merged, budget.settings)
     library_links.add_routes(app, library_links.Links(store, library, env().public_url))
     connector = Connector(env(), store, News(store), now=now, seconds=seconds)

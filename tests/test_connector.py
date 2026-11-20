@@ -6,13 +6,14 @@ import json
 import secrets
 from urllib.parse import parse_qs, urlsplit
 
+import actions_app
 import pytest
-from test_http import TWIN, add_row, env, owner
+from test_http import TWIN, add_row, env
 
 from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
 from infomaster.connector import Connector, oauth
 from infomaster.connector.mcp import LEGACY, MODERN
-from infomaster.outputs import miniapp
+from infomaster.connector.tools import ToolError
 from infomaster.processing.news import News
 from infomaster.settings import ChatSettings, Settings
 
@@ -42,7 +43,7 @@ def sent():
 def connector(store, budget, journal, schedule, merged, now, seconds, sent):
     settings = budget.settings
     hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
-    app = miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
+    app = actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
                              schedule, hse, merged, settings)
 
     async def send_code(text):
@@ -386,7 +387,7 @@ async def test_reads(client, sent, schedule, merged, store, now):
 
 
 async def test_write_journal_undo(client, sent, connector, merged):
-    """A change through the connector is journaled; the Mini App lists it and undoes it once."""
+    """A change through the connector is journaled; «Machine» lists it and undoes it once."""
     token = (await connect(client, sent))["access_token"]
     result = data(await call(client, token, "add_deadline", {"title": "Essay", "due": "2026-10-25"}))
     assert result["uid"] == "ha-1" and result["change"]["summary"] == "Added the deadline «Essay», due 2026-10-25"
@@ -394,21 +395,19 @@ async def test_write_journal_undo(client, sent, connector, merged):
     refused = await call(client, token, "add_deadline", {"title": "", "due": "2026-10-25"})
     assert refused["isError"] and "title" in refused["content"][0]["text"]
 
-    assert (await client.get("/app/api/connector")).status == 401  # the Mini App's initData check
-    screen = await (await client.get("/app/api/connector", headers=owner())).json()
+    screen = connector.state()  # what «Machine → Claude connector» shows
     assert screen["url"] == "https://infomaster.example.ts.net/mcp" and screen["tools"]["write"] > 10
     [connection] = screen["connections"]
     assert connection["name"] == "Claude" and connection["redirect"] == "claude.ai"
     [change] = screen["changes"]
     assert (change["tool"], change["undo"], change["undone_at"]) == ("add_deadline", True, None)
 
-    undone = await (await client.post(f"/app/api/connector/changes/{change['id']}/undo", headers=owner())).json()
-    assert merged.todo.own() == () and undone["changes"][0]["undone_at"] is not None
-    again = await client.post(f"/app/api/connector/changes/{change['id']}/undo", headers=owner())
-    assert again.status == 400 and "undone already" in await again.text()
+    await connector.undo(change["id"])
+    assert merged.todo.own() == () and connector.state()["changes"][0]["undone_at"] is not None
+    with pytest.raises(ToolError, match="undone already"):
+        await connector.undo(change["id"])
 
-    revoked = await client.delete(f"/app/api/connector/connections/{connection['id']}", headers=owner())
-    assert (await revoked.json())["connections"] == []
+    assert connector.oauth.revoke_grant(connection["id"]) and connector.state()["connections"] == []
     assert (await rpc(client, token, "ping")).status == 401
 
 
@@ -564,7 +563,7 @@ async def test_service_tools(tmp_path, aiohttp_client, sent):
     from infomaster.library import links as library_links
 
     service = Service(env(), tmp_path)  # Telegram clients are made, never connected
-    app = miniapp.create_app(service.env, service.budget, service.journal, service.inbox, service.chat_settings,
+    app = actions_app.app(service.env, service.budget, service.journal, service.inbox, service.chat_settings,
                              service.sources, service.subjects, service.schedule, service.hseapp, service.merged,
                              settings=service.settings, sheet_topic=service.sheet_publisher, grade_list=service.grades,
                              twin=service.twin, calendar_feed=service.calendar,
@@ -599,7 +598,7 @@ async def test_service_tools(tmp_path, aiohttp_client, sent):
     await undo_last(service.connector)
     assert service.settings.get("grades_sheets")[0]["name"] == "Discrete"
     removed = data(await call(client, token, "remove_gradebook", {"sheet_id": added["sheet_id"]}))
-    assert removed["change"]["undo"] == "the owner can undo it in the Mini App"
+    assert removed["change"]["undo"] == "the owner can undo it in the web app"
     assert "tab layouts are gone" in service.connector.changes.recent(1)[0]["note"]
     await undo_last(service.connector)
     assert [s["url"] for s in service.settings.get("grades_sheets")] == [url]

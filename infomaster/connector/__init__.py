@@ -1,10 +1,10 @@
 """The MCP connector (§8.5, D57): infomaster as a remote MCP server that claude.ai adds as a custom connector.
 
-On the public port, next to the Mini App:
+On the public port, next to the web app:
 - /mcp: the endpoint (mcp.py), behind an OAuth access token;
-- /.well-known/oauth-*, /oauth/*: the authorization server for the one owner (oauth.py);
-- /app/api/connector*: the Mini App's «Claude connector» screen: the address to paste into claude.ai, the connections
-  with Revoke, the journal of changes with Undo (changes.py). It is behind the Mini App's initData check.
+- /.well-known/oauth-*, /oauth/*: the authorization server for the one owner (oauth.py).
+The web app's «Machine» shows the address to paste into claude.ai, the connections with Revoke and the journal of
+changes with Undo (changes.py), from `state`.
 """
 
 import datetime as dt
@@ -17,7 +17,6 @@ from aiohttp import web
 from .. import clock
 from ..config import Env
 from ..library.links import LIBRARY_KEY
-from ..outputs.miniapp import respond
 from ..processing.news import News
 from ..store import Store
 from . import catalog, oauth
@@ -42,9 +41,9 @@ class Connector:
         self.endpoint = Endpoint(self.registry, self, self._record)
         self.app: web.Application | None = None
 
-    def attach(self, app: web.Application, miniapp: bool = True) -> web.Application:
-        """The connector's routes and tools on the public port's app (the Mini App's): the tools act on the
-        services it holds. Without the Mini App (D69) its «Claude connector» screen's API is left out."""
+    def attach(self, app: web.Application) -> web.Application:
+        """The connector's routes and tools on the public port's app (actions.public_app): the tools act on the
+        services it holds."""
         self.app = app
         catalog.register(self.registry, app)
         if app.get(LIBRARY_KEY) is not None:  # put there by library.links.add_routes, before this
@@ -52,10 +51,6 @@ class Connector:
         oauth.add_routes(app, self.oauth)
         app[CONNECTOR_KEY] = self
         app.router.add_route("*", "/mcp", self._mcp)
-        if miniapp:
-            app.router.add_get("/app/api/connector", screen)
-            app.router.add_delete("/app/api/connector/connections/{grant_id}", revoke)
-            app.router.add_post("/app/api/connector/changes/{change_id}/undo", undo)
         return app
 
     async def _mcp(self, request: web.Request) -> web.Response:
@@ -127,32 +122,3 @@ class Connector:
 
 CONNECTOR_KEY = web.AppKey("connector", Connector)
 
-
-# --- the Mini App's screen ---------------------------------------------------------------------------------
-
-async def screen(request: web.Request) -> web.Response:
-    return respond(request, request.app[CONNECTOR_KEY].state())
-
-
-async def revoke(request: web.Request) -> web.Response:
-    connector = request.app[CONNECTOR_KEY]
-    try:
-        grant_id = int(request.match_info["grant_id"])
-    except ValueError:
-        raise web.HTTPNotFound() from None
-    if not connector.oauth.revoke_grant(grant_id):
-        raise web.HTTPNotFound(text="no such connection")
-    return respond(request, connector.state())
-
-
-async def undo(request: web.Request) -> web.Response:
-    connector = request.app[CONNECTOR_KEY]
-    try:
-        change_id = int(request.match_info["change_id"])
-    except ValueError:
-        raise web.HTTPNotFound() from None
-    try:
-        await connector.undo(change_id)
-    except ToolError as e:
-        raise web.HTTPBadRequest(text=str(e)) from None
-    return respond(request, connector.state())

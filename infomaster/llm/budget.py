@@ -8,7 +8,7 @@ reserve is dropped.
 - 100 %, or a required call that does not fit: every call stops until midnight or until the limit is raised.
 
 Days that stopped are remembered with their limit (kv "llm.days", the last DAYS_KEPT days) for the chart of the
-«Расход LLM» screen in the Mini App.
+«Machine → LLM» in the web app.
 """
 
 import datetime as dt

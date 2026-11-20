@@ -223,7 +223,7 @@ async def test_notifier(store):
                         "tag": "reminder-eve-2026-10-22"}
     assert notifier.reminder("day", []) is None and service.sent == []  # nothing due: nothing sent
 
-    notifier.system(Phrase("infomaster is up.", "infomaster запущен."))  # the forum posts it silently: no push
+    notifier.system(Phrase("infomaster is up.", "infomaster запущен."))  # no failure: no push
     notifier.system(Alert("RUZ is unavailable.", "РУЗ недоступен."))
     notifier.system(Alert("A login is needed.", "Нужен вход."), login="hseapp")
     notifier.budget(Notice(Level.SOFT, 1.6, 2.0))

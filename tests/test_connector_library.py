@@ -2,6 +2,7 @@
 
 import base64
 
+import actions_app
 import pytest
 from test_connector import Seconds, call, connect, data, rpc, undo_last
 from test_http import TWIN, env
@@ -10,7 +11,6 @@ from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
 from infomaster.connector import Connector
 from infomaster.library import Library
 from infomaster.library import links as library_links
-from infomaster.outputs import miniapp
 from infomaster.processing.news import News
 from infomaster.settings import ChatSettings, Settings
 
@@ -35,7 +35,7 @@ def library(store, tmp_path, now):
 
 def app_of(store, budget, journal, schedule, merged):
     hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
-    return miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
+    return actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
                               schedule, hse, merged, budget.settings)
 
 

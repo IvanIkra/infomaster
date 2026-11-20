@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from aiohttp import web
 
-from . import clock
+from . import actions, clock
 from .collectors.files import Files
 from .collectors.grades import GradeSheets
 from .collectors.hseapp import CALLBACK_PATH, HseApp
@@ -28,7 +28,7 @@ from .library.feed import ChatMaterials, from_bot
 from .llm.budget import Budget
 from .llm.client import Haiku
 from .llm.journal import Journal
-from .outputs import api, miniapp
+from .outputs import api
 from .outputs.bot import Bot
 from .outputs.deadlines import DeadlineWatch
 from .outputs.ical_feed import CalendarFeed
@@ -228,7 +228,7 @@ class Service:
         await self.bot.start()
         runners, tasks = [], []
         try:
-            for app, port in ((miniapp.create_app(self.env, self.budget, self.journal, self.inbox, self.chat_settings,
+            for app, port in ((actions.public_app(self.env, self.budget, self.journal, self.inbox, self.chat_settings,
                                                   self.sources, self.subjects, self.schedule, self.hseapp,
                                                   self.merged, self.settings, self.sheet_publisher,
                                                   self.grades, self.twin, self.calendar, self.reminders,
@@ -238,7 +238,7 @@ class Service:
                                               self.grades, self.news, self.settings),
                                self.env.internal_port)):
                 if port == self.env.public_port:
-                    self.connector.attach(app)  # the MCP connector shares the public port (§8.5)
+                    self.connector.attach(app)  # the MCP connector (§8.5)
                     self.web.attach(app)  # so does the web app (§8.6)
                 runner = web.AppRunner(app, access_log=None)
                 await runner.setup()

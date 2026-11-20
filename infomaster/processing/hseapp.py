@@ -108,7 +108,7 @@ class HseAppDeadlines:
         # After a poll that changed the lists; True when there were none before (the first poll: a baseline).
         self.on_change: Callable[[bool], Awaitable[None]] | None = None
 
-    # --- for the merge, the status and the Mini App -------------------------------------------
+    # --- for the merge, the status and the web app -------------------------------------------
 
     def lists(self) -> dict:
         return self.store.get_json(LISTS_KEY) or {"fetched_at": None, "items": [], "done": []}

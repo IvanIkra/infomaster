@@ -88,7 +88,7 @@ def twin(store, tmp_path):
     inbox, chat_settings = Inbox(store), ChatSettings(store)
     notices = []
     twin = telegram.Twin(SimpleNamespace(), inbox, chat_settings, tmp_path / "twin",
-                         lambda line: notices.append(line.ru))  # a Phrase: the forum picks its language
+                         lambda line: notices.append(line.ru))  # a Phrase: the notifier picks its language
     twin.notices = notices
     inbox.put_chat(CHANNEL, "Матан", "supergroup", None, 4)
     return twin

@@ -5,13 +5,14 @@ import re
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import actions_app
 import icalendar
 import pytest
 
 from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
 from infomaster.collectors.ruz import Diff, parse
 from infomaster.config import Env
-from infomaster.outputs import api, miniapp
+from infomaster.outputs import api
 from infomaster.outputs.ical_feed import CalendarFeed
 from infomaster.processing.events import event_uid
 from infomaster.settings import ChatSettings, Settings
@@ -227,7 +228,7 @@ async def test_public_routes(aiohttp_client, budget, journal, store, schedule, n
     await schedule.after_poll(Diff())
     feed = CalendarFeed(schedule, now=now)
     hse = HseApp(store, Settings(store), env.public_url + CALLBACK_PATH)
-    app = miniapp.create_app(env, budget, journal, schedule.inbox, ChatSettings(store), {}, schedule.subjects,
+    app = actions_app.app(env, budget, journal, schedule.inbox, ChatSettings(store), {}, schedule.subjects,
                              schedule, hse, merged, calendar_feed=feed)
     client = await aiohttp_client(app)
     for name in ("main", "optional"):
@@ -246,7 +247,7 @@ async def test_public_routes_off(aiohttp_client, budget, journal, store, schedul
     env = Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, api_token="tok",
               public_url="https://x.ts.net", calendar_secret=SECRET)
     hse = HseApp(store, Settings(store), env.public_url + CALLBACK_PATH)
-    client = await aiohttp_client(miniapp.create_app(env, budget, journal, schedule.inbox, ChatSettings(store), {},
+    client = await aiohttp_client(actions_app.app(env, budget, journal, schedule.inbox, ChatSettings(store), {},
                                                      schedule.subjects, schedule, hse, merged,
                                                      calendar_feed=CalendarFeed(schedule, now=now)))
     assert (await client.get(f"/calendar/{SECRET}/main.ics")).status == 404  # no public secret: no feeds here

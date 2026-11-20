@@ -3,7 +3,7 @@ and deleting an event, the main or the optional calendar, the hidden deadlines a
 correcting grades.
 
 What stands behind a class or an event comes with its card (`Data.fix`), with every field as it is now. The changes
-are the connector's write tools, journaled with `via` web and their undo, as in the Mini App's timetable:
+are the connector's write tools, journaled with `via` web and their undo:
 
 - a RUZ class: `correct_class` moves, cancels or renames it and puts it in the main or the optional calendar; the
   tool resets a field it is not given, so the app sends all of them; «As it was» takes the own correction back
