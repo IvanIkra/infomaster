@@ -20,6 +20,10 @@ connector's hide_news.
 Shelves (stage 16.8, shelves.py): the problem sheets with their PDFs and versions, the library's raw material by
 course and the sorting of its inbox, under /web/api/shelf; the changes are the connector's tools.
 
+Corrections (stage 16.9, fixes.py): a class moved, cancelled or changed, an event changed, hidden or deleted, the
+main or the optional calendar, the hidden deadlines and events with «Restore», grades corrected, under /web/api/fix;
+the changes are the connector's tools.
+
 «Machine» (stage 16.6, machine.py): the sources and their freshness, the journal of changes with undo, and the Mini
 App's settings, under /web/api/machine.
 
@@ -47,6 +51,7 @@ from ..llm.client import Haiku
 from ..store import Store
 from .auth import COOKIE, COOKIE_PATH, SESSION_IDLE, Auth, AuthError, device_name
 from .check import Check
+from .fixes import FIXES_KEY, Fixes
 from .machine import MACHINE_KEY, Machine
 from .notify import Notifier
 from .push import Push, PushError
@@ -75,6 +80,7 @@ class WebApp:
         self.notifier = Notifier(self.push, lang)
         self.machine = Machine(self)
         self.shelves = Shelves(self)
+        self.fixes = Fixes(self)
 
     def attach(self, app: web.Application) -> web.Application:
         app[WEB_KEY] = self
@@ -118,8 +124,10 @@ class WebApp:
                ("POST", "/add/{what}", add_by_hand)]
         api += [(method, "/machine" + path, handler) for method, path, handler in self.machine.routes()]
         api += [(method, "/shelf" + path, handler) for method, path, handler in self.shelves.routes()]
+        api += [(method, "/fix" + path, handler) for method, path, handler in self.fixes.routes()]
         app[MACHINE_KEY] = self.machine
         app[SHELVES_KEY] = self.shelves
+        app[FIXES_KEY] = self.fixes
         for method, path, handler in api:
             app.router.add_route(method, "/web/api" + path, guarded(handler))
         if self.connector is not None and self.check is not None:
@@ -644,9 +652,8 @@ async def add_by_hand(request: web.Request) -> web.Response:
         tool = "add_event"
         arguments = {name: data[name] for name in ("title", "start", "end", "room", "kind") if data.get(name)}
     elif what == "grade":
-        tool = "add_grade"
-        title = _data(request).title(data.get("course")) if isinstance(data.get("course"), str) else None
-        arguments = {"course": title, "label": data.get("label"), "value": data.get("value")}
+        tool = "add_grade"  # a grade's course is a short label, as a gradebook's: the lens's key is one
+        arguments = {"course": data.get("course"), "label": data.get("label"), "value": data.get("value")}
     else:
         return error(404, "no such thing to add")
     try:

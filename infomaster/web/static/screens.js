@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, CHANGED, ICONS, act, api, changed, go, html, icon, toast } from "./common.js";
 import { day, kind, t, today } from "./i18n.js";
+import { EntryFix, GradeRow } from "./fixes.js";
 
 const hm = (iso) => iso.slice(11, 16);
 const dateOf = (iso) => iso.slice(0, 10);
@@ -232,10 +233,8 @@ function CourseHead({ info, todayIso }) {
         : d.kind === "cheatsheet" ? t("cheatsheet") : d.day ? day(d.day, { day: "numeric", month: "long" }) : ""}
         </div></span>${d.url && html`<a class="sec" href=${d.url} target="_blank" rel="noopener">PDF</a>`}</div>`)
       : html`<div class="note">—</div>`}</div>`}
-    ${open === "grades" && html`<div class="box">${g.works.length ? g.works.map((w, i) => html`
-      <div class="doc" key=${i}><span>${w.label}${w.new ? html` <span class="chip">new</span>` : ""}</span>
-        <b>${w.value === null ? "—" : String(w.value).replace(".", getDecimal())}</b></div>`)
-      : html`<div class="note">${t("noGrades")}</div>`}</div>`}
+    ${open === "grades" && html`<div class="box">${g.works.length ? g.works.map((w) => html`
+      <${GradeRow} key=${w.id} w=${w} />`) : html`<div class="note">${t("noGrades")}</div>`}</div>`}
   </div>`;
 }
 
@@ -316,7 +315,7 @@ export function Card({ kind: what, uid, onClose, onOut }) {
     <section class="sheet" role="dialog" aria-label=${data ? data.title : ""}><div>
       <div class="grab" aria-hidden="true"></div>
       <div class="err" role="alert">${error}</div>
-      ${data && (what === "d" ? html`<${DeadlineCard} d=${data} onClose=${onClose} />` : html`<${ClassCard} c=${data} />`)}
+      ${data && (what === "d" ? html`<${DeadlineCard} d=${data} onClose=${onClose} />` : html`<${ClassCard} c=${data} onClose=${onClose} />`)}
       <button class="sec wide" onClick=${onClose}>${t("close")}</button>
     </div></section>`;
 }
@@ -443,7 +442,7 @@ function DeadlineCard({ d, onClose }) {
     <${DeadlineActions} d=${d} onClose=${onClose} />`;
 }
 
-function ClassCard({ c }) {
+function ClassCard({ c, onClose }) {
   const when = c.all_day ? capital(day(c.start, { weekday: "long", day: "numeric", month: "long" }))
     : `${capital(day(c.start, { weekday: "short", day: "numeric", month: "long" }))}, ${hm(c.start)}–${hm(c.end)}`;
   return html`
@@ -462,7 +461,8 @@ function ClassCard({ c }) {
       ${c.due.map((d) => html`<button key=${d.uid} class="it" onClick=${() => go("/d", { uid: d.uid })}>
         <span class="k kd"></span><span class="ttl"><b>${d.title}</b></span></button>`)}</div>`}
     <${Quote} quote=${c.quote} link=${c.link} from=${c.origin} />
-    ${c.materials > 0 && html`<div class="note">${t("materialsN", { n: c.materials })}</div>`}`;
+    ${c.materials > 0 && html`<div class="note">${t("materialsN", { n: c.materials })}</div>`}
+    <${EntryFix} c=${c} onClose=${onClose} />`;
 }
 
 const todayIso = () => {

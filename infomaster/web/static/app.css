@@ -349,3 +349,7 @@ select.field.narrow { width: 150px; }
 .row > .count, .row > .chip { flex-shrink: 0; }
 .rb { position: relative; }
 .rb .count { position: absolute; top: -4px; right: -4px; }
+
+/* the corrections (16.9): a grade of the lens opens its form */
+button.doc.plain { border: 0; border-bottom: 1px dashed var(--line); background: none; padding: 0; color: inherit;
+  font: inherit; cursor: pointer; }

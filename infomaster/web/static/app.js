@@ -9,6 +9,7 @@ import { Card, CheckQueue, Feed, Week } from "./screens.js";
 import { Notifications } from "./notifications.js";
 import { AddSheet } from "./add.js";
 import { NewsCard, NewsList } from "./news.js";
+import { Hidden } from "./fixes.js";
 import { Inbox, ItemCard, RawList, SheetCard, SheetList, ShelfHome } from "./shelves.js";
 import { Chat, Chats, ConnectorScreen, Courses, Gradebook, Gradebooks, HseApp, Journal, Llm, Machine,
          NotificationPrefs, Processing, Tab } from "./machine.js";
@@ -213,6 +214,7 @@ function machineScreen(at, out, load) {
     case "/machine/tab": return html`<${Tab} key=${p.get("id") + "|" + p.get("tab")} id=${p.get("id")}
       name=${p.get("tab")} onOut=${out} />`;
     case "/machine/connector": return html`<${ConnectorScreen} onOut=${out} />`;
+    case "/machine/hidden": return html`<${Hidden} onOut=${out} />`;
     default: return null;
   }
 }

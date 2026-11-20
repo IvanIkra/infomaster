@@ -37,6 +37,7 @@ const TEXTS = {
   countBatches: ["{n} in the queue", "в очереди: {n}"],
   countImages: ["{n} today", "сегодня: {n}"],
   journal: ["Journal of changes", "Журнал изменений"],
+  hiddenRow: ["Hidden deadlines and events", "Скрытые сроки и события"],
   journalHint: ["Your changes here and Claude's through the connector. Undo puts a change back while what it touched is unchanged.",
                 "Ваши изменения здесь и изменения Claude через коннектор. «Отменить» возвращает изменение, пока затронутое не поменялось."],
   noChanges: ["No changes yet.", "Изменений пока нет."],
@@ -360,6 +361,7 @@ export function Machine({ onOut, onLang }) {
       <//>
       <${Section} title=${m("setup")} foot=${m("secrets")}>
         <${Go} href="#/machine/journal" title=${m("journal")} />
+        <${Go} href="#/machine/hidden" title=${m("hiddenRow")} />
         ${data.has.twin && html`<${Go} href="#/machine/chats" title=${m("twin")} />`}
         ${data.has.hseapp && html`<${Go} href="#/machine/hseapp" title=${m("hseapp")} />`}
         ${data.has.grades && html`<${Go} href="#/machine/grades" title=${m("grades")} />`}

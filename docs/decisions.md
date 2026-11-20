@@ -383,6 +383,20 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   sheet's PDF is a multipart upload that no tool takes, so it is kept as the Mini App keeps it and journaled by hand,
   with the undo that deletes it. «New material» stays in «+» (D64): the shelves sort and change what is there.
 
+- **D68. Corrections live on the card and send every field, 20.11.2026.** This adds to §8.6 and is step 16.9 of
+  §11.1. A class or an event is corrected where it is seen, on its card, not on a timetable screen of its own as in the
+  Mini App: the card brings what stands behind the entry (RUZ's own time, the owner's correction, the chat's one, an
+  event's id and whether it is an own one or an own copy). `correct_class` and `edit_event` reset a field they are not
+  given (a move without the room blanks it, one without `required` puts the class back in the main calendar), so the
+  card carries every field as it is now and the app sends all of them with the owner's change. A chat's correction of
+  a class is ignored or applied again rather than deleted, as `set_event_options` hides it and the class's Midterm
+  follows. What is hidden has nowhere else to be seen, so «Machine» gets a «Hidden» screen with the deadlines and the
+  events ahead and «Restore» on each; an event an own copy stands in for is left out, as «As it was» on the copy
+  brings it back. Grades are corrected in the course's lens, which now lists the grades added by hand as well. A grade's
+  course is a short label, as a gradebook's, so «+» gives it the lens's key rather than the course's title, which the
+  Mini App would refuse when it is longer than ten characters. All of it goes through the connector's existing tools,
+  journaled with their undo.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

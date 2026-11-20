@@ -18,10 +18,11 @@ from ..collectors.inbox import MAILBOX, message_link
 from ..i18n import Phrase, say
 from ..library import Library
 from ..library.links import Links
+from ..processing.events import OWN
 from ..processing.grades import Grades
 from ..processing.merge import DeadlineList
 from ..processing.news import News
-from ..processing.schedule import NOT_CLASSES, SEMINARS, Entry, Schedule
+from ..processing.schedule import NOT_CLASSES, SEMINARS, Entry, Schedule, applies, local
 from ..processing.subjects import clean
 from ..processing.todo import Deadline, uid
 
@@ -274,7 +275,64 @@ class Data:
         source = "mail" if entry.message and entry.message[0] == MAILBOX else "tg"
         materials = len(self.library.items(class_uid=entry.uid)) if self.library is not None else 0
         return {**item, "course_title": self.title(key), "source": entry.source, "origin": entry.origin,
-                "link": entry.link, "quote": self.quote(entry.message, source), "materials": materials}
+                "link": entry.link, "quote": self.quote(entry.message, source), "materials": materials,
+                "fix": self.fix(entry)}
+
+    # --- corrections (step 16.9) --------------------------------------------------------------------------
+
+    @staticmethod
+    def _span(start: dt.datetime, end: dt.datetime, whole_day: bool) -> dict:
+        """start and end as the tools take them: Moscow minutes, or a date and no end for a whole day."""
+        if whole_day:
+            return {"start": start.date().isoformat(), "end": None}
+        return {"start": start.isoformat(timespec="minutes"), "end": end.isoformat(timespec="minutes")}
+
+    def fix(self, entry: Entry) -> dict | None:
+        """What stands behind an entry for the owner to change, with every field as it is now: correct_class and
+        edit_event reset a field they are not given, so the app sends them all and changes only what was touched.
+        A class: RUZ's own time, the owner's correction (`own`, its event id) and the chat's one (`chat`, applied
+        unless hidden). An event: its id, whether it is the owner's own or an own copy of a chat's one."""
+        events = self.schedule.events
+        if entry.of_class:
+            item = self.schedule.ruz.by_uid(entry.uid)
+            if item is None:
+                return None
+            own, chat = events.own_correction(entry.uid), events.correction(entry.uid)
+            behind = own or (chat if applies(item, chat) else None)
+            fields = {**self._span(entry.start, entry.end, entry.all_day),
+                      "room": (behind["room"] if behind else item["room"]) or "", "cancelled": entry.cancelled,
+                      "kind": own["kind"] if own else item["kind"], "required": entry.required}
+            if own and own["title"]:
+                fields["title"] = own["title"]
+            start, end = local(item["start"]), local(item["end"])
+            return {"of": "class", "fields": fields, "own": own["id"] if own else None,
+                    "chat": {"id": chat["id"], "hidden": bool(chat["hidden"]),
+                             "from": self.told(self.schedule.told_by(chat))} if chat else None,
+                    "ruz": {**self._span(start, end, False), "room": item["room"] or "",
+                            "cancelled": bool(item["cancelled"])}}
+        event = events.by_uid(entry.uid)
+        if event is None:
+            return None
+        return {"of": "event", "id": event["id"], "own": event["source"] == OWN, "copy": bool(event["copy_of"]),
+                "required": bool(event["required"]),
+                "fields": {"title": event["title"], "kind": event["kind"],
+                           **self._span(entry.start, entry.end, entry.all_day), "room": event["room"] or "",
+                           "cancelled": bool(event["cancelled"])}}
+
+    def hidden(self) -> dict:
+        """What the owner hid, to bring back: the deadlines, the newest due date first, and the events from today
+        on (an event an own copy stands in for is not listed: «As it was» on the copy brings it back)."""
+        today = self.now().date()
+        reasons = {"done": Phrase("done", "сдан"), "not_mine": Phrase("not mine", "не мой"),
+                   "duplicate": Phrase("a duplicate", "дубль")}
+        deadlines = [{"uid": row["uid"], "title": row["title"], "due": row["due"],
+                      "course": self.key(row["course"]) if row["course"] else None,
+                      "reason": self.told(reasons[row["reason"]]) if row["reason"] in reasons else None,
+                      "from": self.told(SOURCE_NAMES[row["source"]]) if row["source"] in SOURCE_NAMES else None}
+                     for row in self.merged.todo.hidden_rows()]
+        events = [{**event, "chat": self.told(event["chat"]) if event["chat"] is not None else None}
+                  for event in self.schedule.agenda(today, 3650)["hidden"]]
+        return {"deadlines": deadlines, "events": events}
 
     # --- news (step 16.7) ---------------------------------------------------------------------------------
 
@@ -342,8 +400,13 @@ class Data:
                 course = self.grades.view(sid)["course"] or sheet["label"]
                 if self.key(course) == key or any(self.schedule.same_course(course, n) for n in names) or \
                         clean(sheet["label"]).casefold() == key.casefold():
-                    works += [{"label": i["label"], "value": i["value"], "new": i["new"]}
+                    works += [{"id": i["id"], "label": i["label"], "value": i["value"], "new": i["new"],
+                               "edited": i["edited"], "sheet_value": i["sheet_value"], "own": False}
                               for i in self.grades.items(sid)]
+            # the grades added by hand: their course is a title, as «+» and the Mini App give it
+            works += [{"id": g["id"], "label": g["label"], "value": g["value"], "new": g["new"], "edited": False,
+                       "sheet_value": None, "own": True} for g in self.grades.manual()
+                      if self.key(g["course"]) == key or any(self.schedule.same_course(g["course"], n) for n in names)]
         values = [w["value"] for w in works if w["value"] is not None]
         return {"count": len(works), "new": sum(w["new"] for w in works),
                 "average": round(sum(values) / len(values), 1) if values else None, "works": works}

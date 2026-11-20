@@ -948,7 +948,24 @@ item's card over them with «Done», «Edit», «Not mine» (an own one: «Delet
 deadlines within two weeks to pick the one that stays) and, for an assumed date, «The date is right», and the «Check»
 queue one question at a time («Check · 1 of 3», «Later» puts one off for the visit). «Machine» with the sources, what
 needs attention, the journal and the settings (16.6), «+» (16.5), the news (16.7) and the shelves of sheets and raw
-material with the inbox (16.8). Still to come (D66): the corrections (16.9).
+material with the inbox (16.8), and the corrections (16.9). Still to come (D66): the switch (16.10).
+
+**Corrections** (step 16.9, D68, `web/fixes.py`, client `fixes.js`): the card of a class or an event carries `fix`,
+what stands behind it with every field as it is now (a class: RUZ's time and room, the owner's correction, the chat's
+correction and whether it is ignored; an event: its id, own or an own copy, its calendar). The changes, each the
+connector's tool with its undo:
+- `POST /fix/class {uid, start, end, room, cancelled, kind, required, title?}` (`correct_class`): moved, cancelled or
+  put in the optional calendar; the app sends every field, as the tool resets the ones it is not given;
+- `POST /fix/event {uid, some of title, kind, start, end, room, cancelled}` (`edit_event`; a chat's event is hidden
+  and an own copy stands for it, so the card closes);
+- `POST /fix/options {id, required?, hidden?}` (`set_event_options`): an event hidden, shown again or put in the
+  other calendar, a chat's correction of a class ignored or applied again;
+- `POST /fix/remove {id}` (`remove_event`): an own event deleted, an own correction or an own copy taken back («As it
+  was»);
+- `GET /fix/hidden` (the hidden deadlines with their reason, the hidden events from today on), `POST /fix/hidden/deadline
+  {uid}` (`unhide_deadline`); a hidden event is restored by `/fix/options`. «Machine → Hidden» shows them;
+- `POST /fix/grade {id, value, label?}` (`change_grade`), `POST /fix/grade/reset {id}` (`delete_grade`: a sheet's grade
+  as the sheet has it, one added by hand deleted); the lens lists the grades with their ids, the ones added by hand too.
 
 ## 9. Storage (SQLite)
 
@@ -1085,8 +1102,8 @@ own; Claude is an optional door, not the brain (D53).
       card with its message, «Hide» with undo;
     - 16.8 the shelves (done, D67): problem sheets with their PDFs and versions, raw material by course, sorting the
       library's inbox; changes are the connector's tools, two of them new (`join_sheet`, `delete_sheet`);
-    - 16.9 corrections: moving, cancelling and changing a class, hiding a chat's event, the main or optional
-      calendar, the hidden deadlines and events with «Restore», correcting grades;
+    - 16.9 corrections (done, D68): moving, cancelling and changing a class, hiding a chat's event, the main or
+      optional calendar, the hidden deadlines and events with «Restore», correcting grades;
     - 16.10 the switch, once the app has everything the forum and the Mini App give (D66): the links of calendars
       and cards lead to the app; the forum's topics and the Mini App are switched off. Still missing from the app,
       to settle before the switch (D67): every version of a knowledge document with its own link (the lens's
