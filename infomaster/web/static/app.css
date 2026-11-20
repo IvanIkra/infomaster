@@ -284,3 +284,23 @@ form.acts .btn { flex: 0 0 auto; padding: 0 20px; }
 .choice small { font-size: 12px; color: var(--mut); }
 .choice .when { font-size: 13px; margin: 0; }
 .picks { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* «+» (16.5) */
+.bar > div { gap: 10px; }
+.plus {
+  margin-left: auto; width: 56px; height: 56px; border-radius: 28px; background: var(--acc); color: var(--on-acc);
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 20px rgba(194, 65, 12, 0.35);
+}
+.grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tile {
+  min-height: 72px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); cursor: pointer;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 6px; padding: 12px;
+  font: 800 14px var(--fb); color: var(--fg); text-align: left;
+}
+.tile .ic { color: var(--acc); }
+.tile[aria-pressed="true"], .acts .sec[aria-pressed="true"] { border-color: var(--fg); }
+.area { min-height: 96px; padding: 10px 12px; resize: vertical; font-weight: 500; line-height: 1.4; }
+select.field { appearance: none; -webkit-appearance: none; }
+.pairs { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 15px; }
+.pairs dt { color: var(--mut); font-weight: 700; font-size: 13px; padding-top: 1px; }
+.pairs dd { margin: 0; font-weight: 700; }

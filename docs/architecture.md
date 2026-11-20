@@ -505,6 +505,9 @@ on their own:
   course the item goes to the inbox. A file the twin cannot download now (offline, a flood wait) stays queued and is
   tried again after the next batch run; any other failure is tried three times. A row goes when its item is made or
   when its message is deleted or leaves the inbox after its 14 days. A file over the size limit is skipped.
+- *The web app* (§8.6, «+»). A photo of the board, a recording, a file, a note or a link of the owner (source
+  `web`), at the class in progress or a recent one the owner picks, else in the inbox; Android's «Share» lands here
+  too.
 - *Sheets* (§6.3). When a sheet or a new version of it is prepared for the forum, its PDF is copied in as kind
   `sheet` (source `sheet`, its message as the origin), at the class of its course that was on when it was sent, else
   at its course alone; once per file.
@@ -516,7 +519,8 @@ on their own:
 ## 7. LLM: the journal and the daily limit
 
 **The journal (D22).** Every call, failed ones included, is written to `llm_runs`: the time (UTC), the task (`batch`,
-`pdf`, `image`, `subjects`, `grades`, `hseapp_labels`; old rows may have `summary`, D55), the chat, the model,
+`pdf`, `image`, `subjects`, `grades`, `hseapp_labels`, `quick` (one line of the web app's «+», §8.6); old rows may
+have `summary`, D55), the chat, the model,
 tokens (input, output, cache), the cost, the duration, the error. The Mini App shows spending for today, the week and the month, broken down
 by task and chat.
 
@@ -733,7 +737,7 @@ twice.
 
 | Reads | Writes |
 |---|---|
-| `get_status` (what needs attention, every source, the LLM spending), `list_deadlines`, `list_hidden_deadlines`, `get_timetable` (a range of days), `list_news`, `search_messages` (text, chat, days; 14 days are kept), `get_message` (as D50's page), `list_chats`, `list_chat_senders`, `list_courses`, `get_settings`, `list_sheets`, `get_sheet` (the text; a scan's first page as its JPEG while the file is kept), `list_grades`, `get_gradebook` | deadlines: `add_deadline`, `edit_deadline`, `hide_deadline` (with a reason: done, not_mine, duplicate of `kept`), `delete_deadline`, `unhide_deadline`, `confirm_deadline_date` (an assumed date, §6.3), `set_deadline_course`; the timetable: `add_event`, `edit_event`, `set_event_options`, `remove_event`, `correct_class`; `edit_sheet`; `update_chat_settings`; the dictionary: `set_course`, `delete_course`; settings: `update_general_settings`, `update_reminders`, `update_images`, `update_pdf_limits`; grades: `update_grade_settings`, `add_gradebook`, `update_gradebook`, `remove_gradebook`, `read_gradebook_now`, `set_tab_layout`, `reset_tab_layout`, `add_grade`, `change_grade`, `delete_grade` |
+| `get_status` (what needs attention, every source, the LLM spending), `list_deadlines`, `list_hidden_deadlines`, `get_timetable` (a range of days), `list_news`, `search_messages` (text, chat, days; 14 days are kept), `get_message` (as D50's page), `list_chats`, `list_chat_senders`, `list_courses`, `get_settings`, `list_sheets`, `get_sheet` (the text; a scan's first page as its JPEG while the file is kept), `list_grades`, `get_gradebook` | deadlines: `add_deadline` (with a course for the web app's lens), `edit_deadline`, `hide_deadline` (with a reason: done, not_mine, duplicate of `kept`), `delete_deadline`, `unhide_deadline`, `confirm_deadline_date` (an assumed date, §6.3), `set_deadline_course`; the timetable: `add_event`, `edit_event`, `set_event_options`, `remove_event`, `correct_class`; `edit_sheet`; `update_chat_settings`; the dictionary: `set_course`, `delete_course`; settings: `update_general_settings`, `update_reminders`, `update_images`, `update_pdf_limits`; grades: `update_grade_settings`, `add_gradebook`, `update_gradebook`, `remove_gradebook`, `read_gradebook_now`, `set_tab_layout`, `reset_tab_layout`, `add_grade`, `change_grade`, `delete_grade` |
 
 Not exposed: the secrets of `.env`, the twin's login and logout, the HSE App X login, the LLM limit and the model
 prices (a lower price would raise the limit too), anything of the summaries.
@@ -862,6 +866,26 @@ decides what:
   sends a test; the feed offers them once on a device without them (except an iPhone outside the Home Screen, where
   the app says to add it first). The service worker shows a message and, on a tap, brings the app to its screen.
 
+**«+»** (step 16.5, D64, `web/quick.py`). One button for everything added by hand:
+
+- material for the library (D58, source `web`): a photo of the board (the camera), a recording, any files, a note or a
+  link. It goes to the class in progress: one that starts within 20 minutes, is on, or ended within 90 minutes;
+  «Another» lists the classes of the last week, and «No class» sends it to the library's inbox. Files are written to
+  disk as they come (`POST /web/api/add/files`, multipart: `class_uid` or `course` first, then the files; a refused
+  file stops the upload and the ones before it stay). Every addition is journaled with its undo (`remove_material`);
+- one line (`POST /web/api/add/line`): Haiku (task `quick`, within the daily limit; no key or the limit spent: «add
+  by hand») is given today, the lenses with their other names and the classes of the next three weeks, and answers
+  what the line is (a deadline, an event or a note), its course among the lenses, the date, and a sentence on how it
+  read the date. The server checks the answer (an unknown course or a bad date is dropped; a deadline without a date
+  is a note) and nothing is saved before the owner confirms: «Save», «No, save it as a note», or «Edit» into the
+  form. Deadlines keep a date only, so a time the line gives stays in the title («Lab 3, 18:00»);
+- by hand (`POST /web/api/add/deadline|event|grade`): the connector's `add_deadline`, `add_event`, `add_grade`. An own
+  deadline may now have a course (`own_deadlines.course`, its key), so it shows in the course's lens; an edited copy
+  of a source's deadline keeps the source's course;
+- Android's «Share» (the manifest's `share_target`, a POST to `/web/share`): the service worker keeps the files and
+  the text in a cache of its own and opens «+», where the owner picks the class; a link waits as a note. Without the
+  worker (the app never opened) the server only sends the app to «+» and asks to share again.
+
 **Screens**: the feed with the lenses and the «Check, please» box (the first two questions with their quick answer),
 the course's lens (grades, next class, shelves), the week as a grid with the deadlines of each day above it, an
 item's card over them with «Done», «Edit», «Not mine» (an own one: «Delete»), «It is a duplicate…» (the course's
@@ -884,7 +908,7 @@ Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Ta
 | `subjects` | the dictionary (§2.2) |
 | `news` | parsed news, `replaced_by` |
 | `deadlines` | deadlines from external sources, `moved_by` |
-| `own_deadlines`, `hidden_deadlines` | own and hidden ones (§5.4); a hidden one keeps why, when the web app says (`reason`: done, not_mine, duplicate of `kept`) |
+| `own_deadlines`, `hidden_deadlines` | own and hidden ones (§5.4); an own one may have a course (its key, from the web app); a hidden one keeps why, when the web app says (`reason`: done, not_mine, duplicate of `kept`) |
 | `events` | events from chats (consultations, events) and changes to RUZ classes; own events and changes have the source `own` (D44) |
 | `classes` | classes from RUZ |
 | `sheets` | problem sheets: message, file hash, course, number, due date, text, summary, previous version, the bot's message id |
@@ -997,8 +1021,8 @@ own; Claude is an optional door, not the brain (D53).
       without one; the «Check» queue; every change journaled with an undo;
     - 16.4 Web Push (done, D63): subscriptions per device and one notifier for what the forum announces now (new
       and moved deadlines, reminders, failures, the LLM budget, a login the twin or HSE App X needs);
-    - 16.5 «+»: uploads to the class in progress, one line parsed by Haiku within the budget and confirmed, Share
-      Target on Android;
+    - 16.5 «+» (done, D64): uploads to the class in progress, one line parsed by Haiku within the budget and
+      confirmed, a deadline, an event or a grade by hand, Share Target on Android;
     - 16.6 «Machine»: the sources and their freshness, the journal with undo, the Mini App's settings moved over;
     - 16.7 the switch: the links of calendars and cards lead to the app; the forum's topics and the Mini App are
       switched off.

@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 MODEL = "claude-haiku-5-5"
 # The journal may still hold "summary" rows from before the summaries were removed (D55); no new call is one.
-TASKS = frozenset({"batch", "pdf", "image", "subjects", "grades", "hseapp_labels"})
+TASKS = frozenset({"batch", "pdf", "image", "subjects", "grades", "hseapp_labels", "quick"})  # quick: the web app's «+»
 
 
 class LLMError(RuntimeError):

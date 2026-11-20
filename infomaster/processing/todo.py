@@ -69,7 +69,7 @@ class Todo:
 
     def own(self) -> tuple[Deadline, ...]:
         rows = self.db.execute("select * from own_deadlines order by due, id").fetchall()
-        return tuple(Deadline(r["title"], dt.date.fromisoformat(r["due"]), r["category"], "ha",
+        return tuple(Deadline(r["title"], dt.date.fromisoformat(r["due"]), r["category"], "ha", r["course"],
                               key=f"{OWN_PREFIX}{r['id']}", ref=f"{OWN_PREFIX}{r['id']}") for r in rows)
 
     def hidden(self) -> tuple[Deadline, ...]:
@@ -81,12 +81,14 @@ class Todo:
         """For the Mini App: by date, the newest first."""
         return [dict(row) for row in self.db.execute("select * from hidden_deadlines order by due desc, title")]
 
-    def add(self, title: str, due: dt.date, category: str) -> Deadline:
+    def add(self, title: str, due: dt.date, category: str, course: str | None = None) -> Deadline:
+        """`course`: its key (the abbr), as the web app gives it; HA and the Mini App give none."""
         title = check(title, due, category)
-        cursor = self.db.execute("insert into own_deadlines(title, due, category) values(?, ?, ?)",
-                                 (title, due.isoformat(), category))
+        course = " ".join((course or "").split()) or None
+        cursor = self.db.execute("insert into own_deadlines(title, due, category, course) values(?, ?, ?, ?)",
+                                 (title, due.isoformat(), category, course))
         key = f"{OWN_PREFIX}{cursor.lastrowid}"
-        return Deadline(title, due, category, "ha", key=key, ref=key)
+        return Deadline(title, due, category, "ha", course, key=key, ref=key)
 
     def remove(self, d: Deadline, reason: str | None = None, kept: str | None = None) -> None:
         """Deleted or done: an own deadline goes away, one from a source is hidden, with the reason when given."""
@@ -106,10 +108,10 @@ class Todo:
         title = check(d.title if title is None else title, due, category)
         if d.source != "ha":
             self.remove(d)
-            return self.add(title, due, category)
+            return self.add(title, due, category, d.course)  # the copy keeps the course: it stays in its lens
         self.db.execute("update own_deadlines set title = ?, due = ?, category = ? where id = ?",
                         (title, due.isoformat(), category, own_id(d)))
-        return Deadline(title, due, category, "ha", key=d.key, ref=d.key)
+        return Deadline(title, due, category, "ha", d.course, key=d.key, ref=d.key)
 
     def unhide(self, hidden_uid: str) -> bool:
         """«Вернуть» in the Mini App: the source's deadline is back unless another hidden row matches it."""

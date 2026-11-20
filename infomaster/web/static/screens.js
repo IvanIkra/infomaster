@@ -12,7 +12,7 @@ const minutes = (iso) => clock(iso.slice(11, 16));
 const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
 // Load a screen's JSON; again when the app comes back to the front, and every five minutes.
-function useLoad(path, onOut) {
+export function useLoad(path, onOut) {
   const [state, setState] = useState({ data: null, error: "" });
   useEffect(() => {
     if (!path) return undefined;
@@ -125,6 +125,7 @@ export function Bar({ view, course }) {
       <button role="tab" aria-selected=${view === "week"} onClick=${() => go("/week", { course })}>
         ${t("weekView")}</button>
     </div>
+    <a class="plus" href="#/add" aria-label=${t("add")}>${icon(ICONS.plus, 26)}</a>
   </div></div>`;
 }
 
@@ -309,7 +310,7 @@ export function Card({ kind: what, uid, onClose, onOut }) {
 }
 
 // Run a change; its error stays on the screen, and `after` runs once it is done.
-function useAct(after) {
+export function useAct(after) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const run = async (job) => {
@@ -400,7 +401,7 @@ function EditForm({ d, busy, onSave, onCancel }) {
   </form>`;
 }
 
-const shortDay = (iso) => capital(day(iso, { weekday: "short", day: "numeric", month: "short" }));
+export const shortDay = (iso) => capital(day(iso, { weekday: "short", day: "numeric", month: "short" }));
 
 function DeadlineCard({ d, onClose }) {
   const when = [capital(day(d.due, { weekday: "short", day: "numeric", month: "long" })),

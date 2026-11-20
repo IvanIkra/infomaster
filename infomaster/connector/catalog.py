@@ -238,7 +238,8 @@ def step(tool: str, **arguments) -> dict:
 
 async def add_deadline(ctx: Context, args: dict) -> Output:
     before = own_keys(ctx)
-    body = {"title": args["title"], "due": args["due"], "category": args.get("category", "study")}
+    body = {"title": args["title"], "due": args["due"], "category": args.get("category", "study"),
+            **({"course": args["course"]} if args.get("course") else {})}
     await mini_app(ctx.app, miniapp.add_deadline, body)
     new = sorted(own_keys(ctx) - before)
     return Output({"uid": new[0] if new else None, **body}, f"Added the deadline «{body['title']}», due {body['due']}",
@@ -858,7 +859,9 @@ def register(registry: Registry, app) -> None:
 
     write("add_deadline", "Add a deadline", "A new own deadline.",
           {"title": {"type": "string", "maxLength": miniapp.TITLE_LIMIT}, "due": DATE,
-           "category": {"type": "string", "enum": list(CATEGORIES), "description": "study by default"}},
+           "category": {"type": "string", "enum": list(CATEGORIES), "description": "study by default"},
+           "course": {"type": "string", "maxLength": miniapp.COURSE_KEY_LIMIT,
+                      "description": "the course's abbreviation (list_courses), for its lens in the web app"}},
           add_deadline, ("title", "due"), destructive=False)
     write("edit_deadline", "Change a deadline",
           "Change the title, due date or list of a deadline. An own one changes; one from a source is hidden and an "

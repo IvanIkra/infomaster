@@ -205,9 +205,10 @@ class DeadlineList:
 
     # --- the owner's changes ----------------------------------------------------------------
 
-    def add(self, title: str, due: dt.date, category: str) -> Deadline:
-        """A new own deadline; ValueError for an empty title or an unknown category."""
-        return self._change(lambda: self.todo.add(title, due, category))
+    def add(self, title: str, due: dt.date, category: str, course: str | None = None) -> Deadline:
+        """A new own deadline, of a course (its key) when the web app gives one; ValueError for an empty title or an
+        unknown category."""
+        return self._change(lambda: self.todo.add(title, due, category, course))
 
     def remove(self, d: Deadline, reason: str | None = None, kept: str | None = None) -> None:
         """Done or deleted: an own one is deleted, one from a source is hidden for good (why, when the web app says:

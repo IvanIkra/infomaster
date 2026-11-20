@@ -49,7 +49,7 @@ create table if not exists materials (  -- raw material of the courses (D58): ke
     size integer,
     sha256 text,
     parent integer,             -- the item it belongs to: a transcript's recording
-    source text not null,       -- chat, bot, miniapp, connector, sheet
+    source text not null,       -- chat, bot, miniapp, connector, sheet, web
     chat_id integer,            -- where it came from
     msg_id integer,
     status text not null,       -- uploading (a draft: no bytes yet), new, processed
@@ -86,7 +86,7 @@ create index if not exists knowledge_doc on knowledge_versions(doc_id, version);
 """
 
 KINDS = ("photo", "audio", "video", "notes", "slides", "sheet", "link", "text", "transcript", "file")
-SOURCES = ("chat", "bot", "miniapp", "connector", "sheet")
+SOURCES = ("chat", "bot", "miniapp", "connector", "sheet", "web")
 DOC_KINDS = ("book", "lecture", "seminar", "cheatsheet")
 CLASS_DOCS = ("lecture", "seminar")          # a document of one class
 PARTS = {"source": ".tex", "pdf": ".pdf"}    # a version's files; a cheat sheet's source is .md

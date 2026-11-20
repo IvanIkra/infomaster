@@ -104,7 +104,8 @@ create table if not exists own_deadlines (     -- the owner's own, from HA's to-
     id integer primary key,     -- the uid is ha-<id>
     title text not null,
     due text not null,          -- YYYY-MM-DD
-    category text not null      -- study, personal
+    category text not null,     -- study, personal
+    course text                 -- the course key (its abbr) the web app gave it (§8.6); null: none
 );
 create table if not exists hidden_deadlines (  -- deadlines of the sources hidden for good (§5.4)
     uid text primary key,       -- <source>-<sha1(source|title|due)[:10]>
@@ -276,6 +277,7 @@ UPGRADES = (
     ("files", "url", "text"),  # the link a PDF came from (D59); null for a message's own file
     ("files", "tries", "integer not null default 0"),  # failed downloads: the file is given up after MAX_TRIES
     ("hidden_deadlines", "reason", "text"),  # why the owner hid it (the web app, §8.6)
+    ("own_deadlines", "course", "text"),  # the course of an own deadline added in the web app (§8.6)
     ("hidden_deadlines", "kept", "text"),
 )
 

@@ -8,6 +8,11 @@
   "display": "standalone",
   "background_color": "#F1EBE0",
   "theme_color": "#FBF7F0",
+  "share_target": {
+    "action": "/web/share", "method": "POST", "enctype": "multipart/form-data",
+    "params": {"title": "title", "text": "text", "url": "url",
+               "files": [{"name": "files", "accept": ["image/*", "audio/*", "video/*", "application/pdf", "*/*"]}]}
+  },
   "icons": [
     {"src": "/web/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
     {"src": "/web/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},

@@ -38,6 +38,11 @@ export const ICONS = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/>',
   cross: '<path d="M6 6l12 12M18 6L6 18"/>',
   merge: '<path d="M7 4v5a5 5 0 0 0 5 5h0a5 5 0 0 1 5 5v1M17 4v5a5 5 0 0 1-5 5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  file: '<path d="M6 3h8l4 4v14H6zM14 3v4h4"/>',
+  note: '<path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5"/>',
 };
 
 // #/path?query: the screen and its parameters

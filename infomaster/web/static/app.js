@@ -7,6 +7,7 @@ import { getLang, setLang, t, when } from "./i18n.js";
 import * as passkey from "./passkey.js";
 import { Card, CheckQueue, Feed, Week } from "./screens.js";
 import { Notifications } from "./notifications.js";
+import { AddSheet } from "./add.js";
 
 const LANG_KEY = "infomaster.lang";  // the login screen's choice, before the server's setting is known
 
@@ -235,7 +236,8 @@ function App() {
 
   const card = at.path === "/d" || at.path === "/c";
   const check = at.path === "/check";
-  if (!card && !check) base = at;
+  const adding = at.path === "/add";
+  if (!card && !check && !adding) base = at;
   const close = () => go(base.path, Object.fromEntries(base.params));
   const screen = base.path === "/week"
     ? html`<${Week} start=${base.params.get("start")} course=${base.params.get("course")} onOut=${out} />`
@@ -244,6 +246,7 @@ function App() {
     uid=${at.params.get("uid")} onClose=${close} onOut=${out} />`}
     ${check && html`<${CheckQueue} start=${at.params.get("id")} course=${at.params.get("course")} onClose=${close}
       onOut=${out} />`}
+    ${adding && html`<${AddSheet} shared=${at.params.get("shared")} onClose=${close} onOut=${out} />`}
     <${Toast} />`;
 }
 

@@ -6,8 +6,33 @@ const CACHE = "infomaster-web";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
+// Android's «Share» (the manifest's share_target): the files and the text are kept here, and «+» opens with them,
+// so the owner picks the class before they are sent.
+const SHARE_CACHE = "infomaster-share";
+
+async function keepShared(request) {
+  const form = await request.formData();
+  await caches.delete(SHARE_CACHE);
+  const cache = await caches.open(SHARE_CACHE);
+  let n = 0;
+  for (const file of form.getAll("files")) {
+    if (!(file instanceof File) || !file.size) continue;
+    await cache.put(`/web/share/file/${n++}`, new Response(file, {
+      headers: { "Content-Type": file.type || "application/octet-stream", "X-Name": encodeURIComponent(file.name) },
+    }));
+  }
+  const text = ["title", "text", "url"].map((name) => form.get(name)).filter((v) => typeof v === "string" && v.trim())
+    .filter((v, i, all) => all.indexOf(v) === i).join("\n");
+  if (text) await cache.put("/web/share/text", new Response(text));
+  return Response.redirect("/web/#/add?shared=1", 303);
+}
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  if (event.request.method === "POST" && url.origin === location.origin && url.pathname === "/web/share") {
+    event.respondWith(keepShared(event.request));
+    return;
+  }
   if (event.request.method !== "GET" || url.origin !== location.origin || !url.pathname.startsWith("/web/")
       || url.pathname.startsWith("/web/api/")) {
     return;

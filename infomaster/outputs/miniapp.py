@@ -84,6 +84,7 @@ GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "forum_language", "min
 GRADE_SETTINGS = {"student": "grades_student", "sheets": "grades_sheets", "window_days": "grades_window_days"}
 PDF_LIMITS = ("pdf_pages", "pdf_tokens")
 TITLE_LIMIT = 200  # characters of an own deadline's title
+COURSE_KEY_LIMIT = 200  # an own deadline's course key (the web app, §8.6)
 SHEET_COURSE_LIMIT, SHEET_NUMBER_LIMIT = 60, 20
 GRADE_LABEL_LIMIT = 40
 EVENT_TITLE_LIMIT = 120
@@ -484,9 +485,13 @@ async def deadlines(request: web.Request) -> web.Response:
 
 
 async def add_deadline(request: web.Request) -> web.Response:
-    """{title, due, category}: a new own deadline."""
-    fields = _own_fields(request, await _json(request), some=False)
-    request.app[DEADLINES_KEY].add(fields["title"], fields["due"], fields["category"])
+    """{title, due, category, course?}: a new own deadline; `course`, its key, comes from the web app (§8.6)."""
+    values = await _json(request)
+    fields = _own_fields(request, values, some=False)
+    course = values.get("course")
+    if course is not None and (not isinstance(course, str) or len(course) > COURSE_KEY_LIMIT):
+        raise web.HTTPBadRequest(text=f"course: up to {COURSE_KEY_LIMIT} characters")
+    request.app[DEADLINES_KEY].add(fields["title"], fields["due"], fields["category"], course)
     return respond(request, _deadlines_state(request))
 
 

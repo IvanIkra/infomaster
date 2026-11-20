@@ -335,6 +335,17 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   again. The endpoints are limited to the known push services, so the server posts nowhere else. Per-kind settings
   (only deadlines, quiet hours) wait for «Machine» (16.6).
 
+- **D64. «+» adds by hand in one place, and the model only proposes, 20.11.2026.** This adds to §8.6 and is step
+  16.5 of §11.1. Material goes to the class in progress, as the photos of a board are taken during it and a recording
+  ends with it; 90 minutes after the end still count, and any class of the last week can be picked. One line is read
+  by Haiku because typing a date, a course and a list is the slow part on a phone, but a model misreads «by
+  Wednesday» or a course's nickname now and then, so the app shows what it understood with a sentence on the date and
+  saves nothing before the owner confirms; the server drops whatever the model may not decide (an unknown course, a
+  date that is not one). It is not optional (D12): the owner asked for it, so it runs below the 80 % mark too and stops
+  only at the limit. Own deadlines get a course, the key of a lens, so what the owner adds stands in its course's lens
+  like the rest. A shared file goes through the service worker rather than to the server directly: the share is a POST
+  from the system, and the owner should still pick its class.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

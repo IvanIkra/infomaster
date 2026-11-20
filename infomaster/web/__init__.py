@@ -14,6 +14,10 @@ checks, and every change goes into the connector's journal (`via` web) with the 
 Notifications (stage 16.4): a device turns them on with its browser's push subscription (push.py); the notifier
 (notify.py) sends what the forum announces with a sound.
 
+«+» (stage 16.5, quick.py): material for the library at the class going on, one line read by Haiku and confirmed, a
+deadline, an event or a grade by hand. Android's «Share» lands on /web/share: the service worker keeps the files and
+opens «+» with them; without it, the server only sends the app there.
+
 The client is plain ES modules, no build step: Preact and htm are vendored in static/vendor, the fonts in static/fonts.
 """
 
@@ -28,11 +32,15 @@ from aiohttp import web
 
 from ..config import Env
 from ..connector.tools import Context, ToolError
+from ..library import LibraryError
+from ..library.feed import first_url
+from ..llm.client import Haiku
 from ..store import Store
 from .auth import COOKIE, COOKIE_PATH, SESSION_IDLE, Auth, AuthError, device_name
 from .check import Check
 from .notify import Notifier
 from .push import Push, PushError
+from .quick import Quick, QuickError
 from .views import Data
 
 STATIC = Path(__file__).parent / "static"
@@ -43,12 +51,13 @@ CHANGES = {"POST", "PUT", "PATCH", "DELETE"}
 class WebApp:
     def __init__(self, env: Env, store: Store, send_code: Callable[[str], Awaitable[None]] | None = None,
                  lang: Callable[[], str] = lambda: "en", now: Callable[[], float] = time.time,
-                 data: Data | None = None):
+                 data: Data | None = None, llm: Haiku | None = None):
         parts = urlsplit(env.public_url)
         self.origin = f"{parts.scheme}://{parts.netloc}"
         self.lang = lang
         self.data = data  # what the screens read; set by the service, left out by the login's tests
         self.check = Check(data, store) if data is not None else None
+        self.quick = Quick(data, llm) if data is not None else None
         self.connector = None  # the service's Connector: the owner's changes are its tools, journaled with undo
         self.auth = Auth(store, parts.hostname or "", self.origin, send_code, lang, now)
         self.push = Push(store, env.public_url, now)
@@ -61,6 +70,7 @@ class WebApp:
         app.router.add_get("/web/sw.js", service_worker)
         app.router.add_get("/web/manifest.webmanifest", manifest)
         app.router.add_static("/web/static", STATIC)
+        app.router.add_post("/web/share", shared)
         api = [("GET", "/me", me),
                ("POST", "/login/code", send_code),
                ("POST", "/login/code/check", check_code),
@@ -84,7 +94,12 @@ class WebApp:
                ("GET", "/push", push_state),
                ("POST", "/push", subscribe),
                ("DELETE", "/push", unsubscribe),
-               ("POST", "/push/test", push_test)]
+               ("POST", "/push/test", push_test),
+               ("GET", "/add", add_state),
+               ("POST", "/add/line", add_line),
+               ("POST", "/add/files", add_files),
+               ("POST", "/add/note", add_note),
+               ("POST", "/add/{what}", add_by_hand)]
         for method, path, handler in api:
             app.router.add_route(method, "/web/api" + path, guarded(handler))
         if self.connector is not None and self.check is not None:
@@ -117,6 +132,10 @@ def guarded(handler):
             return await handler(request)
         except AuthError as e:
             return error(e.status, e.message)
+        except web.HTTPException as e:  # a refusal raised deep down (bad JSON, no such class) comes as JSON too
+            if e.status < 400:
+                raise
+            return error(e.status, e.text if e.text and not e.text.startswith(f"{e.status}:") else e.reason)
     wrapper.__name__ = handler.__name__
     return wrapper
 
@@ -417,3 +436,176 @@ async def push_test(request: web.Request) -> web.Response:
     if not sent:
         return error(502, "The push service did not take it." if lang != "ru" else "Служба уведомлений его не приняла.")
     return web.json_response({"sent": sent})
+
+
+# --- «+» (stage 16.5) ----------------------------------------------------------------------------------------
+
+FIELD_BYTES = 400        # a form field before the files: a class's uid or a course key
+CHUNK = 1 << 16
+QUICK_ERRORS = {"unavailable": (503, "One line needs the Anthropic key: add it by hand.",
+                                "Для одной строки нужен ключ Anthropic: добавьте вручную."),
+                "budget": (429, "The daily LLM limit is spent: add it by hand.",
+                           "Дневной лимит LLM исчерпан: добавьте вручную."),
+                "empty": (400, "Type what to add.", "Напишите, что добавить.")}
+
+
+def _say(request: web.Request, en: str, ru: str) -> str:
+    return ru if request.app[WEB_KEY].lang() == "ru" else en
+
+
+def _quick(request: web.Request) -> Quick:
+    quick = request.app[WEB_KEY].quick
+    if quick is None:
+        raise web.HTTPServiceUnavailable(text="the screens are not wired")
+    return quick
+
+
+async def shared(request: web.Request) -> web.Response:
+    """Android's «Share» before the service worker took over: the files cannot be kept here (no session is sure), so
+    the app opens «+» and asks to share again."""
+    raise web.HTTPSeeOther("/web/#/add?shared=lost")
+
+
+async def add_state(request: web.Request) -> web.Response:
+    """What «+» shows: the class in progress and the recent ones, the courses, whether one line can be read."""
+    data, quick = _data(request), _quick(request)
+    connector = request.app[WEB_KEY].connector
+    return web.json_response({**quick.place(), "courses": data.courses(), "line": quick.available(),
+                              "library": data.library is not None,
+                              "grades": connector is not None and "add_grade" in connector.registry.tools})
+
+
+async def add_line(request: web.Request) -> web.Response:
+    """{text}: what Haiku understood of one line; nothing is saved."""
+    text = (await body(request)).get("text")
+    try:
+        return web.json_response(await _quick(request).read(text if isinstance(text, str) else ""))
+    except QuickError as e:
+        reason = str(e)
+        if reason in QUICK_ERRORS:
+            status, en, ru = QUICK_ERRORS[reason]
+            return error(status, _say(request, en, ru))
+        return error(502, _say(request, f"The line was not read: {reason}", f"Строку не разобрали: {reason}"))
+
+
+def _library(request: web.Request):
+    library = _data(request).library
+    if library is None:
+        raise web.HTTPServiceUnavailable(text="the library is not wired")
+    return library
+
+
+def _placed(request: web.Request, class_uid: str | None, course_key: str | None) -> dict:
+    """course and class_uid for the library from the app's class uid or course key; the inbox without either."""
+    if class_uid:
+        found = _library(request).class_of(class_uid)
+        if found is None:
+            raise web.HTTPBadRequest(text="no such class")
+        return {"course": found["subject"], "class_uid": class_uid}
+    if course_key:
+        name = _data(request).course_name(course_key)
+        if name is None:
+            raise web.HTTPBadRequest(text="no such course")
+        return {"course": name, "class_uid": None}
+    return {"course": None, "class_uid": None}
+
+
+def _journal_material(request: web.Request, ids: list[int], what: str) -> dict:
+    connector = request.app[WEB_KEY].connector
+    summary = f"Added {what} to the library: " + ", ".join(f"#{item_id}" for item_id in ids)
+    if connector is None:
+        return {"id": None, "summary": summary, "undo": False}
+    undo = [{"tool": "remove_material", "arguments": {"id": item_id}} for item_id in ids] \
+        if "remove_material" in connector.registry.tools else None
+    change_id = connector.journal("add_material", {"ids": ids}, summary, undo)
+    return {"id": change_id, "summary": summary, "undo": undo is not None}
+
+
+async def _form_field(part) -> str:
+    data = b""
+    while chunk := await part.read_chunk(FIELD_BYTES):
+        data += chunk
+        if len(data) > FIELD_BYTES:
+            raise web.HTTPBadRequest(text=f"{part.name}: up to {FIELD_BYTES} bytes")
+    return data.decode(errors="replace").strip()
+
+
+async def _part_chunks(part):
+    while chunk := await part.read_chunk(CHUNK):
+        yield chunk
+
+
+async def add_files(request: web.Request) -> web.Response:
+    """Multipart: `class_uid` or `course` (a key) first, then the files; each is written to disk as it comes and
+    kept in the library (source web). A refused file stops the upload; the files before it stay, journaled."""
+    library = _library(request)
+    try:
+        reader = await request.multipart()
+    except (AssertionError, ValueError, KeyError):
+        return error(400, "multipart/form-data expected")
+    fields, added = {}, []
+    try:
+        while (part := await reader.next()) is not None:
+            if part.filename is None:
+                if part.name not in ("class_uid", "course") or added:
+                    return error(400, "class_uid and course come before the files")
+                fields[part.name] = await _form_field(part) or None
+                continue
+            place = _placed(request, fields.get("class_uid"), fields.get("course"))
+            added.append(await library.add_stream(_part_chunks(part), name=part.filename,
+                                                  media_type=part.headers.get("Content-Type"), source="web",
+                                                  author="owner", **place))
+    except LibraryError as e:
+        if not added:
+            return error(400, str(e))
+        change = _journal_material(request, added, "files")
+        return web.json_response({"added": added, "change": change, "error": str(e)}, status=207)
+    if not added:
+        return error(400, _say(request, "Choose a file.", "Выберите файл."))
+    return web.json_response({"added": added, "change": _journal_material(request, added, "files")})
+
+
+async def add_note(request: web.Request) -> web.Response:
+    """{text, class_uid?, course?}: a note for the library; a line that is only a link is kept as a link."""
+    data = await body(request)
+    text = data.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return error(400, _say(request, "Write the note.", "Напишите заметку."))
+    text = text.strip()
+    place = _placed(request, data.get("class_uid") or None, data.get("course") or None)
+    url = first_url(text)
+    try:
+        if url and url == text:
+            item_id = _library(request).add("link", url=url, source="web", author="owner", **place)
+        else:
+            item_id = _library(request).add("text", text=text, title=" ".join(text.split())[:80], source="web",
+                                            author="owner", **place)
+    except LibraryError as e:
+        return error(400, str(e))
+    return web.json_response({"added": [item_id], "change": _journal_material(request, [item_id], "a note")})
+
+
+async def add_by_hand(request: web.Request) -> web.Response:
+    """POST /add/deadline {title, due, category?, course?}, /add/event {title, start, end?, room?, kind?},
+    /add/grade {course: a key, label, value}: the connector's tools, journaled with their undo."""
+    data, what = await body(request), request.match_info["what"]
+    connector = _connector(request)
+    if what == "deadline":
+        tool = "add_deadline"
+        arguments = {"title": data.get("title"), "due": data.get("due"), "category": data.get("category") or "study"}
+        if data.get("course"):
+            arguments["course"] = data["course"]
+    elif what == "event":
+        tool = "add_event"
+        arguments = {name: data[name] for name in ("title", "start", "end", "room", "kind") if data.get(name)}
+    elif what == "grade":
+        tool = "add_grade"
+        title = _data(request).title(data.get("course")) if isinstance(data.get("course"), str) else None
+        arguments = {"course": title, "label": data.get("label"), "value": data.get("value")}
+    else:
+        return error(404, "no such thing to add")
+    try:
+        change_id, output = await connector.act(tool, arguments)
+    except ToolError as e:
+        return error(400, str(e))
+    return _change(change_id, output)
