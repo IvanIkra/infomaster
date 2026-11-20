@@ -93,6 +93,7 @@ button:disabled { opacity: 0.55; cursor: default; }
   width: 72px; height: 72px; border-radius: 20px; background: var(--acc); color: var(--on-acc);
   display: flex; align-items: center; justify-content: center; font: italic 600 34px var(--fh);
 }
+img.logo { display: block; background: none; box-shadow: 0 0 0 1px var(--line); }
 .brand h1 { font-size: 32px; }
 .brand p { margin: 0; max-width: 300px; color: var(--mut); }
 .or { display: flex; align-items: center; gap: 10px; color: var(--mut); font-size: 12px; margin: 8px 0; }

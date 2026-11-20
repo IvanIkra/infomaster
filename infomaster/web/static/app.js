@@ -45,7 +45,7 @@ function Login({ onIn }) {
 
   return html`<main class="screen">
     <div class="brand">
-      <div class="logo" aria-hidden="true">im</div>
+      <img class="logo" src="/web/static/icons/icon.svg" alt="" />
       <h1>infomaster</h1>
       <p>${t("tagline")}</p>
     </div>
