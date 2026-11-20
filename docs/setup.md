@@ -195,6 +195,22 @@ It applies to what the bot writes after the switch: old messages stay as they we
 rewritten on their next edit, existing topics are not renamed, and the menu button changes after a restart. News, deadline labels, course names and the iCal
 feeds are always in English, because Tablo receives them too.
 
+## Web app
+
+The home-screen app (architecture §8.6) is replacing the forum and the Mini App step by step (stage 16); for now it
+has the login and the list of devices. Nothing is set in `.env`: it uses `PUBLIC_URL`.
+
+1. Make sure you have pressed **Start** in your private chat with the bot: the login code comes there.
+2. Open `https://infomaster.<tailnet>.ts.net/web/` on the phone, tap **Send a code**, type the six digits the bot
+   sent and tap **Log in**.
+3. Create a passkey when the app offers it: later logins on that device take Face ID, Touch ID or the device's PIN.
+   A passkey works only at this address; if the Funnel name ever changes, log in with a code again.
+4. Add the app to the Home Screen: on iPhone, **Share → Add to Home Screen** (notifications on iOS need this); on
+   Android, the browser's **Install app**.
+
+**Machine → Login and devices** lists where you are logged in and your passkeys; a lost phone is logged out there
+from another device. A device unused for 90 days is logged out by itself.
+
 ## Claude connector
 
 infomaster is a remote MCP server (architecture §8.5): add it to claude.ai as a custom connector, and Claude in the

@@ -24,6 +24,7 @@ dependencies = [
     "pypdf>=5",  # text of PDFs, pages for the model: MIT, unlike PyMuPDF
     "telethon>=1.45",  # layer 229: KeyboardInlineButton with a button type
     "tzdata",  # zoneinfo data that does not depend on the time zones of the OS image
+    "webauthn>=3",  # passkeys of the web app (D61)
 ]
 
 [project.urls]
@@ -41,6 +42,7 @@ include = ["infomaster*"]
 
 [tool.setuptools.package-data]
 "infomaster.outputs" = ["miniapp/*", "emoji-pack/*"]
+"infomaster.web" = ["static/*", "static/*/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

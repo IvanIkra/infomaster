@@ -64,7 +64,7 @@ A single asyncio process runs the collectors, the processing pipeline and two HT
 
 | Port | Exposed | Serves |
 |---|---|---|
-| public, `8080` | through Tailscale Funnel | Mini App (Telegram `initData` check, owner only), HSE App X login callback, personal iCal feeds, the MCP connector `/mcp` with its OAuth endpoints |
+| public, `8080` | through Tailscale Funnel | the web app `/web/` (a code from the bot or a passkey, owner only), Mini App (Telegram `initData` check, owner only), HSE App X login callback, personal iCal feeds, the MCP connector `/mcp` with its OAuth endpoints |
 | internal, `8081` | Docker network only | `/api/deadlines`, `/api/news`, `/api/grades`, `/api/status` (Bearer token), feeds for Tablo |
 
 The full design is in [docs/architecture.md](docs/architecture.md); the reasoning behind each choice is in
@@ -130,6 +130,7 @@ infomaster/
 ├── collectors/   # Telegram twin, mail, RUZ, HSE App X, files, grade sheets
 ├── processing/   # batches, deadlines and merge, events, schedule, sheets, grades, images
 ├── outputs/      # forum bot and its topics, Mini App, iCal feeds, internal API
+├── web/          # the home-screen web app: login by a code from the bot or a passkey, its static client
 ├── connector/    # MCP connector for claude.ai: OAuth, the /mcp endpoint, tools, journal with undo
 ├── library/      # raw course material and the knowledge base, signed file links, feeding from chats and the bot
 ├── llm/          # client with structured output, daily budget, journal

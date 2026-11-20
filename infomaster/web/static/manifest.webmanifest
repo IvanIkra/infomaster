@@ -1,0 +1,16 @@
+{
+  "name": "infomaster",
+  "short_name": "infomaster",
+  "description": "Deadlines, classes and study materials in one place",
+  "id": "/web/",
+  "start_url": "/web/",
+  "scope": "/web/",
+  "display": "standalone",
+  "background_color": "#FBF7F0",
+  "theme_color": "#C2410C",
+  "icons": [
+    {"src": "/web/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/web/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/web/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

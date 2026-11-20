@@ -58,6 +58,7 @@ settings ◄──────────────────────�
 | Calendar | icalendar | reading RUZ and publishing our own feed |
 | Text width | Pillow + the same Inter file as Tablo | line budgets (§2.1) |
 | Mini App | static HTML/JS + `telegram-web-app.js`, no build | few screens |
+| Web app | Preact + htm as vendored ES modules, no build; `webauthn` for passkeys | a home-screen app instead of the forum (§8.6, D61); no Node in the image |
 | External access | Tailscale Funnel | a permanent HTTPS address without a domain (D16) |
 | Deployment | Docker Compose on Tablo's server | like Tablo (D26) |
 
@@ -551,6 +552,7 @@ iCloud subscriptions fetch the feed from their own servers and cannot reach the 
 |---|---|---|
 | public (Funnel) | `/app/*` (the Mini App), `/hseapp/callback`, `/calendar/<CALENDAR_PUBLIC_SECRET>/main.ics` and `optional.ics` | Mini App: an `initData` check, only the owner's Telegram id is let in. Callback: the PKCE `state`. Feeds: the secret in the path; no `tablo.ics` here |
 | public (Funnel) | `/mcp`, `/.well-known/oauth-protected-resource[/mcp]`, `/.well-known/oauth-authorization-server`, `/oauth/*` (the MCP connector, §8.5) | `/mcp`: an OAuth access token; the metadata is public; `/oauth/authorize` lets in only with a one-time code the bot sends to the owner |
+| public (Funnel) | `/web/*` (the web app, §8.6) | `/web/api/*`: a session cookie, got with a code the bot sends to the owner or with a passkey; a change must come from the app's own origin. The page, its files and the service worker are public |
 | internal | `/api/*`, `/calendar/<CALENDAR_SECRET>/main.ics`, `optional.ics`, `tablo.ics` | a Bearer token; the feeds use a secret in the path because calendars cannot send headers |
 
 The secrets differ: a leaked link of one's own calendar is replaced without touching Tablo. Without
@@ -774,6 +776,38 @@ carries chat text or what a model made of it has an `untrusted` field saying tha
 asks for it. The other guards are the client's approval of destructive tools, the journal with undo, and that only
 the owner can connect.
 
+### 8.6 Web app
+
+Stage 16 of §11.1 (D61). A home-screen app (PWA) at `https://infomaster.<tailnet>.ts.net/web/` that takes the place
+of the forum and the Mini App. It lives in `infomaster/web/`: the server side next to the connector on the public
+port, the client in `web/static/`.
+
+**Client.** Plain ES modules and an import map, no build: Preact and its hooks and htm in `static/vendor/` (with
+their licences), Lora and Nunito Sans in `static/fonts/` (Latin and Cyrillic subsets, SIL OFL), the look «Paper» in
+`app.css` with light and dark colours after the system, both languages in `i18n.js` (D41). The service worker
+(`/web/sw.js`, scope `/web/`) fetches the app's own files from the network first and falls back to its cache, so an
+update shows on the next start and the app opens without a connection; `/web/api` is never cached. The manifest
+makes it installable; on iOS, notifications need the app on the Home Screen, and the app says so.
+
+**Login** (`web/auth.py`). Only the owner:
+
+- the first login on a device is a six-digit code the bot sends to the owner's private chat on request (a new code
+  at most every 30 seconds and 10 an hour; 5 wrong tries drop it; it lives 10 minutes);
+- a logged-in device may add a passkey: discoverable, with user verification, bound to the host of `PUBLIC_URL`.
+  Later logins use it with no name and no code. If the Funnel name changes, passkeys stop working and the code still
+  does;
+- a session is a random token in a cookie on `/web` (HttpOnly, Secure, SameSite=Strict, 90 days); the database keeps
+  its SHA-256 (`web_sessions`), and a session unused for 90 days is gone. **Machine → Login and devices** lists the
+  sessions and passkeys, ends a session elsewhere, removes a passkey, adds one and logs out;
+- a request under `/web/api` that changes something must carry the app's own `Origin`; codes and WebAuthn
+  challenges live in memory, so a restart only asks for a new code.
+
+**Screens**: the feed (classes and deadlines of the coming days on one
+axis, the class now or next, the «Check» queue), the week, an item's card (the source quoted, its history, «Done»,
+«Not mine», «Edit», «It is a duplicate»), a course's lens with its shelves (knowledge base, sheets, grades, raw
+material, sources), «Machine» (status, sources, the journal of changes with undo, settings) and «+» (material to the
+class in progress, one line parsed by Haiku). They arrive in the steps of stage 16 (§11.1).
+
 ## 9. Storage (SQLite)
 
 Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Tablo (§9).
@@ -798,6 +832,7 @@ Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Ta
 | `llm_runs` | the LLM journal |
 | `connector_clients`, `connector_grants`, `connector_tokens` | the MCP connector's OAuth (§8.5): registered clients, the connections the owner allowed with their refresh token, access tokens; tokens as SHA-256 |
 | `connector_changes` | the journal of changes made through the connector, with their undo steps (§8.5) |
+| `web_sessions`, `web_passkeys` | the web app's login (§8.6): a session per device with the SHA-256 of its token, the owner's passkeys (COSE public key, sign count) |
 
 ## 10. Settings and secrets
 
@@ -886,8 +921,23 @@ own; Claude is an optional door, not the brain (D53).
     writes the LaTeX, builds the PDF and uploads both. The server neither transcribes nor runs TeX.
 15. **New sources** (done, D54, D60). Sheets and homework from course wiki pages; grade sheets shared as Dropbox
     links.
-16. **An app instead of the forum.** The Mini App becomes a home-screen web app with its own login and Web Push
-    for deadlines, reminders and failures. Then the forum is switched off; the bot stays to receive forwarded files.
+16. **An app instead of the forum** (in progress, §8.6, D61). A home-screen web app, built anew, with its own login and
+    Web Push for deadlines, reminders and failures. Then the forum is switched off; the bot stays to receive
+    forwarded files and to send login codes. In steps:
+    - 16.1 the frame and the login (done): the page, manifest, icons, fonts and service worker; a code from the bot,
+      then a passkey; sessions per device;
+    - 16.2 reading: one feed of classes and deadlines with the class now, the week, an item's card with its source
+      and history, a course's lens with its shelves;
+    - 16.3 actions: «Done» and «Not mine» as two reasons of a hidden deadline (Tablo and HA still see both as
+      hidden), editing, merging duplicates by hand, confirming an assumed date; the «Check» queue; every change
+      journaled with an undo;
+    - 16.4 Web Push: subscriptions per device and one notifier for what the forum announces now (new and moved
+      deadlines, reminders, failures, the LLM budget, a login the twin or HSE App X needs);
+    - 16.5 «+»: uploads to the class in progress, one line parsed by Haiku within the budget and confirmed, Share
+      Target on Android;
+    - 16.6 «Machine»: the sources and their freshness, the journal with undo, the Mini App's settings moved over;
+    - 16.7 the switch: the links of calendars and cards lead to the app; the forum's topics and the Mini App are
+      switched off.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

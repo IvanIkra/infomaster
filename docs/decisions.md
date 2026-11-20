@@ -293,6 +293,23 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   (D52). So the group is configured nowhere new, and the sheets, deadlines, library and forum need no change. Pages
   are listed in the `wiki_pages` setting (Mini App, «Batches and news»; the connector).
 
+- **D61. A home-screen web app takes the place of the forum and the Mini App, 20.11.2026.** This adds §8.6, changes
+  §3 and §8.1 and is stage 16 of §11.1. The app is built anew, not from the Mini App, around one feed: classes and
+  deadlines on one time axis, a course as a lens on that feed rather than a tab, a «Check» queue that holds only what
+  the service is unsure of (an assumed date, a likely duplicate, an item without a course), one card per item with
+  its source and history, a «Machine» screen behind the status dot for the sources, the journal of changes and the
+  settings, and one «+» for everything added by hand. Its look is called «Paper»: Lora for dates and headings, Nunito
+  Sans for text, terracotta for actions, light or dark after the system. infomaster serves it on the public port under
+  `/web/` as plain ES modules: Preact and htm are vendored and the fonts are kept in the repository, so the image and
+  CI need no Node, and the app makes no third-party requests and opens offline. Only the owner logs in. The first
+  login on a device is a code the bot sends to the owner's chat, as for the connector (D57); the device may then add
+  a passkey (WebAuthn, the `webauthn` package) for its later logins. A session belongs to one device, can be ended
+  from another, and its token sits hashed in the database and in an HttpOnly, SameSite=Strict cookie. Notifications
+  move to Web Push for new and moved deadlines, reminders and failures. iOS shows them only for an app added to the
+  Home Screen, and without action buttons. Deadlines keep a date without a time, so the app shows times for classes
+  only. The forum and the Mini App work until the last step of the stage, then the forum is switched off; the bot
+  stays for forwarded files and login codes.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

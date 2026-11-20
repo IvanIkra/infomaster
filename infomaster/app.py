@@ -50,6 +50,7 @@ from .processing.sheets import Sheets
 from .processing.subjects import Subjects
 from .settings import ChatSettings, Settings
 from .store import Store
+from .web import WebApp
 
 log = logging.getLogger(__name__)
 
@@ -132,6 +133,8 @@ class Service:
         # The MCP connector for claude.ai (§8.5, D57): its sign-in code comes from the bot to the owner's chat.
         self.connector = Connector(env, self.store, self.news, send_code=self._to_owner,
                                    lang=lambda: self.settings.get("miniapp_language"))
+        # The web app (§8.6, D61): its first login on a device is a code from the bot too.
+        self.web = WebApp(env, self.store, send_code=self._to_owner, lang=lambda: self.settings.get("miniapp_language"))
         self.inbox.wake = self.batches.wake
         self.batches.publish = self._publish
         self.batches.notify = self._to_system
@@ -254,6 +257,7 @@ class Service:
                                self.env.internal_port)):
                 if port == self.env.public_port:
                     self.connector.attach(app)  # the MCP connector shares the Mini App's port (§8.5)
+                    self.web.attach(app)  # so does the web app (§8.6)
                 runner = web.AppRunner(app, access_log=None)
                 await runner.setup()
                 await web.TCPSite(runner, "0.0.0.0", port).start()
