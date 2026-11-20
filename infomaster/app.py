@@ -51,6 +51,7 @@ from .processing.subjects import Subjects
 from .settings import ChatSettings, Settings
 from .store import Store
 from .web import WebApp
+from .web.views import Data
 
 log = logging.getLogger(__name__)
 
@@ -134,7 +135,10 @@ class Service:
         self.connector = Connector(env, self.store, self.news, send_code=self._to_owner,
                                    lang=lambda: self.settings.get("miniapp_language"))
         # The web app (§8.6, D61): its first login on a device is a code from the bot too.
-        self.web = WebApp(env, self.store, send_code=self._to_owner, lang=lambda: self.settings.get("miniapp_language"))
+        language = lambda: self.settings.get("miniapp_language")  # noqa: E731
+        self.web = WebApp(env, self.store, send_code=self._to_owner, lang=language,
+                          data=Data(self.schedule, self.merged, self.library, self.grades, self.library_links,
+                                    language))
         self.inbox.wake = self.batches.wake
         self.batches.publish = self._publish
         self.batches.notify = self._to_system

@@ -42,13 +42,84 @@ const TEXTS = {
   cancelled: ["The passkey request was cancelled.", "Запрос ключа отменён."],
   offline: ["No connection to infomaster.", "Нет связи с infomaster."],
   search: ["Search", "Поиск"],
+  all: ["All", "Всё"],
+  today: ["Today", "Сегодня"],
+  tomorrow: ["Tomorrow", "Завтра"],
+  thisWeek: ["This week", "Эта неделя"],
+  overdue: ["Overdue", "Просрочено"],
+  goingOn: ["Now", "Идёт сейчас"],
+  inMinutes: ["In {n} min", "Через {n} мин"],
+  laterToday: ["Later today", "Сегодня ещё"],
+  until: ["until", "до"],
+  handIn: ["hand in", "сдать"],
+  atClass: ["at the class", "к паре"],
+  due: ["due", "срок"],
+  assumed: ["date guessed", "дата угадана"],
+  cancelledClass: ["cancelled", "отменена"],
+  online: ["online", "онлайн"],
+  list: ["List", "Список"],
+  weekView: ["Week", "Неделя"],
+  deadlinesShort: ["deadlines", "сроки"],
+  nothingAhead: ["Nothing ahead.", "Впереди ничего."],
+  deadline: ["Deadline", "Срок"],
+  from: ["From", "Откуда"],
+  history: ["History", "История"],
+  openMessage: ["Open the message", "Открыть сообщение"],
+  messageGone: ["The message is no longer kept (they are kept 14 days).",
+                "Сообщение уже не хранится (они хранятся 14 дней)."],
+  found: ["found", "найден"],
+  movedFrom: ["moved", "перенесён"],
+  fromHseApp: ["from HSE App X", "из HSE App X"],
+  ownAdded: ["added by you", "добавлен вами"],
+  inDays: ["in {n} d", "через {n} д"],
+  inHours: ["in {n} h", "через {n} ч"],
+  todayDue: ["today", "сегодня"],
+  daysAgo: ["{n} d ago", "{n} д назад"],
+  handedHere: ["Handed in here", "Сдаётся на этой паре"],
+  materialsN: ["material: {n}", "материалов: {n}"],
+  changed: ["Changed", "Изменение"],
+  course: ["course lens", "линза курса"],
+  byCourse: ["Average", "Среднее"],
+  worksN: ["{n} works", "работ: {n}"],
+  newN: ["+{n} new", "+{n} новых"],
+  noGrades: ["no grades yet", "оценок пока нет"],
+  nextClass: ["Next class", "Следующая пара"],
+  noNext: ["none in two months", "в ближайшие два месяца нет"],
+  shelves: ["Shelves", "Полки"],
+  knowledge: ["Knowledge base", "База знаний"],
+  docsN: ["{n} documents", "документов: {n}"],
+  sheets: ["Sheets", "Листочки"],
+  sheetsN: ["{n} sheets", "листочков: {n}"],
+  grades: ["Grades", "Оценки"],
+  raw: ["Raw material", "Сырьё"],
+  rawN: ["{n} items", "записей: {n}"],
+  soon: ["opens in a later step", "откроется на следующих шагах"],
+  ahead: ["Ahead in the course", "Дальше по курсу"],
+  book: ["book", "книга"],
+  cheatsheet: ["cheat sheet", "шпаргалка"],
+  close: ["Close", "Закрыть"],
+  prevWeek: ["Previous week", "Прошлая неделя"],
+  nextWeek: ["Next week", "Следующая неделя"],
 };
 
 let lang = "en";
 
 export function setLang(value) { lang = value === "ru" ? "ru" : "en"; document.documentElement.lang = lang; }
 export function getLang() { return lang; }
-export function t(key) { const pair = TEXTS[key]; return pair ? pair[lang === "ru" ? 1 : 0] : key; }
+export function t(key, values) {
+  const pair = TEXTS[key];
+  let text = pair ? pair[lang === "ru" ? 1 : 0] : key;
+  for (const [name, value] of Object.entries(values || {})) text = text.replace(`{${name}}`, value);
+  return text;
+}
+
+const TYPES = { "Lecture": "лекция", "Seminar": "семинар", "Lab": "лабораторная", "Class": "занятие",
+                "Interim assessment": "контрольная", "Exam": "экзамен", "Consultation": "консультация",
+                "Event": "событие", "Talk": "доклад", "Deadline": "срок" };
+export const kind = (type) => lang === "ru" ? (TYPES[type] || type.toLowerCase()) : type;
+
+const locale = () => (lang === "ru" ? "ru-RU" : "en-GB");
+export const day = (iso, options) => new Date(iso.slice(0, 10) + "T12:00:00").toLocaleDateString(locale(), options);
 
 export function when(seconds) {
   // '20 Nov, 12:45' or '20 нояб., 12:45' for a unix time, in the device's zone
@@ -59,7 +130,6 @@ export function when(seconds) {
 
 export function today() {
   const date = new Date();
-  const locale = lang === "ru" ? "ru-RU" : "en-GB";
-  return { weekday: date.toLocaleDateString(locale, { weekday: "long" }),
-           day: date.toLocaleDateString(locale, { day: "numeric", month: "long" }) };
+  return { weekday: date.toLocaleDateString(locale(), { weekday: "long" }),
+           day: date.toLocaleDateString(locale(), { day: "numeric", month: "long" }) };
 }

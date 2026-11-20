@@ -4,12 +4,14 @@ the Mini App.
 On the public port, next to the Mini App and the connector:
 - /web/: the app's page; /web/static/*: its scripts, styles, fonts and icons; /web/sw.js: the service worker, whose
   scope is /web/; /web/manifest.webmanifest;
-- /web/api/*: JSON for the app, behind the session cookie (auth.py). A request that changes something must come
-  from the app's own origin: the cookie is SameSite=Strict already, and the Origin header is checked too.
+- /web/api/*: JSON for the app, behind the session cookie (auth.py); what the screens read comes from views.py.
+  A request that changes something must come from the app's own origin: the cookie is SameSite=Strict already,
+  and the Origin header is checked too.
 
 The client is plain ES modules, no build step: Preact and htm are vendored in static/vendor, the fonts in static/fonts.
 """
 
+import datetime as dt
 import json
 import time
 from collections.abc import Awaitable, Callable
@@ -21,6 +23,7 @@ from aiohttp import web
 from ..config import Env
 from ..store import Store
 from .auth import COOKIE, COOKIE_PATH, SESSION_IDLE, Auth, AuthError, device_name
+from .views import Data
 
 STATIC = Path(__file__).parent / "static"
 NO_CACHE = {"Cache-Control": "no-cache"}
@@ -29,10 +32,12 @@ CHANGES = {"POST", "PUT", "PATCH", "DELETE"}
 
 class WebApp:
     def __init__(self, env: Env, store: Store, send_code: Callable[[str], Awaitable[None]] | None = None,
-                 lang: Callable[[], str] = lambda: "en", now: Callable[[], float] = time.time):
+                 lang: Callable[[], str] = lambda: "en", now: Callable[[], float] = time.time,
+                 data: Data | None = None):
         parts = urlsplit(env.public_url)
         self.origin = f"{parts.scheme}://{parts.netloc}"
         self.lang = lang
+        self.data = data  # what the screens read; set by the service, left out by the login's tests
         self.auth = Auth(store, parts.hostname or "", self.origin, send_code, lang, now)
 
     def attach(self, app: web.Application) -> web.Application:
@@ -52,7 +57,12 @@ class WebApp:
                ("DELETE", "/sessions/{session_id}", end_session),
                ("POST", "/passkeys/options", passkey_options),
                ("POST", "/passkeys", add_passkey),
-               ("DELETE", "/passkeys/{passkey_id}", remove_passkey)]
+               ("DELETE", "/passkeys/{passkey_id}", remove_passkey),
+               ("GET", "/feed", feed),
+               ("GET", "/week", week),
+               ("GET", "/deadline", deadline),
+               ("GET", "/class", class_),
+               ("GET", "/course", course)]
         for method, path, handler in api:
             app.router.add_route(method, "/web/api" + path, guarded(handler))
         return app
@@ -200,3 +210,46 @@ async def remove_passkey(request: web.Request) -> web.Response:
     if not request.app[WEB_KEY].auth.remove_passkey(_id(request, "passkey_id")):
         return error(404, "no such passkey")
     return web.json_response(_devices(request))
+
+
+# --- the screens (views.py) --------------------------------------------------------------------------------
+
+def _data(request: web.Request) -> Data:
+    data = request.app[WEB_KEY].data
+    if data is None:
+        raise web.HTTPServiceUnavailable(text="the screens are not wired")
+    return data
+
+
+def _course(request: web.Request) -> str | None:
+    return " ".join(request.query.get("course", "").split()) or None
+
+
+async def feed(request: web.Request) -> web.Response:
+    """?course=<key>: the feed, all courses or one course's lens."""
+    return web.json_response(_data(request).feed(_course(request)))
+
+
+async def week(request: web.Request) -> web.Response:
+    """?start=<a day of the week, YYYY-MM-DD>&course=<key>: the week of that day, this week without it."""
+    data = _data(request)
+    try:
+        day = dt.date.fromisoformat(request.query["start"]) if "start" in request.query else data.now().date()
+    except ValueError:
+        return error(400, "start: a date like 2026-11-16")
+    return web.json_response(data.week(day, _course(request)))
+
+
+async def deadline(request: web.Request) -> web.Response:
+    card = _data(request).deadline_card(request.query.get("uid", ""))
+    return web.json_response(card) if card else error(404, "no such deadline")
+
+
+async def class_(request: web.Request) -> web.Response:
+    card = _data(request).class_card(request.query.get("uid", ""))
+    return web.json_response(card) if card else error(404, "no such class")
+
+
+async def course(request: web.Request) -> web.Response:
+    found = _data(request).course(" ".join(request.query.get("key", "").split()))
+    return web.json_response(found) if found else error(404, "no such course")

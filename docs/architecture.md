@@ -802,11 +802,27 @@ makes it installable; on iOS, notifications need the app on the Home Screen, and
 - a request under `/web/api` that changes something must carry the app's own `Origin`; codes and WebAuthn
   challenges live in memory, so a restart only asks for a new code.
 
-**Screens**: the feed (classes and deadlines of the coming days on one
-axis, the class now or next, the «Check» queue), the week, an item's card (the source quoted, its history, «Done»,
-«Not mine», «Edit», «It is a duplicate»), a course's lens with its shelves (knowledge base, sheets, grades, raw
-material, sources), «Machine» (status, sources, the journal of changes with undo, settings) and «+» (material to the
-class in progress, one line parsed by Haiku). They arrive in the steps of stage 16 (§11.1).
+**Reading** (`web/views.py`, step 16.2). A course is known by its key, the dictionary's abbreviation of its name
+(§6.2), or the name until the dictionary has one: classes, events and deadlines name their course each in their own
+way, and the key is what they share, so a course's lens is one filter over all of them.
+
+- `GET /web/api/feed?course=`: the class going on or next today, the overdue deadlines, then every day with a class
+  in the next 14 days or a deadline however far, and the lenses (courses with a class in the last month or the next
+  two, the soonest first). Deadlines have a date and no time: a study deadline due on a day its course has a class
+  is shown at that class (a seminar first), since it is handed in there; the others close their day;
+- `GET /web/api/week?start=&course=`: the seven days of a week, past ones too;
+- `GET /web/api/deadline?uid=`: a deadline's card: its course, the class it is handed in at, the message it came
+  from while it is kept (D29) with its link, and its history (found, every move, from which chat or letter);
+- `GET /web/api/class?uid=`: a class's or an event's card: its course, the deadlines handed in at it, the message
+  that changed it, how much material the library has for it;
+- `GET /web/api/course?key=`: a course's lens: the next class, the grades of its gradebooks (a plain average of the
+  works on the 0–10 scale, not a formal grade), its knowledge base documents with links, the counts of its sheets and
+  raw material.
+
+**Screens**: the feed with the lenses, the course's lens (grades, next class, shelves), the week as a grid with the
+deadlines of each day above it, and an item's card over them. Still to come in the steps of stage 16 (§11.1): the
+«Check» queue and the card's actions («Done», «Not mine», «Edit», «It is a duplicate»), «Machine» with the sources,
+the journal and the settings, «+», and the shelves of sheets and raw material.
 
 ## 9. Storage (SQLite)
 
@@ -926,8 +942,8 @@ own; Claude is an optional door, not the brain (D53).
     forwarded files and to send login codes. In steps:
     - 16.1 the frame and the login (done): the page, manifest, icons, fonts and service worker; a code from the bot,
       then a passkey; sessions per device;
-    - 16.2 reading: one feed of classes and deadlines with the class now, the week, an item's card with its source
-      and history, a course's lens with its shelves;
+    - 16.2 reading (done): one feed of classes and deadlines with the class now, the week, an item's card with its
+      source and history, a course's lens with its grades, next class and knowledge base;
     - 16.3 actions: «Done» and «Not mine» as two reasons of a hidden deadline (Tablo and HA still see both as
       hidden), editing, merging duplicates by hand, confirming an assumed date; the «Check» queue; every change
       journaled with an undo;

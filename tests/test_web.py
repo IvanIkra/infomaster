@@ -5,16 +5,19 @@ import hashlib
 import json
 import os
 import re
+from pathlib import Path
 
 import cbor2
 import pytest
 from aiohttp import web
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
-from test_http import env
+from test_http import add_row, env
 
+from infomaster.collectors.ruz import parse
 from infomaster.web import WebApp
 from infomaster.web.auth import ATTEMPTS, CODE_TTL, CODES_PER_HOUR, RESEND_AFTER, SESSION_IDLE, USER_ID, device_name
+from infomaster.web.views import Data
 
 ORIGIN = "https://infomaster.example.ts.net"
 RP_ID = "infomaster.example.ts.net"
@@ -329,3 +332,112 @@ def test_device_name():
     assert device_name("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0") == \
         "Windows · Firefox"
     assert device_name("") == "?"
+
+
+# --- the screens (stage 16.2) ----------------------------------------------------------------------------------
+
+FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
+
+
+@pytest.fixture
+def screens(store, seconds, sent, schedule, merged, now):
+    """The timetable of the fixture (Tuesday 20.10.2026, noon), the dictionary for two courses, and the web app
+    reading them."""
+    schedule.ruz._sync(parse(FEED))
+    schedule.subjects.set_manual("Discrete Mathematics", "Discrete Mathematics", "DM")
+    schedule.subjects.set_manual("Algebra", "Algebra", "Alg")
+    schedule.inbox.put_chat(-1001, "DM seminar chat", "supergroup", None, 0)
+
+    async def send_code(text):
+        sent.append(text)
+
+    return WebApp(env(), store, send_code=send_code, lang=lambda: "en", now=seconds,
+                  data=Data(schedule, merged, lang=lambda: "en"))
+
+
+@pytest.fixture
+async def reader(aiohttp_client, screens, sent, seconds):
+    client = await aiohttp_client(screens.attach(web.Application()))
+    client.token = await log_in(client, sent, seconds)
+    return client
+
+
+async def read(client, path):
+    response = await call(client, "GET", path, token=client.token)
+    assert response.status == 200, await response.text()
+    return await response.json()
+
+
+async def test_screens_need_a_session(aiohttp_client, screens):
+    client = await aiohttp_client(screens.attach(web.Application()))
+    for path in ("/feed", "/week", "/deadline?uid=x", "/class?uid=x", "/course?key=DM"):
+        assert (await call(client, "GET", path)).status == 401
+
+
+async def test_feed(reader, merged):
+    add_row(merged, "Sheet 5", "2026-10-22", course="Discrete Mathematics")  # due at Thursday's seminar
+    add_row(merged, "Essay", "2026-10-25", course=None)
+    add_row(merged, "Old quiz", "2026-10-19", course="Algebra")
+    feed = await read(reader, "/feed")
+    assert feed["today"] == "2026-10-20" and feed["now"] == "2026-10-20T12:00"
+    assert feed["current"]["title"] == "Algebra" and feed["current"]["start"] == "2026-10-20T13:00:00"
+    assert [d["title"] for d in feed["overdue"]] == ["Old quiz"]
+    assert feed["courses"][0] == {"key": "Alg", "title": "Algebra"}  # the soonest class first
+    days = {day["date"]: [(i["kind"], i["title"]) for i in day["items"]] for day in feed["days"]}
+    assert days["2026-10-22"] == [("class", "Discrete Mathematics"), ("deadline", "Sheet 5")]
+    assert days["2026-10-25"] == [("deadline", "Essay")]
+    thursday = next(day for day in feed["days"] if day["date"] == "2026-10-22")["items"]
+    assert thursday[1]["at_class"]["uid"] == thursday[0]["uid"] and thursday[1]["course"] == "DM"
+    assert thursday[0]["due"] == [{"uid": thursday[1]["uid"], "title": "Sheet 5"}]
+    assert thursday[0]["online"] and thursday[1]["from"] == "DM seminar chat"
+
+    lens = await read(reader, "/feed?course=DM")
+    titles = [i["title"] for day in lens["days"] for i in day["items"]]
+    assert titles == ["Discrete Mathematics", "Sheet 5"] and lens["overdue"] == [] and lens["current"] is None
+
+
+async def test_week(reader, merged):
+    add_row(merged, "Sheet 5", "2026-10-22", course="Discrete Mathematics")
+    week = await read(reader, "/week?start=2026-10-21")
+    assert week["start"] == "2026-10-19" and len(week["days"]) == 7
+    monday = week["days"][0]["items"]
+    assert monday[0]["title"] == "Математический анализ" and monday[0]["past"]  # no dictionary entry yet
+    assert [i["kind"] for i in week["days"][3]["items"]] == ["class", "deadline"]
+    assert (await call(reader, "GET", "/week?start=soon", token=reader.token)).status == 400
+
+
+async def test_deadline_card(reader, merged, schedule, now):
+    schedule.inbox.add(-1001, 1, {"sender_id": 5, "sender_name": "Starosta", "at": now(),
+                                  "text": "Sheet 5 is due on Sunday"})
+    first = add_row(merged, "Sheet 5", "2026-10-25", course="Discrete Mathematics")
+    moved = add_row(merged, "Sheet 5", "2026-10-22", course="Discrete Mathematics")
+    with merged.db:
+        merged.deadlines.move(first, moved)
+    feed = await read(reader, "/feed")
+    item = next(i for day in feed["days"] for i in day["items"] if i["kind"] == "deadline")
+    card = await read(reader, "/deadline?uid=" + item["uid"])
+    assert card["title"] == "Sheet 5" and card["at_class"]["title"] == "Discrete Mathematics"
+    assert card["quote"]["text"] == "Sheet 5 is due on Sunday" and card["quote"]["sender"] == "Starosta"
+    assert [(h["what"], h.get("was"), h["due"]) for h in card["history"]] == \
+        [("found", None, "2026-10-25"), ("moved", "2026-10-25", "2026-10-22")]
+    assert (await call(reader, "GET", "/deadline?uid=nothing", token=reader.token)).status == 404
+
+
+async def test_class_card(reader, merged):
+    add_row(merged, "Sheet 5", "2026-10-22", course="Discrete Mathematics")
+    feed = await read(reader, "/feed")
+    seminar = next(i for day in feed["days"] for i in day["items"] if i["title"] == "Discrete Mathematics")
+    card = await read(reader, "/class?uid=" + seminar["uid"])
+    assert card["type"] == "Seminar" and card["course"] == "DM" and card["course_title"] == "Discrete Mathematics"
+    assert [d["title"] for d in card["due"]] == ["Sheet 5"] and card["materials"] == 0 and card["quote"] is None
+    assert (await call(reader, "GET", "/class?uid=nothing", token=reader.token)).status == 404
+
+
+async def test_course(reader, merged):
+    add_row(merged, "Sheet 5", "2026-10-22", course="Discrete Mathematics")
+    lens = await read(reader, "/course?key=DM")
+    assert lens["title"] == "Discrete Mathematics" and lens["next"]["start"] == "2026-10-22T16:40:00"
+    assert lens["next"]["due"][0]["title"] == "Sheet 5"
+    assert lens["grades"] == {"count": 0, "new": 0, "average": None, "works": []}
+    assert lens["documents"] == [] and lens["sheets"] == {"count": 0}
+    assert (await call(reader, "GET", "/course?key=Nope", token=reader.token)).status == 404

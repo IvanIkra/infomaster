@@ -1,47 +1,17 @@
-// The web app (§8.6, D61). Stage 16.1: the login (a code from the bot, then a passkey) and the devices.
-import { h, render } from "preact";
+// The web app (§8.6, D61): the login (a code from the bot, then a passkey), the devices, and the frame that routes
+// to the screens (screens.js).
+import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import htm from "htm";
-import { getLang, setLang, t, today, when } from "./i18n.js";
+import { ApiError, ICONS, api, go, html, icon, route } from "./common.js";
+import { getLang, setLang, t, when } from "./i18n.js";
 import * as passkey from "./passkey.js";
+import { Card, Feed, Week } from "./screens.js";
 
-const html = htm.bind(h);
 const LANG_KEY = "infomaster.lang";  // the login screen's choice, before the server's setting is known
-
-class ApiError extends Error {
-  constructor(status, message) { super(message); this.status = status; }
-}
-
-async function api(method, path, data) {
-  let response;
-  try {
-    response = await fetch("/web/api" + path, {
-      method, credentials: "same-origin",
-      headers: data === undefined ? {} : { "Content-Type": "application/json" },
-      body: data === undefined ? undefined : JSON.stringify(data),
-    });
-  } catch {
-    throw new ApiError(0, t("offline"));
-  }
-  const answer = await response.json().catch(() => ({}));
-  if (!response.ok) throw new ApiError(response.status, answer.error || t("failed"));
-  return answer;
-}
-
-const icon = (path, size = 20) => html`<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"
-  style=${{ width: size + "px", height: size + "px" }} dangerouslySetInnerHTML=${{ __html: path }}></svg>`;
-const ICONS = {
-  back: '<path d="M15 18l-6-6 6-6"/>',
-  next: '<path d="M9 6l6 6-6 6"/>',
-  key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/>',
-  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
-};
 
 const passkeyError = (e) => (e.name === "NotAllowedError" || e.name === "AbortError") ? t("cancelled")
   : (e instanceof ApiError ? e.message : t("failed"));
 
-const isIos = () => /iPhone|iPad/.test(navigator.userAgent);
-const standalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 
 // --- the login ---------------------------------------------------------------------------------------------
 
@@ -133,21 +103,6 @@ function OfferPasskey({ onDone }) {
 
 // --- after the login ---------------------------------------------------------------------------------------
 
-function Home() {
-  const { weekday, day } = today();
-  return html`<main class="screen">
-    <header class="top">
-      <div><div class="kicker">${weekday}</div><h1>${day}</h1></div>
-      <button class="rb" aria-label=${t("search")} disabled>${icon(ICONS.search)}</button>
-      <a class="rb" href="#/machine" aria-label=${t("machineOk")}><span class="dot"></span></a>
-    </header>
-    <div class="stack">
-      ${isIos() && !standalone() && html`<div class="hint">${t("installIos")}</div>`}
-      <div class="now"><div class="lab">${t("feedSoon")}</div><p>${t("feedSoonText")}</p></div>
-    </div>
-  </main>`;
-}
-
 function Machine() {
   return html`<main class="screen">
     <header class="top">
@@ -211,12 +166,12 @@ function Devices({ onOut }) {
 
 // --- the frame ---------------------------------------------------------------------------------------------
 
-const route = () => location.hash.replace(/^#/, "") || "/";
+let base = { path: "/", params: new URLSearchParams() };  // the screen under a card
 
 function App() {
   const [me, setMe] = useState(undefined);   // undefined: asking; null: logged out
   const [offer, setOffer] = useState(false); // a passkey to offer after a login by code
-  const [path, setPath] = useState(route());
+  const [at, setAt] = useState(route());
 
   const load = async () => {
     try {
@@ -229,7 +184,7 @@ function App() {
   };
   useEffect(() => {
     load();
-    const changed = () => setPath(route());
+    const changed = () => setAt(route());
     window.addEventListener("hashchange", changed);
     return () => window.removeEventListener("hashchange", changed);
   }, []);
@@ -240,9 +195,17 @@ function App() {
   }
   if (offer) return html`<${OfferPasskey} onDone=${() => { setOffer(false); load(); }} />`;
   const out = () => { setMe(null); location.hash = ""; };
-  if (path === "/machine") return html`<${Machine} />`;
-  if (path === "/machine/login") return html`<${Devices} onOut=${out} />`;
-  return html`<${Home} />`;
+  if (at.path === "/machine") return html`<${Machine} />`;
+  if (at.path === "/machine/login") return html`<${Devices} onOut=${out} />`;
+
+  const card = at.path === "/d" || at.path === "/c";
+  if (!card) base = at;
+  const close = () => go(base.path, Object.fromEntries(base.params));
+  const screen = base.path === "/week"
+    ? html`<${Week} start=${base.params.get("start")} course=${base.params.get("course")} onOut=${out} />`
+    : html`<${Feed} course=${base.path === "/course" ? base.params.get("key") : null} onOut=${out} />`;
+  return html`${screen}${card && html`<${Card} key=${at.params.get("uid")} kind=${at.path.slice(1)}
+    uid=${at.params.get("uid")} onClose=${close} onOut=${out} />`}`;
 }
 
 let saved = null;
