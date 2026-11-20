@@ -19,6 +19,7 @@ classifiers = [
 dependencies = [
     "aiohttp>=3.10",
     "anthropic>=1.15",
+    "cryptography>=43",  # Web Push: its encryption and VAPID (RFC 8291, 8292); webauthn needs it too
     "icalendar>=6",
     "openpyxl>=3.1",  # teachers' grade sheets as xlsx
     "pypdf>=5",  # text of PDFs, pages for the model: MIT, unlike PyMuPDF

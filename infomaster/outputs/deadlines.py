@@ -95,6 +95,9 @@ class DeadlineTopic:
         self.merged, self.owner_id, self.now = merged, owner_id, now
         self._lock = asyncio.Lock()
         self._quiet: set[str] = set()
+        # A new deadline (was None) or a moved one (was: its old date): the web app's notifier (§8.6) is told of what
+        # this topic notifies of.
+        self.notify: Callable[[Deadline, str | None], None] | None = None
 
     @property
     def pinned(self) -> Board:
@@ -132,7 +135,9 @@ class DeadlineTopic:
             self._quiet -= quiet
             self.store.put_json(SHOWN_KEY, [entry(d) for d in shown])  # first: a failing post is not told twice
             if before is not None:
-                for text, d, ref in self.messages(before, shown, quiet):
+                for text, d, ref, was in self.messages(before, shown, quiet):
+                    if d is not None and self.notify is not None:
+                        self.notify(d, was)
                     try:
                         await self._post(text, d, ref)
                     except Exception:
@@ -167,8 +172,9 @@ class DeadlineTopic:
     # --- the messages --------------------------------------------------------------------------
 
     def messages(self, before: list[dict], shown: list[Deadline],
-                 quiet: set[str]) -> list[tuple[str, Deadline | None, str]]:
-        """(text, the deadline for the button or None, its ref) of every change worth a message, in list order."""
+                 quiet: set[str]) -> list[tuple[str, Deadline | None, str, str | None]]:
+        """(text, the deadline for the button or None, its ref, the date it moved from) of every change worth a
+        message, in list order."""
         refs = {d.ref for d in shown}
         was = {e["ref"]: e for e in before if e["ref"] in refs}  # a shown deadline -> as it was shown last
         lost = [e for e in before if e["ref"] not in refs]
@@ -190,13 +196,13 @@ class DeadlineTopic:
             if d.ref in quiet:
                 continue
             if d.ref in new:
-                result.append((self._new(d), d, d.ref))
+                result.append((self._new(d), d, d.ref, None))
             elif d.ref in was and was[d.ref]["due"] != d.due.isoformat():  # the same date: a rename, no news
-                result.append((self._moved(was[d.ref], d), d, d.ref))
+                result.append((self._moved(was[d.ref], d), d, d.ref, was[d.ref]["due"]))
         today = clock.local_day(self.now()).isoformat()
         for e in lost:
             if e["ref"] not in quiet and e["due"] >= today and (why := self._withdrawn(e)):
-                result.append((self._gone(e, why), None, e["ref"]))
+                result.append((self._gone(e, why), None, e["ref"], None))
         return result
 
     def _newer(self, ref: str) -> str | None:

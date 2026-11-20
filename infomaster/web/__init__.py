@@ -11,6 +11,9 @@ On the public port, next to the Mini App and the connector:
 The owner's changes (stage 16.3) are the connector's write tools (§8.5), called through `Connector.act`: the same
 checks, and every change goes into the connector's journal (`via` web) with the steps that undo it.
 
+Notifications (stage 16.4): a device turns them on with its browser's push subscription (push.py); the notifier
+(notify.py) sends what the forum announces with a sound.
+
 The client is plain ES modules, no build step: Preact and htm are vendored in static/vendor, the fonts in static/fonts.
 """
 
@@ -28,6 +31,8 @@ from ..connector.tools import Context, ToolError
 from ..store import Store
 from .auth import COOKIE, COOKIE_PATH, SESSION_IDLE, Auth, AuthError, device_name
 from .check import Check
+from .notify import Notifier
+from .push import Push, PushError
 from .views import Data
 
 STATIC = Path(__file__).parent / "static"
@@ -46,6 +51,8 @@ class WebApp:
         self.check = Check(data, store) if data is not None else None
         self.connector = None  # the service's Connector: the owner's changes are its tools, journaled with undo
         self.auth = Auth(store, parts.hostname or "", self.origin, send_code, lang, now)
+        self.push = Push(store, env.public_url, now)
+        self.notifier = Notifier(self.push, lang)
 
     def attach(self, app: web.Application) -> web.Application:
         app[WEB_KEY] = self
@@ -73,7 +80,11 @@ class WebApp:
                ("GET", "/check", check),
                ("POST", "/check/put-aside", put_aside),
                ("POST", "/deadlines/{action}", deadline_action),
-               ("POST", "/changes/{change_id}/undo", undo)]
+               ("POST", "/changes/{change_id}/undo", undo),
+               ("GET", "/push", push_state),
+               ("POST", "/push", subscribe),
+               ("DELETE", "/push", unsubscribe),
+               ("POST", "/push/test", push_test)]
         for method, path, handler in api:
             app.router.add_route(method, "/web/api" + path, guarded(handler))
         if self.connector is not None and self.check is not None:
@@ -166,7 +177,7 @@ async def manifest(request: web.Request) -> web.FileResponse:
 async def me(request: web.Request) -> web.Response:
     app, session = request.app[WEB_KEY], request[SESSION_KEY]
     return web.json_response({"lang": app.lang(), "session": session["id"], "device": session["device"],
-                              "passkeys": len(app.auth.passkeys())})
+                              "passkeys": len(app.auth.passkeys()), "push": app.push.subscribed(session["id"])})
 
 
 async def send_code(request: web.Request) -> web.Response:
@@ -365,3 +376,44 @@ async def undo(request: web.Request) -> web.Response:
         return error(400, str(e))
     return web.json_response({"change": {"id": change["id"], "summary": change["summary"],
                                          "undone_at": change["undone_at"]}})
+
+
+# --- notifications (stage 16.4) ------------------------------------------------------------------------------
+
+def _push_state(request: web.Request) -> dict:
+    push = request.app[WEB_KEY].push
+    return {"key": push.vapid.public, "on": push.subscribed(request[SESSION_KEY]["id"]),
+            "devices": len(push.devices())}
+
+
+async def push_state(request: web.Request) -> web.Response:
+    """The server's key for the browser's subscription, whether this device gets notifications, how many do."""
+    return web.json_response(_push_state(request))
+
+
+async def subscribe(request: web.Request) -> web.Response:
+    """{subscription}: the browser's PushSubscription; this device gets the notifications from now on."""
+    data = await body(request)
+    try:
+        request.app[WEB_KEY].push.subscribe(request[SESSION_KEY]["id"], data.get("subscription"))
+    except PushError as e:
+        return error(400, str(e))
+    return web.json_response(_push_state(request))
+
+
+async def unsubscribe(request: web.Request) -> web.Response:
+    request.app[WEB_KEY].push.unsubscribe(request[SESSION_KEY]["id"])
+    return web.json_response(_push_state(request))
+
+
+async def push_test(request: web.Request) -> web.Response:
+    """A message to this device only, to see that notifications come."""
+    app = request.app[WEB_KEY]
+    lang = app.lang()
+    sent = await app.push.send({"title": "infomaster",
+                                "body": "Notifications work on this device." if lang != "ru"
+                                else "Уведомления на этом устройстве работают.", "url": "/web/#/", "tag": "test"},
+                               session_id=request[SESSION_KEY]["id"])
+    if not sent:
+        return error(502, "The push service did not take it." if lang != "ru" else "Служба уведомлений его не приняла.")
+    return web.json_response({"sent": sent})

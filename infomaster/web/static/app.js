@@ -6,6 +6,7 @@ import { ApiError, CHANGED, ICONS, TOAST, api, go, html, icon, route } from "./c
 import { getLang, setLang, t, when } from "./i18n.js";
 import * as passkey from "./passkey.js";
 import { Card, CheckQueue, Feed, Week } from "./screens.js";
+import { Notifications } from "./notifications.js";
 
 const LANG_KEY = "infomaster.lang";  // the login screen's choice, before the server's setting is known
 
@@ -110,6 +111,7 @@ function Machine() {
       <div><h1>${t("machine")}</h1></div>
     </header>
     <a class="link" href="#/machine/login">${t("login")}<span>${icon(ICONS.next, 16)}</span></a>
+    <a class="link" href="#/machine/push">${t("notifications")}<span>${icon(ICONS.next, 16)}</span></a>
   </main>`;
 }
 
@@ -229,6 +231,7 @@ function App() {
   const out = () => { setMe(null); location.hash = ""; };
   if (at.path === "/machine") return html`<${Machine} />`;
   if (at.path === "/machine/login") return html`<${Devices} onOut=${out} />`;
+  if (at.path === "/machine/push") return html`<${Notifications} onOut=${out} onChange=${load} />`;
 
   const card = at.path === "/d" || at.path === "/c";
   const check = at.path === "/check";
@@ -236,7 +239,7 @@ function App() {
   const close = () => go(base.path, Object.fromEntries(base.params));
   const screen = base.path === "/week"
     ? html`<${Week} start=${base.params.get("start")} course=${base.params.get("course")} onOut=${out} />`
-    : html`<${Feed} course=${base.path === "/course" ? base.params.get("key") : null} onOut=${out} />`;
+    : html`<${Feed} course=${base.path === "/course" ? base.params.get("key") : null} push=${me.push} onOut=${out} />`;
   return html`${screen}${card && html`<${Card} key=${at.params.get("uid")} kind=${at.path.slice(1)}
     uid=${at.params.get("uid")} onClose=${close} onOut=${out} />`}
     ${check && html`<${CheckQueue} start=${at.params.get("id")} course=${at.params.get("course")} onClose=${close}
@@ -251,4 +254,8 @@ render(html`<${App} />`, document.getElementById("app"));
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/web/sw.js", { scope: "/web/" }).catch(() => {});
+  // A tap on a notification while the app is open: the service worker names the screen.
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data && typeof event.data.open === "string") location.hash = event.data.open || "#/";
+  });
 }

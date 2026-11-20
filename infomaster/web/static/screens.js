@@ -130,7 +130,25 @@ export function Bar({ view, course }) {
 
 // --- the feed and a course's lens ----------------------------------------------------------------------------
 
-export function Feed({ course, onOut }) {
+const PUSH_HINT = "infomaster.pushHint";  // «Not now» on the feed's offer of notifications, for this browser
+
+function PushHint() {
+  const [shown, setShown] = useState(() => {
+    try { return localStorage.getItem(PUSH_HINT) !== "no"; } catch { return true; }
+  });
+  if (!shown || !("PushManager" in window) || (isIos() && !standalone())) return null;
+  const later = () => {
+    try { localStorage.setItem(PUSH_HINT, "no"); } catch { /* private mode: it shows again next time */ }
+    setShown(false);
+  };
+  return html`<div class="box stack" style="gap:10px">
+    <span class="note">${t("pushHint")}</span>
+    <div class="acts"><a class="sec" href="#/machine/push">${t("turnOn")}</a>
+      <button class="sec" onClick=${later}>${t("notNow")}</button></div>
+  </div>`;
+}
+
+export function Feed({ course, push, onOut }) {
   const { data, error } = useLoad("/feed" + (course ? "?course=" + encodeURIComponent(course) : ""), onOut);
   const info = useLoad(course ? "/course?key=" + encodeURIComponent(course) : null, onOut).data;
   const pick = (key) => go(key ? "/course" : "/", { key });
@@ -149,6 +167,7 @@ export function Feed({ course, onOut }) {
     <div class="err" role="alert">${error}</div>
     ${data && html`<div class="feed">
       ${!course && isIos() && !standalone() && html`<div class="hint">${t("installIos")}</div>`}
+      ${!course && push === false && html`<${PushHint} />`}
       ${course && info && info.key && html`<${CourseHead} info=${info} todayIso=${data.today} />`}
       ${data.check.length > 0 && html`<${CheckBox} items=${data.check} course=${course} />`}
       ${!course && data.current && html`<${NowCard} item=${data.current} now=${data.now} />`}

@@ -58,7 +58,7 @@ settings ◄──────────────────────�
 | Calendar | icalendar | reading RUZ and publishing our own feed |
 | Text width | Pillow + the same Inter file as Tablo | line budgets (§2.1) |
 | Mini App | static HTML/JS + `telegram-web-app.js`, no build | few screens |
-| Web app | Preact + htm as vendored ES modules, no build; `webauthn` for passkeys | a home-screen app instead of the forum (§8.6, D61); no Node in the image |
+| Web app | Preact + htm as vendored ES modules, no build; `webauthn` for passkeys; Web Push on `cryptography` | a home-screen app instead of the forum (§8.6, D61, D63); no Node in the image |
 | External access | Tailscale Funnel | a permanent HTTPS address without a domain (D16) |
 | Deployment | Docker Compose on Tablo's server | like Tablo (D26) |
 
@@ -842,6 +842,26 @@ with the steps that undo it. After a change a note at the top of the screen offe
   a title or a date, so a changed deadline is asked about anew;
 - `POST /web/api/changes/{id}/undo`: the undo of a journaled change.
 
+**Notifications** (step 16.4, D63). Web Push to every device that turns it on; `web/push.py` sends, `web/notify.py`
+decides what:
+
+- the notifier is called where the forum is and pushes what the forum announces with a sound (D55): a new or moved
+  deadline (`DeadlineTopic.notify`; a withdrawn one goes quietly), the reminders of the evening before and the
+  morning (`DeadlineReminders.notify`), a failure of a source or a login it needs (an `Alert` of the System topic:
+  the twin, HSE App X, mail, RUZ, the wiki, a grade sheet) and the daily LLM limit spent (not the 80 % warning). A
+  message is {title, body, url, tag}: the url is the app's screen (a deadline's card, the feed, «Machine»), and a
+  deadline's messages share a tag, so a move replaces its news on the device;
+- a subscription belongs to a web session (`web_push`): ending the session, or 90 days without it, ends the
+  device's notifications. Its endpoint must be https on Apple's, Google's, Mozilla's or Microsoft's push service.
+  A subscription the service answers 404 or 410 to is deleted, and so is one that fails 10 times in a row;
+- the server's VAPID key pair (P-256) is made at the first start and kept in `kv["web.vapid"]`; its subject is
+  `PUBLIC_URL`. The messages are encrypted for each device (aes128gcm, RFC 8291, checked against the RFC's example)
+  and carry an ES256 token (RFC 8292). There is no push library: pywebpush would bring the synchronous `requests`;
+- `GET /web/api/push` (the public key, whether this device gets notifications, how many do), `POST` `{subscription}`,
+  `DELETE`, `POST /web/api/push/test` (to this device only). **Machine → Notifications** turns them on and off and
+  sends a test; the feed offers them once on a device without them (except an iPhone outside the Home Screen, where
+  the app says to add it first). The service worker shows a message and, on a tap, brings the app to its screen.
+
 **Screens**: the feed with the lenses and the «Check, please» box (the first two questions with their quick answer),
 the course's lens (grades, next class, shelves), the week as a grid with the deadlines of each day above it, an
 item's card over them with «Done», «Edit», «Not mine» (an own one: «Delete»), «It is a duplicate…» (the course's
@@ -876,6 +896,7 @@ Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Ta
 | `connector_changes` | the journal of changes made through the connector or the web app (`via`), with their undo steps (§8.5) |
 | `web_sessions`, `web_passkeys` | the web app's login (§8.6): a session per device with the SHA-256 of its token, the owner's passkeys (COSE public key, sign count) |
 | `web_checked` | the «Check» questions the owner put aside (§8.6) |
+| `web_push` | the devices that get notifications (§8.6): a web session, its push endpoint and keys, failures in a row |
 
 ## 10. Settings and secrets
 
@@ -974,8 +995,8 @@ own; Claude is an optional door, not the brain (D53).
     - 16.3 actions (done, D62): «Done» and «Not mine» as two reasons of a hidden deadline (Tablo and HA still see
       both as hidden), editing, merging duplicates by hand, confirming an assumed date, a course for a deadline
       without one; the «Check» queue; every change journaled with an undo;
-    - 16.4 Web Push: subscriptions per device and one notifier for what the forum announces now (new and moved
-      deadlines, reminders, failures, the LLM budget, a login the twin or HSE App X needs);
+    - 16.4 Web Push (done, D63): subscriptions per device and one notifier for what the forum announces now (new
+      and moved deadlines, reminders, failures, the LLM budget, a login the twin or HSE App X needs);
     - 16.5 «+»: uploads to the class in progress, one line parsed by Haiku within the budget and confirmed, Share
       Target on Android;
     - 16.6 «Machine»: the sources and their freshness, the journal with undo, the Mini App's settings moved over;

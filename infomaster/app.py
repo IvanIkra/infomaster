@@ -140,6 +140,10 @@ class Service:
                           data=Data(self.schedule, self.merged, self.library, self.grades, self.library_links,
                                     language))
         self.web.connector = self.connector  # the owner's changes are the connector's tools, journaled with undo
+        # Web Push (§8.6): what the forum announces with a sound goes to the app's devices too.
+        self.deadline_topic.notify = self.web.notifier.deadline
+        self.reminders.notify = self.web.notifier.reminder
+        self.budget.notify = self._budget_notice
         self.inbox.wake = self.batches.wake
         self.batches.publish = self._publish
         self.batches.notify = self._to_system
@@ -166,7 +170,12 @@ class Service:
         self.forum.on_button(REMINDER_BUTTON, self.reminders.on_button)
 
     def _to_system(self, text: Phrase) -> None:
+        self.web.notifier.system(text)
         self.forum.spawn(self.forum.post("system", text))
+
+    def _budget_notice(self, notice) -> None:
+        self.web.notifier.budget(notice)
+        self.forum.on_budget(notice)
 
     async def _to_owner(self, text: str) -> None:
         """A message of the bot to the owner's private chat: the connector's sign-in code. It fails until the owner
@@ -175,11 +184,13 @@ class Service:
 
     def _twin_notice(self, text: Phrase) -> None:
         """Twin.notify_login: the line gets the button that leads to the login on the Mini App's «Chats» screen."""
+        self.web.notifier.system(text, login="twin")
         button = self.forum.app_button(self.forum.tr("Log the twin in", "Войти в твинк"), "chats")
         self.forum.spawn(self.forum.post("system", text, buttons=[button] if button else None))
 
     def _hseapp_notice(self, text: Phrase, login: bool) -> None:
         """HseApp.notify: a line for the System topic; one that asks for a login gets the button to the Mini App."""
+        self.web.notifier.system(text, login="hseapp" if login else None)
         button = self.forum.app_button(self.forum.tr("Log in to HSE App X", "Войти в HSE App X"), "hseapp") \
             if login else None
         self.forum.spawn(self.forum.post("system", text, buttons=[button] if button else None))

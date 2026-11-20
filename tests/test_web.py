@@ -189,7 +189,8 @@ async def test_code_login(client, sent, seconds):
     cookie = response.cookies["im_session"]
     assert cookie["httponly"] and cookie["secure"] and cookie["samesite"] == "Strict" and cookie["path"] == "/web"
     me = await call(client, "GET", "/me", token=cookie.value)
-    assert await me.json() == {"lang": "ru", "session": 1, "device": "iPhone · Safari", "passkeys": 0}
+    assert await me.json() == {"lang": "ru", "session": 1, "device": "iPhone · Safari", "passkeys": 0,
+                                 "push": False}
     again = await call(client, "POST", "/login/code/check", {"code": code_of(sent)})
     assert again.status == 400 and (await again.json())["error"] == "Сначала запросите код."
 

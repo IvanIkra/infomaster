@@ -154,6 +154,26 @@ const TEXTS = {
   outside: ["Outside the courses", "Вне курсов"],
   allChecked: ["All checked.", "Всё проверено."],
   checkLater: ["The rest waits for later.", "Остальное — на потом."],
+  // notifications (stage 16.4)
+  notifications: ["Notifications", "Уведомления"],
+  pushOn: ["On for this device", "Включены на этом устройстве"],
+  pushOff: ["Off for this device", "Выключены на этом устройстве"],
+  pushDevicesN: ["Devices with notifications: {n}", "Устройств с уведомлениями: {n}"],
+  turnOn: ["Turn on", "Включить"],
+  turnOff: ["Turn off", "Выключить"],
+  sendTest: ["Send a test", "Прислать проверочное"],
+  testSent: ["Sent: it should come in a few seconds", "Отправлено: придёт через несколько секунд"],
+  pushWhat: ["What comes", "Что приходит"],
+  pushWhatList: ["New and moved deadlines · reminders the evening before and in the morning · a source that fails or needs a login · the daily LLM limit spent",
+                 "Новые и перенесённые сроки · напоминания накануне вечером и утром · сбой источника или нужный вход · исчерпан дневной лимит LLM"],
+  pushDenied: ["Notifications are blocked for this site: allow them in the browser's settings.",
+               "Уведомления для этого сайта запрещены: разрешите их в настройках браузера."],
+  pushUnsupported: ["This browser cannot get notifications.", "Этот браузер не умеет получать уведомления."],
+  pushIos: ["On iPhone, notifications come only to the app on the Home Screen: Share → Add to Home Screen, then open it from there.",
+            "На iPhone уведомления приходят только приложению на экране «Домой»: Поделиться → На экран «Домой», и откройте его оттуда."],
+  pushHint: ["Turn on notifications on this device: new deadlines, reminders and failures.",
+             "Включите уведомления на этом устройстве: новые сроки, напоминания и сбои."],
+  notNow: ["Not now", "Не сейчас"],
 };
 
 let lang = "en";

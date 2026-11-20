@@ -324,6 +324,17 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   comes back when one of them changes. Two connector tools come with it, `confirm_deadline_date` and
   `set_deadline_course`, and `hide_deadline` takes the reason.
 
+- **D63. Web Push is sent by infomaster itself, to the devices that ask, 20.11.2026.** This adds to §8.6 and is step
+  16.4 of §11.1. The notifier is one object called where the forum posts, so the forum can go at 16.7 and the
+  notifications stay; it pushes exactly what the forum announces with a sound (D55), nothing the forum posts quietly.
+  A subscription is a device's, bound to its web session: logging a device out, here or from another device, ends
+  its notifications, with no second list to keep. The encryption (RFC 8291) and VAPID (RFC 8292) are a page of code
+  on `cryptography`, which `webauthn` needed already and is now named in the manifest: the push libraries for Python
+  use the synchronous `requests`, and the service runs on aiohttp. The VAPID keys are made once and kept in the
+  database, not in `.env`: there is nothing for the owner to set, and new keys would make every device subscribe
+  again. The endpoints are limited to the known push services, so the server posts nowhere else. Per-kind settings
+  (only deadlines, quiet hours) wait for «Machine» (16.6).
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

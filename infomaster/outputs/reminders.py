@@ -23,6 +23,7 @@ from telethon import Button
 
 from .. import clock
 from ..i18n import Phrase, tr
+from ..processing.todo import Deadline
 from ..settings import Settings
 from ..store import Store
 from .deadlines import TOPIC, DeadlineTopic
@@ -46,6 +47,7 @@ class DeadlineReminders:
         self.forum, self.store, self.db, self.topic, self.settings = forum, store, store.db, topic, settings
         self.owner_id, self.now = owner_id, now
         self._woken = asyncio.Event()
+        self.notify: Callable[[str, list[Deadline]], None] | None = None  # the web app's notifier (§8.6)
 
     def reschedule(self) -> None:
         """A time changed: the loop counts its sleep anew."""
@@ -105,6 +107,8 @@ class DeadlineReminders:
         due_then = [d for d in self.topic.merged.visible() if d.due == due]
         if not due_then:
             return None
+        if self.notify is not None:
+            self.notify(name, due_then)
         lang = self.forum.lang
         lines = []
         for d in due_then:

@@ -615,6 +615,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "anthropic" },
+    { name = "cryptography" },
     { name = "icalendar" },
     { name = "openpyxl" },
     { name = "pypdf" },
@@ -634,6 +635,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.10" },
     { name = "anthropic", specifier = ">=1.15" },
+    { name = "cryptography", specifier = ">=43" },
     { name = "icalendar", specifier = ">=6" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "pypdf", specifier = ">=5" },

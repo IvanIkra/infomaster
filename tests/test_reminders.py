@@ -42,6 +42,8 @@ async def test_the_eve_and_the_morning(reminders, forum, now):
     add(reminders, "Calc HW 5", "2026-10-21")
     add(reminders, "Calc HW 6", "2026-10-22", msg_id=4)
     own = reminders.topic.merged.add("Dentist", dt.date(2026, 10, 21), "personal")
+    told = []
+    reminders.notify = lambda name, due: told.append((name, [d.title for d in due]))
     await reminders.tick()
     assert forum.messages == {}  # the first start: what has come is no news
 
@@ -55,6 +57,7 @@ async def test_the_eve_and_the_morning(reminders, forum, now):
     assert labels(forum.buttons[msg_id]) == [[("Скрыть: Calc HW 5", b"dr:hide:0")],
                                              [("Удалить: Dentist", b"dr:hide:1")]]
     assert forum.notified == {msg_id}  # a reminder notifies (D55)
+    assert told == [("eve", ["Calc HW 5", "Dentist"])]  # and the web app's notifier is told
     await reminders.tick()
     assert len(forum.messages) == 1  # once per slot
 

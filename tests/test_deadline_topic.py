@@ -86,6 +86,8 @@ async def test_the_first_refresh_takes_the_list_as_it_is(topic, forum):
 
 
 async def test_new_moved_and_withdrawn(topic, forum):
+    told = []  # the web app's notifier is told what notifies here (§8.6)
+    topic.notify = lambda d, was: told.append((d.title, was))
     await topic.refresh()
     assert board(forum) == HEADER + "\nДедлайнов нет."
     first = add(topic)
@@ -97,6 +99,7 @@ async def test_new_moved_and_withdrawn(topic, forum):
                             f"🆕 <b>Old HW</b> — пн 19.10\nМатанализ\n{LINK}"]
     assert labels(forum.buttons[102]) == [[("Скрыть", b"dl:hide")]]
     assert forum.notified == {102, 103, 104}  # new deadlines notify, the list does not (D55)
+    assert told == [("Calc HW 5", None), ("Calc KR", None), ("Old HW", None)]
     rows = topic.db.execute("select kind, ref, key from bot_posts where kind = 'deadline' order by id").fetchall()
     assert [tuple(row) for row in rows] == [("deadline", first, f"dl:{first}"), ("deadline", gone, f"dl:{gone}"),
                                             ("deadline", past, f"dl:{past}")]
@@ -112,6 +115,7 @@ async def test_new_moved_and_withdrawn(topic, forum):
         "key"] is None  # «снят» has no button
     moved_post, withdrawn_post = [msg_id for msg_id in forum.messages if msg_id not in forum.pinned]
     assert moved_post in forum.notified and withdrawn_post not in forum.notified  # a withdrawal is silent (D55)
+    assert told[3:] == [("Calc HW 5", "2026-10-22")]
     assert board(forum) == HEADER + f"\n💬 <b>Calc HW 5</b> — сб 24.10 · Матанализ · {LINK}" and moved
 
 
