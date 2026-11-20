@@ -188,22 +188,18 @@ async def test_all_day_event_and_class_twins(feed, schedule, now):
 
 def test_origin_and_edit_link(feed):
     """One's own calendar says where an event came from and links to its card; tablo.ics has neither."""
-    feed.edit_link = lambda uid: "https://t.me/example_bot?start=ev-" + ("c" if uid.endswith("ruz.hse.ru") else "e")
+    feed.edit_link = lambda uid: "https://x.ts.net/web/#/c?uid=" + ("c" if uid.endswith("ruz.hse.ru") else "e")
     events = events_of(feed.render("main"))
     consult, calc = events[event_uid("tg", CHAT, 1)], events["2000001@ruz.hse.ru"]
     assert str(consult["DESCRIPTION"]) == "Consultation\nAlgebra\nFrom: Матан https://t.me/c/1234567890/1\n" \
-                                          "Edit: https://t.me/example_bot?start=ev-e"
+                                          "Edit: https://x.ts.net/web/#/c?uid=e"
     assert "URL" not in consult  # iOS would show it under Location, above the room
-    assert str(calc["DESCRIPTION"]) == "Seminar\nFrom: RUZ\nEdit: https://t.me/example_bot?start=ev-c"
+    assert str(calc["DESCRIPTION"]) == "Seminar\nFrom: RUZ\nEdit: https://x.ts.net/web/#/c?uid=c"
     moved = events["2000005@ruz.hse.ru"]  # a class moved by a chat: the chat told it
     assert "From: Матан https://t.me/c/1234567890/5" in str(moved["DESCRIPTION"])
     tablo = events_of(feed.render("tablo"))
     assert all("URL" not in e and "From:" not in str(e["DESCRIPTION"]) for e in tablo.values())
-    feed.message_page = lambda chat_id, msg_id: f"https://t.me/example_bot?start=m-{chat_id}-{msg_id}"  # D50
-    consult = events_of(feed.render("main"))[event_uid("tg", CHAT, 1)]
-    assert "From: Матан https://t.me/example_bot?start=m--1001234567890-1\n" in str(consult["DESCRIPTION"])
-    feed.message_page = None
-    feed.edit_link = lambda uid: None  # before the bot has started: the source only
+    feed.edit_link = lambda uid: None  # no link: the source only
     assert str(events_of(feed.render("main"))["2000001@ruz.hse.ru"]["DESCRIPTION"]) == "Seminar\nFrom: RUZ"
 
 

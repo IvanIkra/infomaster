@@ -25,7 +25,7 @@ main and optional also say where an event came from and how to change it, since 
 one link: DESCRIPTION ends with "From: <the chat> <link to the message>" (a letter's subject, RUZ, "you" for an own
 one) and "Edit: <link>", which opens the event's card in the web app (§8.6, D69), where the source message is quoted
 too; no URL, which iOS shows under Location as a web page card above the room. The source's link is the message's
-own (t.me), or a page of `message_page` when one is given.
+own (t.me).
 tablo.ics has neither; no feed has URL, which Tablo also takes for an online class (§4.2).
 """
 
@@ -57,21 +57,18 @@ def summary(entry: Entry, feed: str) -> str:
     return f"{entry.title} · {MARKS.get(entry.type, entry.type)}"
 
 
-def origin_line(entry: Entry, page: Callable[[int, int], str | None] | None = None) -> str:
-    """Where it came from, for one's own calendar: the chat with a link to the message's page (else the message), RUZ,
-    the owner."""
+def origin_line(entry: Entry) -> str:
+    """Where it came from, for one's own calendar: the chat with a link to the message, RUZ, the owner."""
     if entry.source == "ruz":
         return "From: RUZ"
     if entry.source == "own":
         return "From: you"
-    link = (page(*entry.message) if page and entry.message else None) or entry.link
-    return f"From: {entry.origin or entry.source}" + (f" {link}" if link else "")
+    return f"From: {entry.origin or entry.source}" + (f" {entry.link}" if entry.link else "")
 
 
-def build(entries: list[Entry], feed: str, stamp: dt.datetime, edit_link: Callable[[str], str | None] | None = None,
-          message_page: Callable[[int, int], str | None] | None = None) -> bytes:
-    """One of FEEDS as iCalendar text; `edit_link(uid)` is the link to an entry's card in the web app,
-    `message_page(chat_id, msg_id)` to a source message's page, when there is one."""
+def build(entries: list[Entry], feed: str, stamp: dt.datetime,
+          edit_link: Callable[[str], str | None] | None = None) -> bytes:
+    """One of FEEDS as iCalendar text; `edit_link(uid)` is the link to an entry's card in the web app."""
     calendar = icalendar.Calendar()
     calendar.add("prodid", "-//infomaster//timetable//EN")
     calendar.add("version", "2.0")
@@ -99,7 +96,7 @@ def build(entries: list[Entry], feed: str, stamp: dt.datetime, edit_link: Callab
         lines = [entry.type, *entry.notes]
         link = edit_link(entry.uid) if edit_link and feed != "tablo" else None
         if feed != "tablo":
-            lines.append(origin_line(entry, message_page))
+            lines.append(origin_line(entry))
         if link:
             lines.append(f"Edit: {link}")
         event.add("description", "\n".join(lines))
@@ -119,10 +116,9 @@ class CalendarFeed:
     def __init__(self, schedule: Schedule, now: Callable[[], dt.datetime] = clock.now_utc):
         self.schedule, self.now = schedule, now
         self.edit_link: Callable[[str], str | None] | None = None  # uid -> its card in the web app
-        self.message_page: Callable[[int, int], str | None] | None = None  # a source message -> a page of its own
 
     def render(self, feed: str) -> bytes:
-        return build(self.schedule.entries(), feed, self.now(), self.edit_link, self.message_page)
+        return build(self.schedule.entries(), feed, self.now(), self.edit_link)
 
 
 FEED_KEY = web.AppKey("calendar", CalendarFeed)
