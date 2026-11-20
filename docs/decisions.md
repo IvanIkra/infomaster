@@ -358,6 +358,16 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   quiet hours comes silent rather than not at all, so a failure at night is still on the lock screen in the morning.
   The model prices are not moved: they change with a new model, in the code's defaults.
 
+- **D66. The switch waits for everything the forum and the Mini App give, 20.11.2026.** This changes stage 16 of
+  §11.1. At step 16.7, the switch, the app still lacked the news, the problem sheets with their files, the library's
+  raw material and inbox, the corrections of classes and events, the hidden lists with their restore and the
+  corrections of grades. Switching off the forum and the Mini App then would have taken these from the owner until
+  they were rebuilt, so they come first, as steps 16.7–16.9, and the switch is the last step, 16.10. The news come
+  first: a third view next to the list and the week, not items in the feed, since the feed is one time axis of
+  classes and deadlines (D61) and news are ranked, not dated. The view shows exactly what Tablo and the forum's list
+  show, by the same rules. «Hide» is a connector tool, `hide_news`, so it is journaled and can be undone, which the
+  forum's button could not do.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

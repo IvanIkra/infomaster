@@ -14,12 +14,13 @@ from dataclasses import dataclass
 
 from .. import clock
 from ..collectors.grades import sheet_id
-from ..collectors.inbox import MAILBOX
+from ..collectors.inbox import MAILBOX, message_link
 from ..i18n import Phrase, say
 from ..library import Library
 from ..library.links import Links
 from ..processing.grades import Grades
 from ..processing.merge import DeadlineList
+from ..processing.news import News
 from ..processing.schedule import NOT_CLASSES, SEMINARS, Entry, Schedule
 from ..processing.subjects import clean
 from ..processing.todo import Deadline, uid
@@ -42,6 +43,8 @@ class Data:
     grades: Grades | None = None
     links: Links | None = None
     lang: Callable[[], str] = lambda: "en"
+    news: News | None = None
+    ttl_hours: Callable[[], int] = lambda: 24  # how long news lives (the setting news_ttl_hours)
 
     # --- time and courses ---------------------------------------------------------------------------------
 
@@ -272,6 +275,46 @@ class Data:
         materials = len(self.library.items(class_uid=entry.uid)) if self.library is not None else 0
         return {**item, "course_title": self.title(key), "source": entry.source, "origin": entry.origin,
                 "link": entry.link, "quote": self.quote(entry.message, source), "materials": materials}
+
+    # --- news (step 16.7) ---------------------------------------------------------------------------------
+
+    def news_item(self, item: dict) -> dict:
+        """A live item as the news list shows it: where it came from by name, a letter by its subject."""
+        inbox = self.schedule.inbox
+        if item["source"] == "mail":
+            subject = inbox.subject(item["msg_ids"])
+            where = {"kind": "mail", "name": subject}
+        else:
+            chat = inbox.chat(item["chat_id"]) if item["chat_id"] is not None else None
+            where = {"kind": chat["kind"] if chat else "chat", "name": chat["title"] if chat else None}
+        return {"id": item["id"], "full": item["full"], "short": item["short"], "importance": item["importance"],
+                "study": item["study"], "posted_at": item["posted_at"], "from": where}
+
+    def news_list(self) -> dict:
+        """The live news in rank order, as Tablo and the forum's list have them."""
+        if self.news is None:
+            return {"items": [], "ttl_hours": self.ttl_hours()}
+        live = self.news.live(self.schedule.now(), self.ttl_hours())
+        return {"items": [self.news_item(item) for item in live], "ttl_hours": self.ttl_hours()}
+
+    def important_news(self) -> int:
+        """How many live items are of importance 4 or 5: the mark on the News view."""
+        if self.news is None:
+            return 0
+        return sum(item["importance"] >= 4 for item in self.news.live(self.schedule.now(), self.ttl_hours()))
+
+    def news_card(self, news_id: int) -> dict | None:
+        """An item with the message it came from, while it is kept, and its link where the chat has one."""
+        item = self.news.get(news_id) if self.news is not None else None
+        if item is None or item["hidden"]:
+            return None
+        quote, link = None, None
+        if item["chat_id"] is not None and item["msg_ids"]:
+            quote = self.quote((item["chat_id"], item["msg_ids"][0]), item["source"])
+            chat = self.schedule.inbox.chat(item["chat_id"]) if item["source"] != "mail" else None
+            link = message_link(chat, item["msg_ids"][0]) if chat else None
+        live = item["replaced_by"] is None and item["gone_at"] is None
+        return {**self.news_item(item), "quote": quote, "link": link, "live": live}
 
     def course(self, key: str) -> dict | None:
         """A course's lens: its title, next class, grades and shelves (knowledge base, sheets, raw material)."""

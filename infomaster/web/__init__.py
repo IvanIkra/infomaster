@@ -14,6 +14,9 @@ checks, and every change goes into the connector's journal (`via` web) with the 
 Notifications (stage 16.4): a device turns them on with its browser's push subscription (push.py); the notifier
 (notify.py) sends what the forum announces with a sound.
 
+News (stage 16.7): the live news in rank order, an item with the message it came from, and «Hide» through the
+connector's hide_news.
+
 «Machine» (stage 16.6, machine.py): the sources and their freshness, the journal of changes with undo, and the Mini
 App's settings, under /web/api/machine.
 
@@ -92,6 +95,9 @@ class WebApp:
                ("GET", "/deadline", deadline),
                ("GET", "/class", class_),
                ("GET", "/course", course),
+               ("GET", "/news", news),
+               ("GET", "/news/{news_id}", news_card),
+               ("POST", "/news/{news_id}/hide", hide_news),
                ("GET", "/check", check),
                ("POST", "/check/put-aside", put_aside),
                ("POST", "/deadlines/{action}", deadline_action),
@@ -285,6 +291,7 @@ async def feed(request: web.Request) -> web.Response:
     answer = _data(request).feed(course)
     answer["check"] = request.app[WEB_KEY].check.items(course)
     answer["problems"] = len(request.app[WEB_KEY].machine.attention(request.app))  # the status dot
+    answer["news"] = _data(request).important_news()  # the mark on the News view
     return web.json_response(answer)
 
 
@@ -311,6 +318,27 @@ async def class_(request: web.Request) -> web.Response:
 async def course(request: web.Request) -> web.Response:
     found = _data(request).course(" ".join(request.query.get("key", "").split()))
     return web.json_response(found) if found else error(404, "no such course")
+
+
+# --- news (stage 16.7) ----------------------------------------------------------------------------------------
+
+async def news(request: web.Request) -> web.Response:
+    """The live news in rank order."""
+    return web.json_response(_data(request).news_list())
+
+
+async def news_card(request: web.Request) -> web.Response:
+    card = _data(request).news_card(_id(request, "news_id"))
+    return web.json_response(card) if card else error(404, "no such news item")
+
+
+async def hide_news(request: web.Request) -> web.Response:
+    """«Hide»: the connector's hide_news, journaled with its undo."""
+    try:
+        change_id, output = await _connector(request).act("hide_news", {"news_id": _id(request, "news_id")})
+    except ToolError as e:
+        return error(400, str(e))
+    return _change(change_id, output)
 
 
 # --- the owner's changes (stage 16.3) ------------------------------------------------------------------------

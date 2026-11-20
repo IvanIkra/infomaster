@@ -60,6 +60,15 @@ class News:
         """The owner's «Скрыть» under an alert: off the list and the API for good."""
         return bool(self.db.execute("update news set hidden = 1 where id = ? and not hidden", (news_id,)).rowcount)
 
+    def unhide(self, news_id: int) -> bool:
+        """The undo of a hide: the item and the ones that replaced it since are shown again."""
+        found, current = False, news_id
+        while current is not None:
+            found |= bool(self.db.execute("update news set hidden = 0 where id = ? and hidden", (current,)).rowcount)
+            row = self.db.execute("select replaced_by from news where id = ?", (current,)).fetchone()
+            current = row["replaced_by"] if row else None
+        return found
+
     def drop(self, news_ids: list[int], at: dt.datetime) -> None:
         marks = ", ".join("?" * len(news_ids))
         self.db.execute(f"update news set gone_at = ? where gone_at is null and id in ({marks})",

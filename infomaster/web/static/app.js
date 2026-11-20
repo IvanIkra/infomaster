@@ -8,6 +8,7 @@ import * as passkey from "./passkey.js";
 import { Card, CheckQueue, Feed, Week } from "./screens.js";
 import { Notifications } from "./notifications.js";
 import { AddSheet } from "./add.js";
+import { NewsCard, NewsList } from "./news.js";
 import { Chat, Chats, ConnectorScreen, Courses, Gradebook, Gradebooks, HseApp, Journal, Llm, Machine,
          NotificationPrefs, Processing, Tab } from "./machine.js";
 
@@ -250,15 +251,18 @@ function App() {
   if (machine) return html`${machine}<${Toast} />`;
 
   const card = at.path === "/d" || at.path === "/c";
+  const newsCard = at.path === "/n";
   const check = at.path === "/check";
   const adding = at.path === "/add";
-  if (!card && !check && !adding) base = at;
+  if (!card && !newsCard && !check && !adding) base = at;
   const close = () => go(base.path, Object.fromEntries(base.params));
-  const screen = base.path === "/week"
+  const screen = base.path === "/news" ? html`<${NewsList} onOut=${out} />` : base.path === "/week"
     ? html`<${Week} start=${base.params.get("start")} course=${base.params.get("course")} onOut=${out} />`
     : html`<${Feed} course=${base.path === "/course" ? base.params.get("key") : null} push=${me.push} onOut=${out} />`;
   return html`${screen}${card && html`<${Card} key=${at.params.get("uid")} kind=${at.path.slice(1)}
     uid=${at.params.get("uid")} onClose=${close} onOut=${out} />`}
+    ${newsCard && html`<${NewsCard} key=${at.params.get("id")} id=${at.params.get("id")} onClose=${close}
+      onOut=${out} />`}
     ${check && html`<${CheckQueue} start=${at.params.get("id")} course=${at.params.get("course")} onClose=${close}
       onOut=${out} />`}
     ${adding && html`<${AddSheet} shared=${at.params.get("shared")} onClose=${close} onOut=${out} />`}

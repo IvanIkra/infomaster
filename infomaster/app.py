@@ -138,7 +138,7 @@ class Service:
         language = lambda: self.settings.get("miniapp_language")  # noqa: E731
         self.web = WebApp(env, self.store, send_code=self._to_owner, lang=language,
                           data=Data(self.schedule, self.merged, self.library, self.grades, self.library_links,
-                                    language), llm=self.llm)
+                                    language, self.news, lambda: self.settings.get("news_ttl_hours")), llm=self.llm)
         self.web.connector = self.connector  # the owner's changes are the connector's tools, journaled with undo
         # Web Push (§8.6): what the forum announces with a sound goes to the app's devices too.
         self.web.notifier.settings = self.settings  # the kinds pushed and the quiet hours («Machine», D65)

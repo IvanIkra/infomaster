@@ -909,12 +909,24 @@ needs the owner (`problems` in the feed):
   limit) and the quiet hours (`push_quiet`, Moscow time, over midnight too), when a message comes without a sound or
   vibration rather than not at all. The connector's `update_notifications` changes them.
 
+**News** (step 16.7, D66): a third view next to the list and the week, the forum's «News» list in the app.
+
+- `GET /web/api/news`: the live news in rank order (`importance + study`, the newer first), the same items as Tablo's
+  `/api/news` and the forum's list, each with where it came from (a chat by its name, a letter by its subject while
+  it is kept) and when; `ttl_hours` says how long news lives. The feed's `news` counts the live items of importance 4
+  and 5, the mark on the view;
+- `GET /web/api/news/{id}`: an item with the message it came from (while it is kept, D29) and its link where the
+  chat has one;
+- `POST /web/api/news/{id}/hide`: the connector's `hide_news`, journaled; its undo shows the item again, and the items
+  that replaced it since.
+
 **Screens**: the feed with the lenses and the «Check, please» box (the first two questions with their quick answer),
 the course's lens (grades, next class, shelves), the week as a grid with the deadlines of each day above it, an
 item's card over them with «Done», «Edit», «Not mine» (an own one: «Delete»), «It is a duplicate…» (the course's
 deadlines within two weeks to pick the one that stays) and, for an assumed date, «The date is right», and the «Check»
-queue one question at a time («Check · 1 of 3», «Later» puts one off for the visit). «Machine» with the sources, what needs
-attention, the journal and the settings (16.6), and «+» (16.5). Still to come: the shelves of sheets and raw material.
+queue one question at a time («Check · 1 of 3», «Later» puts one off for the visit). «Machine» with the sources, what
+needs attention, the journal and the settings (16.6), «+» (16.5) and the news (16.7). Still to come (D66): the shelves
+of sheets and raw material (16.8) and the corrections (16.9).
 
 ## 9. Storage (SQLite)
 
@@ -1047,8 +1059,13 @@ own; Claude is an optional door, not the brain (D53).
       confirmed, a deadline, an event or a grade by hand, Share Target on Android;
     - 16.6 «Machine» (done, D65): the sources and their freshness, what needs attention, the journal with undo, the
       Mini App's settings moved over, the notifications' kinds and quiet hours;
-    - 16.7 the switch: the links of calendars and cards lead to the app; the forum's topics and the Mini App are
-      switched off.
+    - 16.7 news (done, D66): the live news in rank order as a third view next to the list and the week, an item's
+      card with its message, «Hide» with undo;
+    - 16.8 the shelves: problem sheets with their PDFs and versions, raw material, sorting the library's inbox;
+    - 16.9 corrections: moving, cancelling and changing a class, hiding a chat's event, the main or optional
+      calendar, the hidden deadlines and events with «Restore», correcting grades;
+    - 16.10 the switch, once the app has everything the forum and the Mini App give (D66): the links of calendars
+      and cards lead to the app; the forum's topics and the Mini App are switched off.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

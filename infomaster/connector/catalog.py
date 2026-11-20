@@ -131,6 +131,23 @@ async def list_news(ctx: Context, args: dict) -> dict:
         for item in items]}
 
 
+async def hide_news(ctx: Context, args: dict) -> Output:
+    news = ctx.services.news
+    item = news.get(args["news_id"])
+    if item is None:
+        raise ToolError("no such news item: take the id from list_news")
+    with news.db:
+        if not news.hide(item["id"]):
+            raise ToolError("it is hidden already")
+    return Output({"hidden": item["id"]}, f"Hid the news «{item['short'] or item['full'][:60]}»",
+                  [step("_unhide_news", news_id=item["id"])])
+
+
+async def unhide_news(ctx: Context, args: dict) -> None:
+    with ctx.services.news.db:
+        ctx.services.news.unhide(args["news_id"])
+
+
 async def search_messages(ctx: Context, args: dict) -> dict:
     for name in ("since", "until"):
         if args.get(name):
@@ -878,6 +895,10 @@ def register(registry: Registry, app) -> None:
              "cells, and whose the layout is (Haiku's or the owner's).", {"sheet_id": GRADEBOOK}, get_gradebook,
              ("sheet_id",))
 
+    write("hide_news", "Hide a news item",
+          "Take a news item off the news list, the web app and Tablo; it stays hidden when its message is edited.",
+          {"news_id": {"type": "integer", "description": "from list_news: items[].id"}}, hide_news, ("news_id",))
+    registry.op("_unhide_news", unhide_news)
     write("add_deadline", "Add a deadline", "A new own deadline.",
           {"title": {"type": "string", "maxLength": miniapp.TITLE_LIMIT}, "due": DATE,
            "category": {"type": "string", "enum": list(CATEGORIES), "description": "study by default"},

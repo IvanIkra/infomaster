@@ -337,3 +337,9 @@ select.field.narrow { width: 150px; }
 .bars { display: flex; align-items: flex-end; gap: 2px; height: 80px; padding: 10px 0; }
 .bars span { flex: 1; min-width: 0; border-radius: 2px 2px 0 0; background: var(--acc); opacity: 0.8; }
 .bars span.stopped { background: var(--bad); }
+
+/* news (16.7) */
+.views .count { margin-left: 6px; vertical-align: 1px; }
+.it.news { align-items: flex-start; }
+.it.news .k { margin-top: 6px; }
+.it.news .ttl { overflow-wrap: anywhere; }

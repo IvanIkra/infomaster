@@ -117,6 +117,10 @@ function Lenses({ courses, active, onPick }) {
   </div>`;
 }
 
+// The important live news (4 or 5) the feed last counted: the mark on the News view.
+let newsMark = 0;
+export const markNews = (n) => { newsMark = n || 0; };
+
 export function Bar({ view, course }) {
   return html`<div class="bar"><div>
     <div class="views" role="tablist" aria-label="View">
@@ -124,6 +128,8 @@ export function Bar({ view, course }) {
         ${t("list")}</button>
       <button role="tab" aria-selected=${view === "week"} onClick=${() => go("/week", { course })}>
         ${t("weekView")}</button>
+      <button role="tab" aria-selected=${view === "news"} onClick=${() => go("/news")}>
+        ${t("newsView")}${newsMark > 0 && view !== "news" && html`<span class="count">${newsMark}</span>`}</button>
     </div>
     <a class="plus" href="#/add" aria-label=${t("add")}>${icon(ICONS.plus, 26)}</a>
   </div></div>`;
@@ -153,6 +159,7 @@ export function Feed({ course, push, onOut }) {
   const { data, error } = useLoad("/feed" + (course ? "?course=" + encodeURIComponent(course) : ""), onOut);
   const info = useLoad(course ? "/course?key=" + encodeURIComponent(course) : null, onOut).data;
   const pick = (key) => go(key ? "/course" : "/", { key });
+  if (data && !course) markNews(data.news);
   const { weekday, day: date } = today();
   const header = course
     ? html`<div><div class="kicker">${t("course")}</div><h1>${(info && info.title) || course}</h1></div>`
@@ -327,7 +334,7 @@ function CourseLink({ course, title }) {
     ${title || course}${icon(ICONS.next, 16)}</button>`;
 }
 
-function Quote({ quote, link, from }) {
+export function Quote({ quote, link, from }) {
   if (!quote && !link) return null;
   return html`<div class="stack" style="gap:8px">
     <span class="lab">${t("from")}</span>
