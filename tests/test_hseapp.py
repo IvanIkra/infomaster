@@ -518,7 +518,8 @@ async def test_miniapp_screen(client, fake, store):
     assert (await client.post("/app/api/hseapp/link", json={"app": "yes"}, headers=owner())).status == 400
 
     bad = await client.post("/app/api/hseapp/login", json={"url": f"{CALLBACK}?state=x&code=y"}, headers=owner())
-    assert bad.status == 400 and await bad.text() == "this login link is out of date: open a new one in the Mini App"
+    assert bad.status == 400
+    assert await bad.text() == "this login link is out of date: open a new one in Machine → HSE App X"
     client.settings.set("miniapp_language", "ru")  # the reason in the Mini App's language (D41)
     bad = await client.post("/app/api/hseapp/login", json={"url": f"{CALLBACK}?state=x&code=y"}, headers=owner())
     assert bad.status == 400 and "устарела" in await bad.text()

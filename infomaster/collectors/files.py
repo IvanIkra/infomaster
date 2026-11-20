@@ -7,7 +7,7 @@ message edited later does not download the same file again; a message whose file
 download that fails on the way (the twin is offline, the network, a flood wait) is not kept: the batch leaves the
 message in the queue for its next run (NotNow). What Haiku read on an image (processing/images.py)
 lives in the same row. Files and rows go with their messages after 14 days (D29); a sheet made of a file keeps its
-text (processing/sheets.py), and the file lives on in the forum.
+text (processing/sheets.py), and the file lives on in the library.
 
 A letter's PDF attachment is kept when the letter arrives (collectors/mail.py), in a row of source `mail`: the mailbox
 is not asked again. A message of a study chat or a letter without a PDF of its own may link to one (D59): the batch

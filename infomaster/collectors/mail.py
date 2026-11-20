@@ -15,7 +15,7 @@ past every msg_id given before whenever UIDVALIDITY changes, so a rebuilt box ne
 old one. The letters and the state are saved in one transaction: a letter is stored once. One broken letter does not
 stop the others.
 
-The password never leaves this module: an error is told without it. The System topic hears once when the box has
+The password never leaves this module: an error is told without it. The owner hears once when the box has
 failed for 3 hours, and once when it works again.
 """
 
@@ -48,7 +48,7 @@ FOLDER = "INBOX"
 POLL_EVERY = 5 * 60         # seconds (§6.2)
 TIMEOUT = 60                # seconds, each socket operation
 MAX_BODY = 8000             # characters of a letter's text (§6.2)
-STALE_AFTER = dt.timedelta(hours=3)  # failing longer than this is told to the System topic
+STALE_AFTER = dt.timedelta(hours=3)  # failing longer than this is told to the owner
 HIDDEN = "***"
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 NOT_SET = "MAIL_USER and MAIL_PASSWORD are not set"
@@ -251,7 +251,7 @@ class Mail:
             env.mail_password
         self.store, self.db, self.settings, self.inbox, self.now = store, store.db, settings, inbox, now
         self.fetcher: Callable = fetch  # replaced in tests
-        self.notify: Callable[[Phrase], None] | None = None  # a line for the System topic
+        self.notify: Callable[[Phrase], None] | None = None  # a line for the owner (Web Push)
         self.files = None  # collectors/files.Files: a letter's PDF attachment is kept there when it comes (D59)
         self.ok_at: str | None = None
         self.error: str | None = None if self.configured else NOT_SET

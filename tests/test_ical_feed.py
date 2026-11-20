@@ -207,7 +207,7 @@ def test_origin_and_edit_link(feed):
 
 
 async def test_routes(aiohttp_client, budget, schedule, now, merged):
-    env = Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, forum_id=-100, api_token="tok",
+    env = Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, api_token="tok",
               public_url="https://x.ts.net", calendar_secret=SECRET)
     await schedule.after_poll(Diff())
     client = await aiohttp_client(api.create_app(env, budget, {}, CalendarFeed(schedule, now=now), merged))
@@ -222,7 +222,7 @@ async def test_routes(aiohttp_client, budget, schedule, now, merged):
 
 async def test_public_routes(aiohttp_client, budget, journal, store, schedule, now, merged):
     """Behind Funnel: main and optional by their own secret, never tablo, never by the internal secret."""
-    env = Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, forum_id=-100, api_token="tok",
+    env = Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, api_token="tok",
               public_url="https://x.ts.net", calendar_secret=SECRET, calendar_public_secret=PUBLIC_SECRET)
     await schedule.after_poll(Diff())
     feed = CalendarFeed(schedule, now=now)
@@ -243,7 +243,7 @@ async def test_public_routes(aiohttp_client, budget, journal, store, schedule, n
 
 
 async def test_public_routes_off(aiohttp_client, budget, journal, store, schedule, now, merged):
-    env = Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, forum_id=-100, api_token="tok",
+    env = Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, api_token="tok",
               public_url="https://x.ts.net", calendar_secret=SECRET)
     hse = HseApp(store, Settings(store), env.public_url + CALLBACK_PATH)
     client = await aiohttp_client(miniapp.create_app(env, budget, journal, schedule.inbox, ChatSettings(store), {},

@@ -16,8 +16,8 @@ from infomaster.library import Library
 from infomaster.llm.budget import BudgetExceeded
 from infomaster.llm.client import Document, Haiku
 from infomaster.outputs import miniapp
-from infomaster.outputs.deadlines import DeadlineTopic
-from infomaster.outputs.sheets import SheetTopic, hashtag
+from infomaster.outputs.deadlines import DeadlineWatch
+from infomaster.outputs.sheets import SheetPublisher
 from infomaster.processing import pdf
 from infomaster.processing.batches import Batches, Changes, check
 from infomaster.processing.news import News
@@ -84,8 +84,8 @@ def batches(store, now, schedule, sheets, files, llm):
 
 
 @pytest.fixture
-def topic(forum, store, sheets, now):
-    return SheetTopic(forum, store, sheets.inbox, sheets, now=now)
+def topic(sheets):
+    return SheetPublisher(sheets)
 
 
 def send(batches, msg_id, data: bytes | None, name="list3.pdf", text="", ago=dt.timedelta(minutes=30)):
@@ -147,7 +147,6 @@ def test_similar_names(a, b, same):
 
 def test_keys():
     assert number_key("№ 3") == "3" and number_key("ДЗ-2.1") == "дз-2.1"
-    assert hashtag("Calc") == "#Calc" and hashtag("Rus Hist") == "#Rus_Hist" and hashtag(None) == ""
 
 
 # --- the files ------------------------------------------------------------------------------------
@@ -223,7 +222,7 @@ def test_check_keeps_sheets_of_read_pdfs():
     assert item["sheets"] == [{"msg_id": 1, "course": "", "number": "2", "due": None}]  # one per message
 
 
-# --- the forum -------------------------------------------------------------------------------------
+# --- publishing ----------------------------------------------------------------------------------
 
 async def found(batches, llm, msg_id, data, **sheet) -> None:
     send(batches, msg_id, data, name=sheet.pop("name", "list3.pdf"))
@@ -231,47 +230,32 @@ async def found(batches, llm, msg_id, data, **sheet) -> None:
     await parse(batches)
 
 
-async def test_posts_and_versions(batches, llm, sheets, topic, forum, schedule):
+async def test_published_and_versions(batches, llm, sheets, topic, schedule):
     await schedule.subjects.resolve(["Математический анализ"])
     await found(batches, llm, 1, SHEET3)
     await topic.publish()
-    [post] = forum.files
-    assert forum.files[post] == (SHEET3, "list3.pdf")
-    assert forum.messages[post][1] == ('📄 <b>Calculus · листок 3</b>\nСрок: чт 29.10\n'
-                                       '<a href="https://t.me/c/1234567890/1">Матан</a> · #Calc')
     first = sheets.get(1)
-    assert (first["status"], first["post_id"], first["version"]) == ("posted", post, 1)
-    assert forum.notified == set()  # sheets are posted silently (D55)
+    assert (first["status"], first["version"], first["previous"]) == ("posted", 1, None)
     assert first["text"].startswith("Calculus. Sheet 3") and llm.readings == []  # pdf_content is off: no reading
 
-    # The same number again: the first message takes the new file, a reply tells it.
+    # The same number again: a newer version.
     await found(batches, llm, 2, SHEET3_FIXED, name="list3_fixed.pdf", due="2026-10-30")
     await topic.publish()
-    assert list(forum.files) == [post] and forum.files[post] == (SHEET3_FIXED, "list3_fixed.pdf")
-    assert forum.messages[post][1].startswith("📄 <b>Calculus · листок 3</b> (версия 2)\nСрок: пт 30.10")
-    [reply] = forum.replies
-    assert forum.replies[reply] == post
-    assert forum.messages[reply][1] == ('🔄 Листок обновлён: версия 2, файл «list3_fixed.pdf»\n'
-                                        '<a href="https://t.me/c/1234567890/2">Матан</a>')
     second = sheets.get(2)
-    assert (second["previous"], second["version"], second["post_id"]) == (1, 2, post)
+    assert (second["status"], second["previous"], second["version"]) == ("posted", 1, 2)
 
     # Another number is another sheet; so is a sheet older than 30 days.
     await found(batches, llm, 3, make_pdf(["Sheet 4"]), number="4")
     await topic.publish()
-    assert sheets.get(3)["previous"] is None and len(forum.files) == 2
+    assert sheets.get(3)["previous"] is None
 
-    # The first message was deleted by hand: the next version is posted anew and carries the sheet.
-    forum.messages.pop(post)
     await found(batches, llm, 4, make_pdf(["Sheet 3 again"]), name="list3_v3.pdf")
     await topic.publish()
-    third = sheets.get(4)
-    assert third["version"] == 3 and third["post_id"] not in (None, post)
-    assert {sheets.get(i)["post_id"] for i in (1, 2, 4)} == {third["post_id"]}
+    assert (sheets.get(4)["previous"], sheets.get(4)["version"]) == (2, 3)
     assert [s["versions"] for s in sheets.listing()] == [1, 3]
 
 
-async def test_same_message_new_file_is_a_version(batches, llm, sheets, topic, forum, now):
+async def test_same_message_new_file_is_a_version(batches, llm, sheets, topic, now):
     await found(batches, llm, 1, SHEET3, number="")
     await topic.publish()
     batches.files.remote[CHAT, 1] = SHEET3_FIXED
@@ -280,13 +264,13 @@ async def test_same_message_new_file_is_a_version(batches, llm, sheets, topic, f
     llm.answers.append({"items": [sheet_item(1, number="", course="")]})
     await parse(batches)
     await topic.publish()
-    assert sheets.get(2)["previous"] == 1 and len(forum.files) == 1
+    assert sheets.get(2)["previous"] == 1
 
 
-async def test_reading_the_whole_sheet(batches, llm, sheets, topic, forum, schedule):
+async def test_reading_the_whole_sheet(batches, llm, sheets, topic, schedule):
     sheets.chat_settings.update(CHAT, {"pdf_content": True})
     sheets.settings.set("pdf_pages", 1)
-    sheets.settings.set("forum_language", "ru")  # the summary is written for the forum (D41)
+    sheets.settings.set("miniapp_language", "ru")  # the summary is written in the app's language (D41)
     await schedule.subjects.resolve(["Математический анализ"])
     llm.readings = [{"summary": "Ряды: 6 задач, сдать в LMS.",
                      "deadlines": [{"label": "Calc sheet 3", "due": "2026-10-29"},
@@ -301,8 +285,7 @@ async def test_reading_the_whole_sheet(batches, llm, sheets, topic, forum, sched
     assert "Course: Математический анализ, abbreviation Calc" in reading.prompt
     assert "Text of the sheet (1 of 2 pages):\n--- page 1 ---\nCalculus. Sheet 3" in reading.prompt
     assert "Task 1" not in reading.prompt  # past the page limit
-    [post] = forum.files
-    assert forum.messages[post][1].endswith("#Calc\n\nРяды: 6 задач, сдать в LMS.")
+    assert sheets.get(1)["summary"] == "Ряды: 6 задач, сдать в LMS."
     today = clock.local_day(batches.now())
     saved = {d["label"]: d for d in batches.deadlines.upcoming(today)}
     assert set(saved) == {"Calc sheet 3", "Calc defence"}
@@ -317,12 +300,11 @@ async def test_reading_the_whole_sheet(batches, llm, sheets, topic, forum, sched
     assert describing.task == "pdf" and "Changed lines:\n-Hand in by 29.10 23:59 in the LMS" in describing.prompt
     assert "Output changes: in Russian" in describing.system and "Изменилось только оформление." in describing.system
     assert "+Task 1. Prove that the series converges" in describing.prompt
-    reply = max(forum.replies)
-    assert "\nСрок сдвинут на 30.10, в задаче 1 уточнено условие.\n" in forum.messages[reply][1]
-    assert forum.messages[post][1].endswith("Ряды: 6 задач, сдать в LMS.")  # the first version's summary stays
+    assert sheets.get(2)["changes"] == "Срок сдвинут на 30.10, в задаче 1 уточнено условие."
+    assert sheets.get(1)["summary"] == "Ряды: 6 задач, сдать в LMS."  # the first version's summary stays
 
 
-async def test_a_scan_is_read_as_pages_and_the_limit_is_kept(batches, llm, sheets, topic, forum):
+async def test_a_scan_is_read_as_pages_and_the_limit_is_kept(batches, llm, sheets, topic):
     sheets.chat_settings.update(CHAT, {"pdf_content": True})
     sheets.settings.set("pdf_tokens", 4000)  # one page of a scan
     llm.readings = [BudgetExceeded("optional LLM tasks are off above 80% of the daily limit")]
@@ -330,20 +312,19 @@ async def test_a_scan_is_read_as_pages_and_the_limit_is_kept(batches, llm, sheet
     await topic.publish()
     reading = llm.calls[-1]
     assert [d.pages for d in reading.documents] == [1] and "first 1 of 2 pages are attached" in reading.prompt
-    [post] = forum.files  # posted without a summary all the same
-    assert sheets.get(1)["summary"] is None and "\n\n" not in forum.messages[post][1]
+    assert sheets.get(1)["status"] == "posted" and sheets.get(1)["summary"] is None  # published all the same
 
 
-async def test_a_failed_post_waits_and_a_lost_file_fails(batches, llm, sheets, topic, forum):
+async def test_a_failure_waits_and_a_lost_file_fails(batches, llm, sheets, topic):
     await found(batches, llm, 1, SHEET3)
 
-    async def down(*args):
-        raise ConnectionError("Telegram is down")
+    async def down(sheet_id):
+        raise ConnectionError("the twin is down")
 
-    forum.post_file, working = down, forum.post_file
+    sheets.prepare, working = down, sheets.prepare
     await topic.publish()
     assert sheets.get(1)["status"] == "new" and sheets.status() == {"waiting": 1, "error": None}
-    forum.post_file = working
+    sheets.prepare = working
     await topic.publish()
     assert sheets.get(1)["status"] == "posted"
 
@@ -353,20 +334,18 @@ async def test_a_failed_post_waits_and_a_lost_file_fails(batches, llm, sheets, t
     assert sheets.get(2)["status"] == "failed" and sheets.get(2)["error"] == "the file is deleted already"
 
 
-async def test_owner_joins_a_sheet_to_an_older_one(batches, llm, sheets, topic, forum):
+async def test_owner_joins_a_sheet_to_an_older_one(batches, llm, sheets, topic):
     await found(batches, llm, 1, SHEET3, number="3")
-    await found(batches, llm, 2, SHEET3_FIXED, number="3а", name="ряды.pdf")  # not recognised: posted as new
+    await found(batches, llm, 2, SHEET3_FIXED, number="3а", name="ряды.pdf")  # not recognised: published as new
     await topic.publish()
-    first, own = sheets.get(1)["post_id"], sheets.get(2)["post_id"]
-    assert first != own and sheets.get(2)["previous"] is None
+    assert sheets.get(2)["previous"] is None
 
     with pytest.raises(ValueError, match="the same sheet"):
         await topic.join(1, 1)
+    batches.files.by_hash(sheets.get(2)["sha256"]).unlink()  # its file is gone: it is joined all the same
     await topic.join(2, 1)
-    assert own in forum.deleted and list(forum.files) == [first] and forum.files[first][0] == SHEET3_FIXED
     joined = sheets.get(2)
-    assert (joined["previous"], joined["version"], joined["post_id"]) == (1, 2, first)
-    assert forum.replies[max(forum.replies)] == first
+    assert (joined["previous"], joined["version"], joined["status"]) == (1, 2, "posted")
     with pytest.raises(ValueError, match="has versions already"):
         await topic.join(1, 2)
     assert [(s["id"], s["first"], s["versions"]) for s in sheets.listing()] == [(2, 1, 2)]
@@ -440,15 +419,13 @@ async def test_miniapp_screen(aiohttp_client, batches, llm, sheets, topic, budge
     assert [(s["id"], s["first"], s["versions"]) for s in state["sheets"]] == [(2, 1, 2)]
 
 
-async def test_owner_changes_and_adds_sheets(aiohttp_client, batches, llm, sheets, topic, forum, budget, journal,
+async def test_owner_changes_and_adds_sheets(aiohttp_client, batches, llm, sheets, topic, budget, journal,
                                             store, schedule, merged):
-    """The owner's change of a sheet edits its caption; an own sheet is posted at once and deleted with its message
-    (D44)."""
+    """The owner changes a sheet; an own sheet is published at once and can be deleted (D44)."""
     from aiohttp import FormData
 
     await found(batches, llm, 1, SHEET3)
     await topic.publish()
-    post = sheets.get(1)["post_id"]
     hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
     client = await aiohttp_client(miniapp.create_app(env(), budget, journal, sheets.inbox, sheets.chat_settings,
                                                      {"sheets": sheets.status}, schedule.subjects, schedule, hse,
@@ -458,8 +435,6 @@ async def test_owner_changes_and_adds_sheets(aiohttp_client, batches, llm, sheet
     change = {"course": "Линейная алгебра", "number": " 3b ", "due": "2026-11-02", "summary": "Series, 6 tasks."}
     [listed] = (await (await client.patch("/app/api/sheets/1", json=change, headers=owner)).json())["sheets"]
     assert (listed["number"], listed["due"], listed["summary"]) == ("3b", "2026-11-02", "Series, 6 tasks.")
-    caption = forum.messages[post][1]
-    assert post in forum.edited and "листок 3b" in caption and "Series, 6 tasks." in caption and "02.11" in caption
     state = await (await client.patch("/app/api/sheets/1", json={"due": "", "summary": ""}, headers=owner)).json()
     assert (state["sheets"][0]["due"], state["sheets"][0]["summary"]) == (None, None)
     for bad in ({}, {"number": 5}, {"due": "2.11"}, {"oops": 1}, {"summary": "x" * 601}):
@@ -474,12 +449,10 @@ async def test_owner_changes_and_adds_sheets(aiohttp_client, batches, llm, sheet
     [mine] = [s for s in state["sheets"] if s["own"]]
     assert (mine["name"], mine["number"], mine["status"], mine["chat"], mine["due"]) == (
         "mine.pdf", "7", "posted", None, None)
-    own_post = sheets.get(mine["id"])["post_id"]
-    assert "добавлен вручную" in forum.messages[own_post][1] and forum.files[own_post][0] == SHEET3_FIXED
 
     assert (await client.delete("/app/api/sheets/1", headers=owner)).status == 404  # a chat's: not the owner's
     state = await (await client.delete(f"/app/api/sheets/{mine['id']}", headers=owner)).json()
-    assert [s["id"] for s in state["sheets"]] == [1] and own_post in forum.deleted and sheets.get(mine["id"]) is None
+    assert [s["id"] for s in state["sheets"]] == [1] and sheets.get(mine["id"]) is None
 
     form = FormData()
     form.add_field("file", b"hello", filename="no.pdf", content_type="application/pdf")
@@ -528,10 +501,12 @@ def assumed_rows(batches) -> list[dict]:
     return [d for d in batches.deadlines.upcoming(clock.local_day(batches.now())) if d["assumed"]]
 
 
-async def test_a_sheet_without_a_date_is_due_at_the_next_seminar(batches, llm, sheets, topic, forum, timetable,
+async def test_a_sheet_without_a_date_is_due_at_the_next_seminar(batches, llm, sheets, topic, timetable,
                                                                   merged, store, now):
-    deadline_topic = DeadlineTopic(forum, store, sheets.inbox, merged, 42, now=now)
-    await deadline_topic.refresh()  # the first showing is quiet
+    watch = DeadlineWatch(store, merged, now=now)
+    told = []
+    watch.notify = lambda d, was: told.append((d.title, d.due.isoformat(), d.assumed, was))
+    await watch.refresh()  # the first look is quiet
     await posted(batches, llm, 1, SHEET3, due="")  # posted Tue 11:30: the lecture of Wed is no seminar
     sheet = sheets.get(1)
     assert (sheet["due"], sheet["due_at"], sheet["due_assumed"]) == ("2026-10-22", "2026-10-22T09:30:00", 1)
@@ -542,15 +517,8 @@ async def test_a_sheet_without_a_date_is_due_at_the_next_seminar(batches, llm, s
     assert (item["title"], item["due"], item["assumed"]) == ("Calc sheet 3", "2026-10-22", True)
 
     await topic.publish()
-    caption = forum.messages[sheets.get(1)["post_id"]][1]
-    assert "Срок: ≈ чт 22.10 09:30 (предположительно: следующий семинар)" in caption
-    forum.lang = "en"
-    assert "Due: ≈ Thu 22.10 09:30 (assumed: the next seminar)" in topic.caption(sheets.get(1), sheets.get(1))
-    forum.lang = "ru"
-    await deadline_topic.refresh()
-    [new] = [text for text in forum.texts("deadlines") if text.startswith("🆕 <b>Calc")]
-    assert "<b>Calc sheet 3</b> — ≈ чт 22.10 (предположительно)" in new and "до следующего семинара" in new
-    assert "<b>Calc sheet 3</b> — ≈ чт 22.10 (предположительно) · " in forum.messages[forum.pinned[-1]][1]
+    await watch.refresh()
+    assert ("Calc sheet 3", "2026-10-22", True, None) in told  # pushed as new, the date marked assumed
 
     # The batch model sees the date as assumed.
     send(batches, 2, None, text="ок")
@@ -625,12 +593,11 @@ async def test_a_real_date_wins(batches, llm, sheets, topic, timetable):
     await topic.publish()
     sheet = sheets.get(sheet["id"])
     assert (sheet["due"], sheet["due_assumed"]) == ("2026-10-30", 0) and assumed_rows(batches) == []
-    assert "Срок: пт 30.10" in topic.caption(sheet, sheet)
 
 
-async def test_the_owner_clears_the_mark(aiohttp_client, batches, llm, sheets, topic, forum, budget, journal, store,
+async def test_the_owner_clears_the_mark(aiohttp_client, batches, llm, sheets, topic, budget, journal, store,
                                          timetable, merged):
-    sheets.on_change = merged.on_change  # the owner's changes are quiet in the forum
+    sheets.on_change = merged.on_change  # the owner's changes are no news
     await posted(batches, llm, 1, SHEET3, due="")
     await posted(batches, llm, 2, make_pdf(["Sheet 4"]), due="", number="4", name="list4.pdf")
     await topic.publish()
@@ -651,7 +618,6 @@ async def test_the_owner_clears_the_mark(aiohttp_client, batches, llm, sheets, t
     await client.patch("/app/api/sheets/1", json={"due": "2026-10-25"}, headers=owner)
     sheet = sheets.get(1)
     assert (sheet["due"], sheet["due_assumed"]) == ("2026-10-25", 0)
-    assert "Срок: вс 25.10\n" in forum.messages[sheet["post_id"]][1]
     [real] = [d for d in batches.deadlines.upcoming(clock.local_day(batches.now())) if d["sheet_id"] == 1]
     assert (real["due"], real["assumed"]) == ("2026-10-25", 0) and f"dl:{real['id']}" in merged.changes[-1]
 
@@ -667,19 +633,17 @@ async def test_the_owner_clears_the_mark(aiohttp_client, batches, llm, sheets, t
     assert sheets.get(2)["due"] == "2026-10-26"  # a real date does not follow the timetable
 
 
-async def test_the_assumed_date_follows_the_timetable(batches, llm, sheets, topic, forum, timetable, now):
+async def test_the_assumed_date_follows_the_timetable(batches, llm, sheets, topic, timetable, now):
     await posted(batches, llm, 1, SHEET3, due="")
     await topic.publish()
     [first] = assumed_rows(batches)
 
-    # RUZ moves the seminar to Friday: the date follows, and so does the caption.
+    # RUZ moves the seminar to Friday: the date follows.
     diff = timetable.ruz._sync([*TIMETABLE[:1], lesson(2, "Calculus", "10-23 11:10"), *TIMETABLE[2:]])
     changes = await timetable.after_poll(diff)
     [row] = assumed_rows(batches)
     assert (row["due"], batches.deadlines.get(first["id"])["moved_by"]) == ("2026-10-23", row["id"])
     assert changes.moved == [(first["id"], row["id"])] and sheets.get(1)["due_at"] == "2026-10-23T11:10:00"
-    await topic.publish()
-    assert "≈ пт 23.10 11:10" in forum.messages[sheets.get(1)["post_id"]][1]
 
     # The owner moves the class in the Mini App: the date follows the feeds as they are.
     await timetable.correct_class(TIMETABLE[1].uid, "2026-10-24T10:00:00", "2026-10-24T11:20:00", "R101", False)

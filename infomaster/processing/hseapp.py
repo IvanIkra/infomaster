@@ -167,7 +167,7 @@ class HseAppDeadlines:
             return result
         try:
             got = await self._ask_all(list(todo.values()), courses)
-        except BudgetExceeded as e:  # the budget tells the System topic itself; asked again at the next poll
+        except BudgetExceeded as e:  # the budget tells the owner itself; asked again at the next poll
             log.info("HSE App X labels wait for the LLM limit: %s", e)
             return result
         except LLMError as e:

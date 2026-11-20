@@ -1,22 +1,22 @@
-"""Листочки (§6.3, D14): PDFs with tasks from the chats, kept as rows here and as files in the forum.
+"""Листочки (§6.3, D14): PDFs with tasks from the chats, kept as rows here; the web app's shelves show them.
 
 1. The batch reads a PDF by its name and its first page (a scan: the first page as an image) and says whether it is a
    sheet, with its course, number and due date (processing/batches.py). The sheet becomes a row here, `new`, in the
-   transaction of the batch, so nothing is lost when the forum is down. The same file again (forwarded, posted twice)
+   transaction of the batch, so nothing is lost when a run fails. The same file again (forwarded, posted twice)
    is no new sheet.
-2. Before the forum gets it, the sheet is prepared once: its pages are read locally for the next version's diff, and
+2. Before it is published, the sheet is prepared once: its pages are read locally for the next version's diff, and
    it is matched against earlier sheets (`previous`). A newer version: the same message with a new file, or the same
    chat and course with the same number or almost the same file name (no number to tell them apart), the older sheet
-   at most 30 days old. With no certainty it is a new sheet; the owner can join it to an older one in the Mini App.
+   at most 30 days old. With no certainty it is a new sheet; the owner can join it to an older one in the web app.
 3. With `pdf_content` on in the chat, the model reads the sheet (task "pdf", an optional one: off above 80 % of the
-   limit): at most `pdf_pages` pages and `pdf_tokens` tokens, what comes first. It writes a short summary for the post
+   limit): at most `pdf_pages` pages and `pdf_tokens` tokens, what comes first. It writes a short summary of it
    and gives the deadlines of its pages; they join the deadlines from the chat (source tg, the sheet's message), and an
    edit of the message's text does not withdraw them, its deletion does. For a newer version the model sees only the
-   diff of the texts and says what changed. The summary and the changes are written in the forum's language (D41),
+   diff of the texts and says what changed. The summary and the changes are written in the app's language (D41),
    as it is when the sheet is prepared.
 
-4. The owner changes a sheet's course, number, due date and summary in the Mini App, and adds sheets of their own:
-   a PDF uploaded there, of the chat OWN_CHAT (D44). An own sheet is posted as a chat's, gets newer versions by
+4. The owner changes a sheet's course, number, due date and summary in the web app, and adds sheets of their own:
+   a PDF uploaded there, of the chat OWN_CHAT (D44). An own sheet is published as a chat's, gets newer versions by
    the same rules among the own ones, and is the only kind the owner may delete.
 5. A sheet without a due date is due before the next seminar of its course (`due_assumed`): the first seminar or
    practical class in the timetable as the feeds show it (corrections applied, cancelled ones skipped) that starts
@@ -26,14 +26,14 @@
    Midterms after every RUZ poll, batch run and correction by the owner (`follow`), it moves with its class and is
    withdrawn when no class is left; once the class has started it stays. A real date wins and the mark goes: the
    sheet's pages, a later message (the batch moves the assumed deadline or gives the same work with a date), or the
-   owner in the Mini App (the sheet's date, or the date of its deadline). A newer version takes the older one's
+   owner (the sheet's date, or the date of its deadline). A newer version takes the older one's
    assumed deadline over and finds its own date the same way. Sheets of before the rule are not assumed.
 6. A prepared sheet, a newer version too, is copied into the library (D58, §6.8) as kind `sheet`, at the class of its
    course that was on when it was sent (the seminar it was handed out at), else at its course alone: there it outlives
    the 14 days of its file here.
 
-The forum side is outputs/sheets.py. Writing methods commit themselves, except `add`: the batch calls it inside its
-own transaction.
+Publishing is outputs/sheets.py; the status `posted` means published (D69). Writing methods commit themselves,
+except `add`: the batch calls it inside its own transaction.
 """
 
 import asyncio
@@ -150,9 +150,8 @@ class Sheets:
         self.deadlines, self.subjects, self.llm, self.now = deadlines, subjects, llm, now
         self.error: str | None = None  # of the last reading that failed, for the status
         self.schedule: Schedule | None = None  # where the next seminar is found; without it no date is assumed
-        # The owner's changes of the assumed deadlines (the refs it touched): the forum shows them quietly.
+        # The owner's changes of the assumed deadlines (the refs it touched): no news to notify of.
         self.on_change: Callable[[set[str]], None] | None = None
-        self.stale: set[int] = set()  # posted sheets whose date changed: their captions are made anew
         self.library: Library | None = None  # where every sheet's PDF is kept for good (D58)
 
     def status(self) -> dict:
@@ -184,7 +183,7 @@ class Sheets:
         return cursor.lastrowid
 
     def add_own(self, file: dict, course: str | None, number: str, due: str | None, at: dt.datetime) -> int:
-        """An own sheet of an uploaded PDF (`file`: its files row); it waits for the forum as a chat's."""
+        """An own sheet of an uploaded PDF (`file`: its files row); it waits to be published as a chat's."""
         with self.db:
             return self.db.execute(
                 "insert into sheets(chat_id, msg_id, name, sha256, course, number, due, due_assumed, sent_at, "
@@ -194,7 +193,7 @@ class Sheets:
 
     def edit(self, sheet_id: int, fields: dict) -> dict | None:
         """The owner's change: course, number and due date of the sheet as it is now (its newest version), the
-        summary of its first version, which the caption carries. A due date given (or cleared) is real: the assumed
+        summary of its first version. A due date given (or cleared) is real: the assumed
         one and its mark go; a new course or number makes the assumed date follow it. The sheet, or None for no such
         sheet."""
         sheet = self.get(sheet_id)
@@ -216,13 +215,12 @@ class Sheets:
         return self.get(sheet_id)
 
     def _changed(self, deadline_ids: set[int]) -> None:
-        """The owner changed these deadlines: the forum takes them quietly."""
+        """The owner changed these deadlines: they are no news."""
         if deadline_ids and self.on_change is not None:
             self.on_change({f"dl:{deadline_id}" for deadline_id in deadline_ids})
 
     def remove_own(self, sheet_id: int) -> list[dict] | None:
-        """An own sheet deleted with every version of it: the rows deleted (the forum's posts of them go too), or
-        None when it is no own sheet."""
+        """An own sheet deleted with every version of it: the rows deleted, or None when it is no own sheet."""
         sheet = self.get(sheet_id)
         if sheet is None or sheet["chat_id"] != OWN_CHAT:
             return None
@@ -241,7 +239,7 @@ class Sheets:
         return chain
 
     def waiting(self) -> list[dict]:
-        """Sheets the forum has not got yet, oldest first."""
+        """Sheets not published yet, oldest first."""
         return [dict(row) for row in self.db.execute("select * from sheets where status = 'new' order by id")]
 
     def first(self, sheet: dict) -> dict:
@@ -275,9 +273,10 @@ class Sheets:
                                (since,))
         return {row["course"] for row in rows}
 
-    def posted(self, sheet_id: int, post_id: int) -> None:
+    def posted(self, sheet_id: int) -> None:
+        """Published (D69)."""
         with self.db:
-            self.db.execute("update sheets set status = 'posted', post_id = ? where id = ?", (post_id, sheet_id))
+            self.db.execute("update sheets set status = 'posted' where id = ?", (sheet_id,))
 
     def file_gone(self) -> str:
         """The reason a sheet failed when its file is gone, for the Mini App: kept in the row, so in its language
@@ -311,7 +310,7 @@ class Sheets:
                                "and created_at >= ? order by id desc", (sheet["id"], sheet["chat_id"], since))
         return next((dict(row) for row in rows if self._latest(row["id"]) and self.same(sheet, dict(row))), None)
 
-    # --- preparing for the forum ---------------------------------------------------------------
+    # --- preparing for publishing ---------------------------------------------------------------
 
     async def prepare(self, sheet_id: int) -> dict | None:
         """Read the sheet, find what it updates, and with `pdf_content` let the model read it; once. None when its
@@ -320,7 +319,7 @@ class Sheets:
         if sheet is not None and self.library is not None:
             try:
                 await self._shelve(sheet)
-            except Exception:  # the forum gets the sheet all the same
+            except Exception:  # the sheet is published all the same
                 log.exception("sheet %d did not go to the library", sheet_id)
         return sheet
 
@@ -434,13 +433,11 @@ class Sheets:
                                (f"dl:{deadline_id}",)).fetchone() is not None
 
     def _set_due(self, sheet: dict, due: str | None, assumed: bool, due_at: str | None) -> None:
-        """The sheet's date as it is now; a posted sheet whose date changed needs its caption anew (`stale`)."""
+        """The sheet's date as it is now."""
         if (sheet["due"], bool(sheet["due_assumed"]), sheet["due_at"]) == (due, assumed, due_at):
             return
         self.db.execute("update sheets set due = ?, due_assumed = ?, due_at = ? where id = ?",
                         (due, int(assumed), due_at, sheet["id"]))
-        if sheet["status"] == "posted":
-            self.stale.add(sheet["id"])
 
     def _settle(self, sheet: dict, due: str | None, told: dict | None = None) -> set[int]:
         """The sheet's real date (None: no date at all): the mark goes, and its assumed deadlines move to the one that
@@ -477,7 +474,7 @@ class Sheets:
 
     def follow(self) -> MidtermChanges:
         """Schedule.followers: the assumed due dates of the recent sheets follow the timetable and give way to real
-        ones; what changed, for the Дедлайны topic."""
+        ones; what changed, as no news."""
         changes = MidtermChanges()
         since = clock.local_iso(self.now() - FOLLOW_WINDOW)
         rows = self.db.execute(
@@ -589,7 +586,7 @@ class Sheets:
         """What changed against the older version, from the diff alone (D14)."""
         changed = pdf.diff(old, new, DIFF_CHARS)
         if not changed:  # a scan has no text to compare
-            return tr(self.settings.get("forum_language"), "The text is the same.", "Текст не изменился.") \
+            return tr(self.settings.get("miniapp_language"), "The text is the same.", "Текст не изменился.") \
                 if old and new else None
         prompt = "\n".join(self._context(sheet) + ["", "Changed lines:", changed])
         try:
@@ -606,15 +603,14 @@ class Sheets:
         return str(answer.get("changes") or "").strip()[:CHANGES_CHARS] or None
 
     def _prompt(self, system: str) -> str:
-        """A system prompt asking for the forum's language."""
-        return system.format(**PROMPT_WORDS[self.settings.get("forum_language")])
+        """A system prompt asking for the app's language."""
+        return system.format(**PROMPT_WORDS[self.settings.get("miniapp_language")])
 
     # --- the owner's joining (the Mini App) -------------------------------------------------------
 
-    async def join(self, sheet_id: int, previous_id: int) -> tuple[dict, int]:
-        """Make a sheet posted as new a newer version of another one: (the sheet now, its own post to delete).
-        ValueError (with a Phrase) when it cannot be: a sheet with versions of its own, the same sheet, its file
-        gone."""
+    async def join(self, sheet_id: int, previous_id: int) -> dict:
+        """Make a sheet published as new a newer version of another one: the sheet now. ValueError (with a Phrase)
+        when it cannot be: a sheet with versions of its own, the same sheet."""
         sheet, older = self.get(sheet_id), self.get(previous_id)
         if sheet is None or older is None or sheet["status"] != "posted" or older["status"] != "posted":
             raise ValueError(Phrase("no such sheet", "такого листка нет"))
@@ -624,21 +620,16 @@ class Sheets:
         older = self.versions(self.first(older))[-1]  # the newest version of the other sheet
         if self.first(older)["id"] == sheet_id:
             raise ValueError(Phrase("it is the same sheet", "это тот же листок"))
-        if self.files.by_hash(sheet["sha256"]) is None:
-            raise ValueError(Phrase("the sheet's file is deleted already (14 days passed): nothing to put into the old "
-                                    "message", "файл листка уже удалён (прошло 14 дней): заменить файл в старом "
-                                    "сообщении нечем"))
         changes = None
         if self.chat_settings.get(sheet["chat_id"], "pdf_content"):
             changes = await self._describe(sheet, older["text"] or "", sheet["text"] or "")
-        own_post = sheet["post_id"]
         with self.db:
-            self.db.execute("update sheets set previous = ?, version = ?, changes = ?, post_id = ? where id = ?",
-                            (older["id"], older["version"] + 1, changes, older["post_id"], sheet_id))
+            self.db.execute("update sheets set previous = ?, version = ?, changes = ? where id = ?",
+                            (older["id"], older["version"] + 1, changes, sheet_id))
             self._inherit(older, sheet)
             touched = self._follow(self.get(sheet_id), MidtermChanges())
         self._changed(touched)
-        return self.get(sheet_id), own_post
+        return self.get(sheet_id)
 
     def listing(self) -> list[dict]:
         """The Листочки screen: every sheet with its versions, the newest first."""

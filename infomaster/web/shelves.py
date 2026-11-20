@@ -328,7 +328,7 @@ async def add_sheet(request: web.Request) -> web.Response:
     change_id = connector.journal("add_sheet", {"sheet_id": sheet_id}, summary, undo) if connector else None
     try:
         await topic.publish()
-    except Exception:  # the forum takes the sheet at its next run
+    except Exception:  # published at the next run
         log.exception("the own sheet %d is not posted yet", sheet_id)
     return _answer(request, {"id": sheet_id, "change": {"id": change_id, "summary": summary,
                                                         "undo": undo is not None, "note": ""}})

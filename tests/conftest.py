@@ -1,4 +1,3 @@
-import asyncio
 import datetime as dt
 
 import pytest
@@ -6,7 +5,6 @@ import pytest
 from infomaster import clock
 from infomaster.collectors.inbox import Inbox
 from infomaster.collectors.ruz import Ruz
-from infomaster.i18n import Alert, say, tr
 from infomaster.llm.budget import Budget
 from infomaster.llm.journal import Journal
 from infomaster.processing.deadlines import Deadlines
@@ -61,106 +59,6 @@ class Clock:
 
     def __call__(self) -> dt.datetime:
         return self.moment
-
-
-class FakeForum:
-    """The bot's forum: posts are kept by id; every post is HTML. Its language is Russian, as the tests of the topics
-    were written; the English texts have tests of their own (lang = "en")."""
-
-    def __init__(self, lang: str = "ru"):
-        self.lang = lang
-        self.messages: dict[int, tuple[str, str]] = {}  # msg_id -> (topic, text)
-        self.buttons: dict[int, list] = {}
-        self.files: dict[int, tuple[bytes, str]] = {}  # msg_id -> (the file's bytes, its name)
-        self.replies: dict[int, int] = {}              # msg_id -> the message it answers
-        self.pinned, self.edited, self.deleted = [], [], []
-        self.notified: set[int] = set()  # the posts sent with a notification (D55): the rest go silently
-        self.next_id = 100
-        self.tasks: list[asyncio.Task] = []
-
-    def tr(self, en, ru):
-        return tr(self.lang, en, ru)
-
-    pages = False  # the bot's links to a message's page in the Mini App (D50); off: the t.me link as before
-
-    def message_url(self, chat_id, msg_id):
-        return f"https://t.me/example_bot?start=m-{chat_id}-{msg_id}" if self.pages and chat_id is not None else None
-
-    async def post(self, topic, text, buttons=None, *, html=False, reply_to=None, notify=False):
-        assert html
-        loud = notify or isinstance(text, Alert)
-        text = say(text, self.lang)
-        self.next_id += 1
-        if loud:
-            self.notified.add(self.next_id)
-        self.messages[self.next_id] = (topic, text)
-        self.buttons[self.next_id] = buttons
-        if reply_to is not None:
-            assert self.messages[reply_to][0] == topic
-            self.replies[self.next_id] = reply_to
-        return self.next_id
-
-    async def post_file(self, topic, path, name, caption):
-        msg_id = await self.post(topic, caption, html=True)
-        self.files[msg_id] = (path.read_bytes(), name)
-        return msg_id
-
-    async def edit_file(self, msg_id, path, name, caption):
-        if not await self.edit(msg_id, caption, html=True):
-            return False
-        self.files[msg_id] = (path.read_bytes(), name)
-        return True
-
-    async def edit(self, msg_id, text, *, html=False):
-        if msg_id not in self.messages:
-            return False
-        self.messages[msg_id] = (self.messages[msg_id][0], text)
-        self.edited.append(msg_id)
-        return True
-
-    async def delete(self, msg_ids):
-        for msg_id in msg_ids:
-            self.messages.pop(msg_id, None)
-            self.files.pop(msg_id, None)
-        self.deleted += msg_ids
-
-    async def pin(self, msg_id):
-        self.pinned.append(msg_id)
-
-    def texts(self, topic):
-        return [text for t, text in self.messages.values() if t == topic]
-
-    def spawn(self, coro):
-        self.tasks.append(asyncio.ensure_future(coro))
-
-    async def settle(self):
-        """Wait for what was spawned, also what that spawned."""
-        while self.tasks:
-            tasks, self.tasks = self.tasks, []
-            await asyncio.gather(*tasks)
-
-
-class Press:
-    """Telethon's CallbackQuery event, as much of it as the handlers use: the button's data, who, under which post."""
-
-    def __init__(self, pattern, data: bytes, sender_id: int = 42, message_id: int | None = None):
-        self.sender_id, self.message_id, self.pattern_match = sender_id, message_id, pattern.match(data)
-        self.answers, self.edits = [], []
-
-    async def answer(self, text="", alert=False):
-        self.answers.append((text, alert))
-
-    async def edit(self, buttons=None):
-        self.edits.append(buttons)
-
-
-def labels(buttons) -> list[list[tuple[str, bytes]]]:
-    return [[(button.text, button.type.data) for button in row] for row in buttons or []]
-
-
-@pytest.fixture
-def forum():
-    return FakeForum()
 
 
 @pytest.fixture

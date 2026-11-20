@@ -349,7 +349,7 @@ class Data:
                 "study": item["study"], "posted_at": item["posted_at"], "from": where}
 
     def news_list(self) -> dict:
-        """The live news in rank order, as Tablo and the forum's list have them."""
+        """The live news in rank order, as Tablo has them."""
         if self.news is None:
             return {"items": [], "ttl_hours": self.ttl_hours()}
         live = self.news.live(self.schedule.now(), self.ttl_hours())

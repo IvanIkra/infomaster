@@ -193,7 +193,7 @@ class Events:
                         (clock.local_iso(at), class_uid))
         return in_force
 
-    # --- the owner's choices (the forum buttons, the Mini App) ----------------------------
+    # --- the owner's choices (the web app, Claude) -----------------------------------------
 
     def set_required(self, event_id: int, required: bool) -> dict | None:
         """Main or optional calendar for the newest version; returns it. A correction stays a class: main."""

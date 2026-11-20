@@ -119,7 +119,7 @@ class Budget:
             self._announce(level)
 
     def raise_today(self, usd: float) -> float:
-        """The button in the System topic: more money until midnight. Returns today's new limit."""
+        """«Machine»: more money until midnight. Returns today's new limit."""
         self._put_today("llm.raised", self._today("llm.raised", 0.0) + usd)
         self.limit_changed()
         return self.limit()

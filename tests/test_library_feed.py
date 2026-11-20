@@ -13,7 +13,7 @@ from infomaster import clock
 from infomaster.collectors.files import NotNow
 from infomaster.library import MAX_FILE, Library
 from infomaster.library.feed import ChatMaterials, file_name, first_url, from_bot
-from infomaster.outputs.forum import Forum
+from infomaster.outputs.bot import Bot
 from infomaster.processing.batches import SCHEMA, STUDY_SCHEMA, Batches, Changes, check
 from infomaster.processing.news import News
 from infomaster.settings import ChatSettings, Settings
@@ -204,11 +204,13 @@ async def test_other_chats_are_not_asked(batches, library):
 # --- the bot -----------------------------------------------------------------------------------------
 
 @pytest.fixture
-def bot(store, budget, library, tmp_path):
+def bot(library, tmp_path):
     env = SimpleNamespace(api_id=1, api_hash="0" * 32, owner_id=OWNER, public_url="https://example.test")
-    forum = Forum(env, store, budget, session=tmp_path / "bot")
-    forum.on_material = lambda message, download: from_bot(library, message, download)
-    return forum
+    lang = ["en"]
+    bot = Bot(env, session=tmp_path / "bot", lang=lambda: lang[0])
+    bot.on_material = lambda message, download: from_bot(library, message, download)
+    bot.language = lang
+    return bot
 
 
 def private(msg_id, text="", media=None, sender=OWNER, data=b"", **extra) -> SimpleNamespace:
@@ -259,7 +261,7 @@ async def test_bot_takes_the_owners_messages(bot, library):
     await bot._on_private(voice)
     assert library.items(kind="audio")[0]["media_type"] == "audio/ogg"
 
-    bot.budget.settings.set("forum_language", "ru")
+    bot.language[0] = "ru"
     link = private(5, "Запись семинара https://video.example.org/s5")
     await bot._on_private(link)
     assert library.items(kind="link")[0]["url"] == "https://video.example.org/s5"
@@ -279,3 +281,18 @@ async def test_bot_takes_the_owners_messages(bot, library):
         await bot._on_private(ignored)
         ignored.respond.assert_not_awaited()
     assert len(library.items()) == 6
+
+
+async def test_start_answers_with_the_web_app(bot):
+    """D69: the bot has no forum and no Mini App: /start, an old link's too, gives the web app's address."""
+    bot.client = AsyncMock()  # the owner's menu button is reset
+    for sender, text in ((OWNER, "/start"), (OWNER, "/start ev-0123456789ab"), (99, "/start")):
+        event = SimpleNamespace(sender_id=sender, raw_text=text, respond=AsyncMock(), get_input_sender=AsyncMock())
+        await bot._on_start(event)
+        if sender != OWNER:
+            event.respond.assert_not_awaited()
+            continue
+        text, = event.respond.await_args.args
+        [button] = event.respond.await_args.kwargs["buttons"]
+        assert text == "infomaster is a web app: https://example.test/web/"
+        assert button.type.url == "https://example.test/web/"

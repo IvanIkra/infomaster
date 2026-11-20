@@ -339,7 +339,6 @@ def test_new_tables_join_an_older_database(tmp_path):
 
 
 def test_all_day_event_in_the_agenda(loaded, now):
-    from infomaster.outputs.timetable import moment
     event_id = add(loaded, now, start="2026-10-21", end=None, room="S301")
     [item] = [i for i in loaded.agenda(dt.date(2026, 10, 20))["items"] if i["title"] == "Alg consult"]
     assert (item["start"], item["end"], item["event"]["start"], item["event"]["end"]) == (
@@ -347,4 +346,3 @@ def test_all_day_event_in_the_agenda(loaded, now):
     assert item["event"]["id"] == event_id
     from infomaster.processing.schedule import event_key
     assert item["key"] == event_key(item["uid"]) and len(item["key"]) == 12  # a link from the calendar finds it
-    assert moment("2026-10-21", "en") == "Wed 21.10" and moment("2026-10-21T18:10:00", "en") == "Wed 21.10 18:10"

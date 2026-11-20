@@ -22,7 +22,7 @@ const TEXTS = {
   libraryOff: ["The library is off.", "Библиотека выключена."],
   versionsN: ["{n} versions", "версий: {n}"],
   yours: ["yours", "ваш"],
-  waiting: ["waiting for the forum", "ждёт форума"],
+  waiting: ["not read yet", "ещё не прочитан"],
   notRead: ["not read", "не прочитан"],
   due: ["due", "срок"],
   noDue: ["no due date", "срока нет"],

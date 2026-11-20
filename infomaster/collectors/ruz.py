@@ -1,7 +1,7 @@
 """The RUZ timetable in iCal (§5.2, §4.1, §4.2): classes of about five weeks, polled every hour.
 
 The link (`RUZ_ICAL_URL`) is a secret and optional: without it the source says so and everything else works. It never
-goes into the status, the log or the System topic: HTTP errors are told by their status, other errors with the link
+goes into the status, the log or the notices: HTTP errors are told by their status, other errors with the link
 cut out. A poll sends the saved ETag and takes 304 for "nothing new"; a failed poll keeps the classes it had.
 
 Each VEVENT is read the way Tablo reads it (§4.2): the cleaned SUMMARY is the subject, start and end are Moscow local
@@ -39,7 +39,7 @@ log = logging.getLogger(__name__)
 
 POLL_EVERY = 3600           # seconds (§4.1)
 TIMEOUT = 60                # seconds
-STALE_AFTER = dt.timedelta(hours=12)  # failing longer than this is told to the System topic (§4.5)
+STALE_AFTER = dt.timedelta(hours=12)  # failing longer than this is told to the owner (§4.5)
 ETAG_KEY = "ruz.etag"
 SIZE_KEY = "ruz.size"       # classes in the last feed that came; a 304 leaves it as it was
 HIDDEN_URL = "<RUZ_ICAL_URL>"
@@ -128,7 +128,7 @@ class Ruz:
     def __init__(self, url: str, store: Store, now: Callable[[], dt.datetime] = clock.now_utc):
         self.url, self.store, self.db, self.now = url, store, store.db, now
         self.on_poll: Callable[[Diff], Awaitable[None]] | None = None  # after every good poll, also a 304
-        self.notify: Callable[[Phrase], None] | None = None            # a line for the System topic
+        self.notify: Callable[[Phrase], None] | None = None            # a line for the owner (Web Push)
         self.ok_at: str | None = None
         self.error: str | None = None if url else "RUZ_ICAL_URL is not set"
         self._failing_since: dt.datetime | None = None
@@ -154,7 +154,7 @@ class Ruz:
         return self.db.execute("select count(*) n from classes where gone_at is null").fetchone()["n"]
 
     def size(self) -> int:
-        """Classes in the last feed that came: the status and the System topic. The past ones kept are not
+        """Classes in the last feed that came: the status and the notices. The past ones kept are not
         counted, so the number does not grow over a semester; a legitimately empty feed counts 0."""
         return self.store.get_json(SIZE_KEY, 0)
 

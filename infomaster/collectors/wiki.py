@@ -43,7 +43,7 @@ NEXT_KEY = "wiki.next"      # the msg_id of the next notice: negative, counting 
 POLL_EVERY = 3 * 3600       # seconds
 TIMEOUT = aiohttp.ClientTimeout(total=60)
 SENDER = "Course wiki"
-STALE_AFTER = dt.timedelta(days=1)  # a page failing longer than this is told to the System topic
+STALE_AFTER = dt.timedelta(days=1)  # a page failing longer than this is told to the owner
 LINK = re.compile(r"\[(https?://[^\s\]]+)\s*([^\]]*)\]")
 HEADING = re.compile(r"^(={2,6})\s*(.*?)\s*\1\s*$")
 COMMENT = re.compile(r"<!--.*?(-->|$)", re.S)

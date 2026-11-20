@@ -60,7 +60,7 @@ from ..settings import BATCH_HOURS, SHEET_LABEL_CHARS, SPECS, ChatSettings, Sett
 from . import ical_feed
 from .api import SOURCES_KEY, Sources
 from .reminders import DeadlineReminders
-from .sheets import SheetTopic
+from .sheets import SheetPublisher
 
 STATIC = Path(__file__).with_name("miniapp")
 INIT_DATA_TTL = 24 * 3600  # seconds; Telegram signs initData once, when the Mini App opens
@@ -75,11 +75,11 @@ SCHEDULE_KEY = web.AppKey("schedule", Schedule)
 HSEAPP_KEY = web.AppKey("hseapp", HseApp)
 DEADLINES_KEY = web.AppKey("deadlines", DeadlineList)
 SETTINGS_KEY = web.AppKey("settings", Settings)
-SHEETS_KEY = web.AppKey("sheets", SheetTopic)
+SHEETS_KEY = web.AppKey("sheets", SheetPublisher)
 REMINDERS_KEY = web.AppKey("reminders", DeadlineReminders)
 GRADES_KEY = web.AppKey("grades", Grades)
 TWIN_KEY = web.AppKey("twin", Twin)
-GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "forum_language", "miniapp_language",
+GENERAL = ("batch_hours", "news_ttl_hours", "llm_prices", "miniapp_language",
            "about_me", "wiki_pages")  # of no other screen
 GRADE_SETTINGS = {"student": "grades_student", "sheets": "grades_sheets", "window_days": "grades_window_days"}
 PDF_LIMITS = ("pdf_pages", "pdf_tokens")
@@ -139,8 +139,8 @@ def bad_request(request: web.Request, en: str, ru: str) -> web.HTTPBadRequest:
 
 @web.middleware
 async def owner_only(request: web.Request, handler):
-    if not request.path.startswith("/app/api/"):
-        return await handler(request)
+    if not request.path.startswith("/app/api/") or request.match_info.http_exception is not None:
+        return await handler(request)  # not the Mini App's API, or no such route (none at all without it, D69)
     scheme, _, init_data = request.headers.get("Authorization", "").partition(" ")
     env = request.app[ENV_KEY]
     user = check_init_data(init_data, env.bot_token) if scheme == "tma" else None
@@ -154,6 +154,11 @@ async def owner_only(request: web.Request, handler):
 
 async def index(request: web.Request) -> web.FileResponse:
     return web.FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
+
+
+async def to_web(request: web.Request) -> web.Response:
+    """Without the forum the web app has the Mini App's place (D69): an old link or menu button leads there."""
+    raise web.HTTPFound("/web/")
 
 
 async def to_index(request: web.Request) -> web.Response:
@@ -1249,88 +1254,100 @@ def page(lang: str, title: str, text: str, hint: str, status: int = 200) -> web.
 def create_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_settings: ChatSettings,
                sources: Sources, dictionary: Subjects, timetable: Schedule, hse: HseApp,
                merged: DeadlineList, settings: Settings | None = None,
-               sheet_topic: SheetTopic | None = None, grade_list: Grades | None = None, twin: Twin | None = None,
+               sheet_topic: SheetPublisher | None = None, grade_list: Grades | None = None, twin: Twin | None = None,
                calendar_feed: ical_feed.CalendarFeed | None = None,
                deadline_reminders: DeadlineReminders | None = None,
-               library_links: Links | None = None) -> web.Application:
+               library_links: Links | None = None, ui: bool = True) -> web.Application:
     """The Mini App's port; without the settings and the sheets' topic the Листочки screen has no API, without the
     grades the Оценки screen has none, without the calendar feed there are no public feeds. With the library's links
-    come their routes (/library/<token>) and the Materials screen's API."""
+    come their routes (/library/<token>) and the Materials screen's API.
+
+    Without `ui` (no FORUM=on, D69) the web app has the Mini App's place: its page and API are not served and /app
+    leads to /web/, but the port keeps what the rest leans on: the services under their keys (the web app's «Machine»
+    and the connector's tools call the handlers here), the HSE App X callback, the library's links and the feeds."""
     app = web.Application(middlewares=[owner_only], client_max_size=UPLOAD_MAX_SIZE + 2**20)  # an own sheet's PDF
     app[ENV_KEY], app[BUDGET_KEY], app[JOURNAL_KEY] = env, budget, journal
     app[INBOX_KEY], app[CHAT_SETTINGS_KEY], app[SOURCES_KEY] = inbox, chat_settings, sources
     app[SUBJECTS_KEY], app[SCHEDULE_KEY], app[HSEAPP_KEY], app[DEADLINES_KEY] = dictionary, timetable, hse, merged
     app[SETTINGS_KEY], app[SHEETS_KEY] = settings, sheet_topic
-    app.router.add_get("/app", to_index)
-    app.router.add_get("/app/", index)
-    app.router.add_get("/app/api/me", me)
-    app.router.add_get("/app/api/chats", chats)
-    app.router.add_patch("/app/api/chats/{chat_id}", update_chat)
-    app.router.add_get("/app/api/chats/{chat_id}/senders", senders)
+
+    def route(method: str, path: str, handler) -> None:
+        if ui:
+            app.router.add_route(method.upper(), path, handler)
+
+    if not ui:
+        app.router.add_get("/app", to_web)
+        app.router.add_get("/app/", to_web)
+    route("get", "/app", to_index)
+    route("get", "/app/", index)
+    route("get", "/app/api/me", me)
+    route("get", "/app/api/chats", chats)
+    route("patch", "/app/api/chats/{chat_id}", update_chat)
+    route("get", "/app/api/chats/{chat_id}/senders", senders)
     if twin is not None:
         app[TWIN_KEY] = twin
-        app.router.add_post("/app/api/twin/login", twin_login)
-        app.router.add_post("/app/api/twin/cancel", twin_cancel)
-        app.router.add_post("/app/api/twin/logout", twin_logout)
-    app.router.add_get("/app/api/llm", llm)
-    app.router.add_post("/app/api/llm/raise", raise_llm)
+        route("post", "/app/api/twin/login", twin_login)
+        route("post", "/app/api/twin/cancel", twin_cancel)
+        route("post", "/app/api/twin/logout", twin_logout)
+    route("get", "/app/api/llm", llm)
+    route("post", "/app/api/llm/raise", raise_llm)
     if settings is not None:
-        app.router.add_patch("/app/api/images", update_images)
-        app.router.add_patch("/app/api/llm", update_llm)
-        app.router.add_get("/app/api/general", general)
-        app.router.add_patch("/app/api/general", update_general)
-    app.router.add_get("/app/api/subjects", subjects)
-    app.router.add_put("/app/api/subjects", put_subject)
-    app.router.add_delete("/app/api/subjects", delete_subject)
-    app.router.add_get("/app/api/agenda", agenda)
-    app.router.add_get("/app/api/message", message)
-    app.router.add_post("/app/api/events", add_event)
-    app.router.add_patch("/app/api/events/{event_id}", update_event)
-    app.router.add_delete("/app/api/events/{event_id}", delete_event)
-    app.router.add_post("/app/api/corrections", correct_class)
-    app.router.add_get("/app/api/deadlines", deadlines)
-    app.router.add_post("/app/api/deadlines", add_deadline)
-    app.router.add_patch("/app/api/deadlines/{uid}", edit_deadline)
-    app.router.add_delete("/app/api/deadlines/{uid}", delete_deadline)
-    app.router.add_delete("/app/api/hidden/{uid}", unhide_deadline)
+        route("patch", "/app/api/images", update_images)
+        route("patch", "/app/api/llm", update_llm)
+        route("get", "/app/api/general", general)
+        route("patch", "/app/api/general", update_general)
+    route("get", "/app/api/subjects", subjects)
+    route("put", "/app/api/subjects", put_subject)
+    route("delete", "/app/api/subjects", delete_subject)
+    route("get", "/app/api/agenda", agenda)
+    route("get", "/app/api/message", message)
+    route("post", "/app/api/events", add_event)
+    route("patch", "/app/api/events/{event_id}", update_event)
+    route("delete", "/app/api/events/{event_id}", delete_event)
+    route("post", "/app/api/corrections", correct_class)
+    route("get", "/app/api/deadlines", deadlines)
+    route("post", "/app/api/deadlines", add_deadline)
+    route("patch", "/app/api/deadlines/{uid}", edit_deadline)
+    route("delete", "/app/api/deadlines/{uid}", delete_deadline)
+    route("delete", "/app/api/hidden/{uid}", unhide_deadline)
     if settings is not None and sheet_topic is not None:
-        app.router.add_get("/app/api/sheets", sheets)
-        app.router.add_patch("/app/api/sheets", update_sheets)
-        app.router.add_post("/app/api/sheets", add_sheet)
-        app.router.add_patch("/app/api/sheets/{sheet_id}", edit_sheet)
-        app.router.add_delete("/app/api/sheets/{sheet_id}", delete_sheet)
-        app.router.add_post("/app/api/sheets/{sheet_id}/join", join_sheet)
+        route("get", "/app/api/sheets", sheets)
+        route("patch", "/app/api/sheets", update_sheets)
+        route("post", "/app/api/sheets", add_sheet)
+        route("patch", "/app/api/sheets/{sheet_id}", edit_sheet)
+        route("delete", "/app/api/sheets/{sheet_id}", delete_sheet)
+        route("post", "/app/api/sheets/{sheet_id}/join", join_sheet)
     if settings is not None and deadline_reminders is not None:
         app[REMINDERS_KEY] = deadline_reminders
-        app.router.add_get("/app/api/reminders", reminders)
-        app.router.add_patch("/app/api/reminders", update_reminders)
+        route("get", "/app/api/reminders", reminders)
+        route("patch", "/app/api/reminders", update_reminders)
     if grade_list is not None:
         app[GRADES_KEY] = grade_list
-        app.router.add_get("/app/api/grades", grade_sheets)
-        app.router.add_patch("/app/api/grades", update_grades)
-        app.router.add_post("/app/api/grades/items", add_grade)
-        app.router.add_patch("/app/api/grades/items/{grade}", change_grade)
-        app.router.add_delete("/app/api/grades/items/{grade}", drop_grade)
-        app.router.add_get("/app/api/grades/sheets/{sid}", gradebook)
-        app.router.add_patch("/app/api/grades/sheets/{sid}", update_gradebook)
-        app.router.add_post("/app/api/grades/sheets/{sid}/read", read_gradebook)
-        app.router.add_put("/app/api/grades/sheets/{sid}/tabs/{tab}", set_layout)
-        app.router.add_delete("/app/api/grades/sheets/{sid}/tabs/{tab}", clear_layout)
+        route("get", "/app/api/grades", grade_sheets)
+        route("patch", "/app/api/grades", update_grades)
+        route("post", "/app/api/grades/items", add_grade)
+        route("patch", "/app/api/grades/items/{grade}", change_grade)
+        route("delete", "/app/api/grades/items/{grade}", drop_grade)
+        route("get", "/app/api/grades/sheets/{sid}", gradebook)
+        route("patch", "/app/api/grades/sheets/{sid}", update_gradebook)
+        route("post", "/app/api/grades/sheets/{sid}/read", read_gradebook)
+        route("put", "/app/api/grades/sheets/{sid}/tabs/{tab}", set_layout)
+        route("delete", "/app/api/grades/sheets/{sid}/tabs/{tab}", clear_layout)
     if library_links is not None:
         add_library_routes(app, library_links)  # the library and its links under LIBRARY_KEY and LINKS_KEY
-        app.router.add_get("/app/api/library", library_home)
-        app.router.add_get("/app/api/library/course", library_course)
-        app.router.add_get("/app/api/library/inbox", library_inbox)
-        app.router.add_get("/app/api/library/classes", library_classes)
-        app.router.add_post("/app/api/library/files", library_upload)
-        app.router.add_post("/app/api/library/items", library_add)
-        app.router.add_get("/app/api/library/items/{item_id}", library_item)
-        app.router.add_patch("/app/api/library/items/{item_id}", library_move)
-        app.router.add_delete("/app/api/library/items/{item_id}", library_remove)
-    app.router.add_get("/app/api/hseapp", hseapp)
-    app.router.add_patch("/app/api/hseapp", update_hseapp)
-    app.router.add_post("/app/api/hseapp/link", hseapp_link)
-    app.router.add_post("/app/api/hseapp/login", hseapp_login)
+        route("get", "/app/api/library", library_home)
+        route("get", "/app/api/library/course", library_course)
+        route("get", "/app/api/library/inbox", library_inbox)
+        route("get", "/app/api/library/classes", library_classes)
+        route("post", "/app/api/library/files", library_upload)
+        route("post", "/app/api/library/items", library_add)
+        route("get", "/app/api/library/items/{item_id}", library_item)
+        route("patch", "/app/api/library/items/{item_id}", library_move)
+        route("delete", "/app/api/library/items/{item_id}", library_remove)
+    route("get", "/app/api/hseapp", hseapp)
+    route("patch", "/app/api/hseapp", update_hseapp)
+    route("post", "/app/api/hseapp/link", hseapp_link)
+    route("post", "/app/api/hseapp/login", hseapp_login)
     app.router.add_get(CALLBACK_PATH, hseapp_callback)
     if calendar_feed is not None:
         ical_feed.add_routes(app, env.calendar_public_secret, calendar_feed, ical_feed.PUBLIC_FEEDS)

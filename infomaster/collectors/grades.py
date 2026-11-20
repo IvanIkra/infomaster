@@ -13,9 +13,9 @@ sheet read and says what came of it (Read).
 Failures count per sheet: the download, a file that is no workbook (a sheet closed to the link gives a login page,
 a deleted or private Dropbox link an HTML page),
 no own row in any tab (a wrong name, or the row is not there yet: the grades kept are not dropped for it), the layout
-(Haiku, the limit). A failed sheet keeps its grades as they were. A sheet failing for 12 hours is told to the System
-topic once (with a notification, D55), and once more when it reads again; the first read of a sheet is told there
-too. New grades are not posted anywhere: the Mini App and the API show them (D55).
+(Haiku, the limit). A failed sheet keeps its grades as they were. A sheet failing for 12 hours is told to the owner
+once (pushed), and once more when it reads again; the first read of a sheet is told too. New grades are not pushed:
+the web app and the API show them (D55).
 """
 
 import asyncio
@@ -46,8 +46,8 @@ TIMEOUT = 120               # seconds
 STALE_AFTER = dt.timedelta(hours=12)
 TOP_ROWS = 15               # rows of a tab above the own row the model sees: the header is somewhere among them
 COURSE_FROM_TITLE = 8       # characters of the sheet's title that name the course when its label is not set
-NO_ROW = Phrase("the own row is on no tab: check the name in the Mini App, Settings → Gradebooks",
-                "своей строки нет ни на одной вкладке: проверьте ФИО в Mini App, Настройки → Таблицы оценок")
+NO_ROW = Phrase("the own row is on no tab: check the name in the web app, Machine → Gradebooks",
+                "своей строки нет ни на одной вкладке: проверьте ФИО в приложении, Машина → Таблицы оценок")
 
 
 def sheet_id(url: str) -> str:
@@ -215,7 +215,7 @@ class GradeSheets:
     def __init__(self, settings: Settings, now: Callable[[], dt.datetime] = clock.now_utc):
         self.settings, self.now = settings, now
         self.on_sheet: Callable[[Sheet], Awaitable[Read]] | None = None
-        self.notify: Callable[[Phrase], None] | None = None        # a line for the System topic
+        self.notify: Callable[[Phrase], None] | None = None        # a line for the owner (Web Push)
         self.sheets: dict[str, SheetStatus] = {}                    # by sheet id, the configured sheets only
         self._wake = asyncio.Event()
 
@@ -295,9 +295,9 @@ class GradeSheets:
         self._recovered(st)
         if read.first:
             self._notify(Phrase(f"The grade sheet «{st.name}» is connected: tabs with the own row: {len(views)}, "
-                                f"grades: {read.items}. They are in the Mini App, Study.",
+                                f"grades: {read.items}. They are in the course lenses of the web app.",
                                 f"Таблица оценок «{st.name}» подключена: вкладок со своей строкой — {len(views)}, "
-                                f"оценок — {read.items}. Они в Mini App, «Учёба»."))
+                                f"оценок — {read.items}. Они в линзах курсов в приложении."))
 
     def _failed(self, st: SheetStatus, error: str | Phrase) -> None:
         st.error = error

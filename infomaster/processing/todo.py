@@ -1,7 +1,7 @@
 """Own and hidden deadlines (§5.4, D8): the port of Tablo's todo.py, the side HA's to-do lists see.
 
-HA shows every deadline of the merged list in two to-do lists, "Tablo · Study" and "Tablo · Personal", and the Mini
-App and the forum buttons act the same way:
+HA shows every deadline of the merged list in two to-do lists, "Tablo · Study" and "Tablo · Personal", and the web
+app and Claude act the same way:
 - an item added there is the owner's own deadline (`own_deadlines`, uid `ha-<id>`);
 - ticking off or deleting an own one deletes it; one from a source is hidden for good (`hidden_deadlines`), even when
   the source sends it again: that is how Haiku's mistakes go away. The row it came from is kept too, so a rename of
@@ -29,14 +29,14 @@ OWN_PREFIX = "ha-"
 
 @dataclass(frozen=True)
 class Deadline:
-    """One deadline of the merge (§2.3): Tablo's model plus what the forum needs to find it again."""
+    """One deadline of the merge (§2.3): Tablo's model plus what finds it again."""
     title: str
     due: dt.date
     category: str               # study, personal
     source: str                 # hseapp, ical, mail, tg, ha
     course: str | None = None   # the abbr from the dictionary: the merge compares by it (§5.5)
     key: str = field(default="", compare=False)  # own ones: "ha-<id>", their uid; the others are keyed by content
-    # Which row it is, through renames: dl:<deadlines.id>, hseapp:<id>, ha-<id>. The forum diffs the list by it.
+    # Which row it is, through renames: dl:<deadlines.id>, hseapp:<id>, ha-<id>. The push of news diffs the list by it.
     ref: str = field(default="", compare=False)
     name: str | None = field(default=None, compare=False)  # the course as the source names it, for showing
     assumed: bool = field(default=False, compare=False)    # a sheet's date the service assumed (§6.3)

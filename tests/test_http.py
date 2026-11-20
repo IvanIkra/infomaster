@@ -27,7 +27,7 @@ TWIN = {"telegram": lambda: {"ok_at": None, "error": None, "login_needed": False
 
 
 def env(**extra) -> Env:
-    return Env(api_id=1, api_hash="h", bot_token=BOT_TOKEN, owner_id=OWNER, forum_id=-100, api_token="tok",
+    return Env(api_id=1, api_hash="h", bot_token=BOT_TOKEN, owner_id=OWNER, api_token="tok",
                public_url="https://infomaster.example.ts.net", **extra)
 
 
@@ -152,13 +152,14 @@ async def test_miniapp_general(aiohttp_client, budget, journal, store, schedule,
     assert (await client.patch("/app/api/general", json={"pdf_pages": 3}, headers=owner())).status == 400
     assert (await client.patch("/app/api/general", json={}, headers=owner())).status == 400
 
-    # the languages (D41): English by default, each its own
-    assert (body["forum_language"], body["miniapp_language"], body["languages"]) == ("en", "en", ["en", "ru"])
+    # the language (D41): English by default
+    assert (body["miniapp_language"], body["languages"]) == ("en", ["en", "ru"]) and "forum_language" not in body
     body = await (await client.patch("/app/api/general", json={"miniapp_language": "ru"}, headers=owner())).json()
-    assert (body["forum_language"], body["miniapp_language"]) == ("en", "ru")
+    assert body["miniapp_language"] == "ru"
     assert (await (await client.get("/app/api/me", headers=owner())).json())["language"] == "ru"
-    bad = await client.patch("/app/api/general", json={"forum_language": "de"}, headers=owner())
-    assert bad.status == 400 and settings.get("forum_language") == "en"
+    bad = await client.patch("/app/api/general", json={"miniapp_language": "de"}, headers=owner())
+    assert bad.status == 400 and settings.get("miniapp_language") == "ru"
+    assert (await client.patch("/app/api/general", json={"forum_language": "ru"}, headers=owner())).status == 400
 
     # what the models are told about the student (D52)
     assert body["about_me"] == ""
@@ -238,7 +239,8 @@ def test_env():
     base = {"TG_API_ID": "1", "TG_API_HASH": "h", "TG_BOT_TOKEN": "t", "TG_OWNER_ID": "42",
             "TG_FORUM_ID": "-1001", "API_TOKEN": "a", "PUBLIC_URL": "https://x.ts.net/"}
     loaded = Env.from_environ(base)
-    assert loaded.forum_id == -1001 and loaded.public_url == "https://x.ts.net" and loaded.public_port == 8080
+    assert loaded.public_url == "https://x.ts.net" and loaded.public_port == 8080
+    assert Env.from_environ({k: v for k, v in base.items() if k != "TG_FORUM_ID"}) == loaded  # no forum (D69)
     with pytest.raises(ConfigError, match="TG_BOT_TOKEN"):
         Env.from_environ({**base, "TG_BOT_TOKEN": ""})
     with pytest.raises(ConfigError):
@@ -466,13 +468,11 @@ async def test_miniapp_has_no_summaries(aiohttp_client, budget, journal, store, 
     assert response.status == 400
 
 
-async def test_miniapp_reminders(aiohttp_client, budget, journal, store, schedule, merged, forum, now):
-    from infomaster.outputs.deadlines import DeadlineTopic
+async def test_miniapp_reminders(aiohttp_client, budget, journal, store, schedule, merged, now):
     from infomaster.outputs.reminders import DeadlineReminders
 
     settings = Settings(store)
-    topic = DeadlineTopic(forum, store, schedule.inbox, merged, OWNER, now=now)
-    reminders = DeadlineReminders(forum, store, topic, settings, OWNER, now=now)
+    reminders = DeadlineReminders(store, merged, settings, now=now)
     hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
     client = await aiohttp_client(miniapp.create_app(env(), budget, journal, schedule.inbox, ChatSettings(store),
                                                      TWIN, schedule.subjects, schedule, hse, merged, settings,

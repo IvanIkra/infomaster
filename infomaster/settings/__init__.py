@@ -243,7 +243,7 @@ SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "pdf_tokens": (30_000, _whole(1_000, 200_000, "a number of tokens")),
     # Images read a Moscow day in chats with «Картинки» (D12); inside the LLM limit, off above its 80 % (§7).
     "images_daily": (30, _whole(0, 500, "a number of images")),
-    # Deadline reminders in «Дедлайны» (D47): on the eve, what is due tomorrow; in the morning, what is due today.
+    # Deadline reminders, pushed (D47): on the eve, what is due tomorrow; in the morning, what is due today.
     "deadline_reminders": (True, _flag),
     "reminder_eve": ("20:00", _clock_time),
     "reminder_day": ("09:00", _clock_time),
@@ -251,8 +251,7 @@ SPECS: dict[str, tuple[Any, Callable[[Any], Any]]] = {
     "grades_student": ("", _student),
     "grades_sheets": ([], _grade_sheets),
     "grades_window_days": (7, _whole(1, 60, "a number of days")),  # a grade is new this long: the API for Tablo
-    # What the owner reads (D41): the bot's posts and what the models write for them, and the Mini App.
-    "forum_language": ("en", _language),
+    # What the owner reads (D41): the app, the bot's answers and what the models write for them (a sheet's summary).
     "miniapp_language": ("en", _language),
     # What the student tells the batches about themselves (D52): group, subgroup, English group,
     # electives, so that what is meant for others does not count.

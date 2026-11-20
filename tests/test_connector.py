@@ -566,7 +566,7 @@ async def test_service_tools(tmp_path, aiohttp_client, sent):
     service = Service(env(), tmp_path)  # Telegram clients are made, never connected
     app = miniapp.create_app(service.env, service.budget, service.journal, service.inbox, service.chat_settings,
                              service.sources, service.subjects, service.schedule, service.hseapp, service.merged,
-                             settings=service.settings, sheet_topic=service.sheet_topic, grade_list=service.grades,
+                             settings=service.settings, sheet_topic=service.sheet_publisher, grade_list=service.grades,
                              twin=service.twin, calendar_feed=service.calendar,
                              deadline_reminders=service.reminders)
     library_links.add_routes(app, service.library_links)

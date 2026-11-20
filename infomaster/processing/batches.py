@@ -40,8 +40,8 @@ their classes (§4.4).
 
 Sheets (§6.3, D14): a PDF of a chat message is downloaded when its batch comes (collectors/files.py), and the model
 sees its first page: the text, or for a scan the page itself as a document. The model says which PDFs are sheets, with
-their course, number and due date; they become rows of processing/sheets.py in the same transaction, and the forum
-gets them after the run. A sheet without a date gets the next seminar's, marked assumed in the deadlines the model
+their course, number and due date; they become rows of processing/sheets.py in the same transaction, and are
+published after the run. A sheet without a date gets the next seminar's, marked assumed in the deadlines the model
 sees: a message that tells the real date moves it.
 
 Images (D12): in a chat with «Картинки» on, the image of a message is downloaded when its batch comes and read by
@@ -144,7 +144,7 @@ MAILBOX_HEADER = ("Chat: the student's university mailbox (@edu.hse.ru, study): 
 
 @dataclass
 class Changes:
-    """What one run gave, for the forum."""
+    """What one run gave."""
     news: list[int] = field(default_factory=list)              # new items
     deadlines: list[int] = field(default_factory=list)         # new deadlines, Midterms too
     moved: list[tuple[int, int]] = field(default_factory=list)  # (old, new)
@@ -152,7 +152,7 @@ class Changes:
     events: list[int] = field(default_factory=list)            # new events and corrections of classes
     events_moved: list[tuple[int, int]] = field(default_factory=list)  # (old, new): moved, cancelled, edited
     events_gone: list[int] = field(default_factory=list)       # withdrawn with their messages
-    sheets: list[int] = field(default_factory=list)            # new sheets, waiting for the forum
+    sheets: list[int] = field(default_factory=list)            # new sheets, waiting to be published
 
 
 @dataclass
@@ -618,7 +618,7 @@ class Batches:
         self.news, self.deadlines, self.llm, self.now, self.monotonic = news, deadlines, llm, now, monotonic
         self.schedule, self.events, self.subjects = schedule, schedule.events, schedule.subjects
         self.publish: Callable[[Changes], Awaitable[None]] | None = None  # after every run, also an empty one
-        self.notify: Callable[[Phrase], None] | None = None               # a line for the System topic
+        self.notify: Callable[[Phrase], None] | None = None               # a line for the owner (Web Push)
         self.mail = False  # mail is configured: the mailbox takes its slots like an enabled chat
         self.files: Files | None = None    # PDFs of the messages; without it the model reads their names only
         self.sheets: Sheets | None = None  # where the sheets the model finds go
@@ -677,7 +677,7 @@ class Batches:
         return ready
 
     async def tick(self) -> Changes:
-        """Parse the chats whose slot has come and publish; the forum also drops news that are no longer live."""
+        """Parse the chats whose slot has come and publish."""
         due = {chat_id: slot for chat_id in self._boxes()
                if (slot := self._slot(chat_id)) > self._done().get(str(chat_id), "")}
         return await self.run_chats(self._ordered(due), slots=due)
@@ -690,7 +690,7 @@ class Batches:
                 if slots:
                     self._mark_done(chat_id, slots[chat_id])
             self.ok_at, self.error = clock.local_iso(self.now()), None
-        except BudgetExceeded as e:  # the budget tells the System topic itself; the chats stay due
+        except BudgetExceeded as e:  # the budget tells the owner itself; the chats stay due
             log.info("batches wait for the LLM limit: %s", e)
         except LLMError as e:
             log.warning("batch failed, the messages stay in the queue: %s", e)
@@ -929,7 +929,7 @@ class Batches:
     def _skip(self, chat: dict, message: dict, error: str) -> None:
         """A message the model cannot answer for. It stays in the queue for the next runs of its chat (an answer cut
         short or malformed may come right next time, and a PDF in it may be a sheet), and after SKIP_AFTER failed
-        runs it leaves the queue and the System topic hears about it."""
+        runs it leaves the queue and the owner hears about it."""
         key = f"{chat['source']}:{chat['id']}:{message['msg_id']}"
         failed = self.store.get_json(FAILED_KEY, {})
         failed[key] = failed.get(key, 0) + 1
@@ -947,9 +947,9 @@ class Batches:
         if self.notify is None:
             return
         file = message.get("pdf") or {}
-        pdf_en = f" Its PDF «{file['name']}» may be a sheet: add it by hand in the Mini App." if \
+        pdf_en = f" Its PDF «{file['name']}» may be a sheet: add it by hand in the web app, Sheets." if \
             file.get("sha256") else ""
-        pdf_ru = f" Его PDF «{file['name']}» может быть листочком: добавьте его вручную в Mini App." if \
+        pdf_ru = f" Его PDF «{file['name']}» может быть листочком: добавьте его вручную в приложении, «Листочки»." if \
             file.get("sha256") else ""
         if chat["source"] == "mail":
             sender = message["sender_name"]

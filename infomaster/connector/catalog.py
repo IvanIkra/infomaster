@@ -47,14 +47,14 @@ def attention(ctx: Context, statuses: dict) -> list[str]:
     found = []
     twin = statuses.get("telegram")
     if twin is not None and not twin.get("account"):
-        found.append("The twin is not logged in: no chat is read (Mini App: Settings → Twin and chats).")
+        found.append("The twin is not logged in: no chat is read (the web app: Machine → Twin and chats).")
     elif twin and twin.get("error"):
         found.append(f"The twin: {twin['error']}")
     mail = statuses.get("mail") or {}
     if mail.get("configured") and mail.get("error"):
         found.append(f"The mail is not read: {mail['error']}")
     if (statuses.get("hseapp") or {}).get("login_needed"):
-        found.append("HSE App X needs a login (Mini App: Settings → HSE App X).")
+        found.append("HSE App X needs a login (the web app: Machine → HSE App X).")
     if (ruz := statuses.get("ruz") or {}).get("error"):
         found.append(f"RUZ is not read: {ruz['error']}")
     env = ctx.app[miniapp.ENV_KEY]
@@ -336,7 +336,7 @@ async def confirm_deadline_date(ctx: Context, args: dict) -> Output:
                   f"Confirmed the date of «{d.title}»: {d.due.isoformat()}",
                   [step("_assume_again", deadline_id=row["id"], sheet_id=sheet["id"] if sheet else None,
                         due_at=sheet["due_at"] if sheet else None)],
-                  "the sheet's caption in the forum keeps the date as confirmed" if sheet else "")
+                  "the sheet keeps the date as confirmed" if sheet else "")
 
 
 async def assume_again(ctx: Context, args: dict) -> None:
@@ -540,7 +540,7 @@ async def edit_sheet(ctx: Context, args: dict) -> Output:
 
 
 async def delete_sheet(ctx: Context, args: dict) -> Output:
-    """An own sheet with all its versions and its messages in the forum; a chat's sheet is not the owner's to delete."""
+    """An own sheet with all its versions; a chat's sheet is not the owner's to delete."""
     topic = need(ctx, miniapp.SHEETS_KEY)
     sheet = topic.sheets.get(args["sheet_id"])
     if sheet is None:
@@ -548,7 +548,7 @@ async def delete_sheet(ctx: Context, args: dict) -> Output:
     if not await topic.remove(sheet["id"]):
         raise ToolError("it is not an own sheet: only the sheets the owner uploaded can be deleted")
     return Output({"deleted": sheet["id"]}, f"Deleted the own sheet «{sheet['name']}»", None,
-                  "the sheet's messages in the forum are deleted: upload the file again to bring it back")
+                  "upload the file again to bring it back")
 
 
 async def remove_own_sheet(ctx: Context, args: dict) -> None:
@@ -569,7 +569,7 @@ async def join_sheet(ctx: Context, args: dict) -> Output:
         raise ToolError(say(e.args[0], "en") if e.args else "it cannot be joined") from None
     return Output({"sheet_id": sheet["id"], "previous": older["id"]},
                   f"Joined the sheet «{sheet['name']}» to «{older['name']}» as its newer version", None,
-                  "the old message in the forum holds the new file now and the sheet's own message is deleted")
+                  "the two are one sheet now")
 
 
 async def update_chat_settings(ctx: Context, args: dict) -> Output:
@@ -622,7 +622,7 @@ async def setting_change(ctx: Context, names: dict[str, str], args: dict, handle
                   [step(tool, **before)])
 
 
-GENERAL_NAMES = {name: name for name in ("batch_hours", "news_ttl_hours", "forum_language", "miniapp_language",
+GENERAL_NAMES = {name: name for name in ("batch_hours", "news_ttl_hours", "miniapp_language",
                                          "about_me", "wiki_pages")}
 
 
@@ -1009,12 +1009,11 @@ def register(registry: Registry, app) -> None:
     registry.op("_restore_course", restore_course)
     if has[miniapp.SETTINGS_KEY]:
         write("update_general_settings", "Change general settings",
-              "Batches every N hours, how long news lives, the languages of the forum and the Mini App (en, ru), "
+              "Batches every N hours, how long news lives, the language of the app (en, ru), "
               "what the student tells the models about themselves (group, subgroup, electives), and the course wiki "
               "pages whose new sheets and homework come as notices in the mailbox (the whole list, addresses).",
               {"batch_hours": {"type": "integer", "enum": list(BATCH_HOURS)},
                "news_ttl_hours": {"type": "integer", "minimum": 1, "maximum": 168},
-               "forum_language": {"type": "string", "enum": ["en", "ru"]},
                "miniapp_language": {"type": "string", "enum": ["en", "ru"]},
                "about_me": {"type": "string", "maxLength": 500},
                "wiki_pages": {"type": "array", "items": {"type": "string"}}}, update_general_settings,
@@ -1032,7 +1031,7 @@ def register(registry: Registry, app) -> None:
               idempotent=True)
     if has[miniapp.SETTINGS_KEY] and has[miniapp.REMINDERS_KEY]:
         write("update_reminders", "Change deadline reminders",
-              "Reminders in the Deadlines topic: on or off, the eve's time and the day's time (Moscow, HH:MM).",
+              "Deadline reminders pushed to the web app: on or off, the eve's time and the day's time (Moscow, HH:MM).",
               {"enabled": {"type": "boolean"}, "eve": {"type": "string", "description": "HH:MM"},
                "day": {"type": "string", "description": "HH:MM"}}, update_reminders, idempotent=True)
     if has[miniapp.SETTINGS_KEY] and has[miniapp.SHEETS_KEY]:
@@ -1043,11 +1042,11 @@ def register(registry: Registry, app) -> None:
                "due": {"type": ["string", "null"], "description": "YYYY-MM-DD, or null"},
                "summary": {"type": "string"}}, edit_sheet, ("sheet_id",))
         write("delete_sheet", "Delete an own sheet",
-              "An own sheet (one the owner uploaded) with every version and its messages in the forum. It cannot be "
+              "An own sheet (one the owner uploaded) with every version. It cannot be "
               "undone; a chat's sheet is refused.", {"sheet_id": {"type": "integer"}}, delete_sheet, ("sheet_id",))
         write("join_sheet", "Join a sheet to another as its newer version",
               "A sheet that was posted as new becomes the newer version of another sheet (sheet_id of list_sheets, "
-              "the newer one first): its file replaces the older one's in the forum. It cannot be undone.",
+              "the newer one first). It cannot be undone.",
               {"sheet_id": {"type": "integer", "description": "the sheet that becomes a newer version"},
                "previous": {"type": "integer", "description": "the sheet it updates"}}, join_sheet,
               ("sheet_id", "previous"), idempotent=False)

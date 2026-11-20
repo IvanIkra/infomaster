@@ -2,10 +2,10 @@
 
 GET /api/deadlines: {"items": [{uid, title, due, category, source, overdue, assumed}]}, the merged list in screen
 order, as Tablo's route gave it (§8); `assumed` marks a sheet's date assumed by the service (§6.3). Own and hidden
-deadlines are kept in the Mini App and with the forum's buttons: HA's to-do lists are gone
+deadlines are kept in the web app and through Claude: HA's to-do lists are gone
 (D34), and with them the routes that changed the list.
 
-GET /api/news: the live news (§8.3, D9, D23), the items of the «Новости» topic and the same rules, in rank order:
+GET /api/news: the live news (D9, D23), the items of the web app's news and the same rules, in rank order:
 {"items": [{id, source, study, posted_at, full, short, importance}], "ttl_hours"}. Replaced, withdrawn and hidden items
 are not given. This is the level Б of §11.4: Tablo only lays them out in its column (§6.6).
 

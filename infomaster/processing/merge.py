@@ -20,9 +20,9 @@ Tablo's rules, unchanged:
 - shown: upcoming by date, then the overdue ones newest first for 3 days (1 for mail and the chats: they cannot tell
   that the work was handed in).
 
-The same list, in the same order, goes to GET /api/deadlines for HA and Tablo, the pinned list of the «Дедлайны» topic
-and the Mini App. The owner's changes (HA, the Mini App, the buttons in the forum) go through here too and tell
-`on_change` which deadlines they put into the list or moved, so the forum shows them without a message of their own.
+The same list, in the same order, goes to GET /api/deadlines for HA and Tablo, the web app and the connector. The
+owner's changes (HA, the web app, Claude) go through here too and tell `on_change` which deadlines they put into the
+list or moved, so they are no news to push (outputs/deadlines.py).
 """
 
 import datetime as dt
@@ -129,7 +129,7 @@ class DeadlineList:
         self.db = store.db
         self.deadlines, self.hseapp, self.subjects, self.now = deadlines, hseapp, subjects, now
         self.todo = Todo(store)
-        # After a change by the owner: the refs it put into the shown list or moved there (the forum shows them
+        # After a change by the owner: the refs it put into the shown list or moved there (no news: no push
         # quietly). Called from synchronous code, so it only schedules the work.
         self.on_change: Callable[[set[str]], None] | None = None
 
@@ -186,7 +186,7 @@ class DeadlineList:
         return next((d for d in self.all() if uid(d) == item_uid), None)
 
     def by_ref(self, ref: str) -> Deadline | None:
-        """The deadline a forum post is about, as it is now: one of the chats or RUZ may have moved since (its newest
+        """The deadline a ref names, as it is now: one of the chats or RUZ may have moved since (its newest
         version then), a copy from a more reliable source may stand for it, and a hidden one is found too."""
         row = None
         if ref.startswith("dl:") and ref[3:].isdigit():
@@ -224,7 +224,7 @@ class DeadlineList:
         return self._change(lambda: self.todo.unhide(hidden_uid))
 
     def restore(self, d: Deadline) -> bool:
-        """«Вернуть» under a forum post: every hidden row that hides this deadline goes."""
+        """«Restore»: every hidden row that hides this deadline goes."""
         def unhide() -> bool:
             rows = [row for row in self.todo.hidden_rows() if hides(Deadline(
                 row["title"], dt.date.fromisoformat(row["due"]), "study", row["source"], row["course"],

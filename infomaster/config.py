@@ -28,7 +28,6 @@ class Env:
     api_hash: str
     bot_token: str
     owner_id: int
-    forum_id: int
     api_token: str
     public_url: str         # Funnel address of the public port, no trailing slash
     public_port: int = 8080
@@ -45,8 +44,7 @@ class Env:
     def from_environ(cls, environ: Mapping[str, str] = os.environ) -> "Env":
         required = {
             "api_id": "TG_API_ID", "api_hash": "TG_API_HASH", "bot_token": "TG_BOT_TOKEN",
-            "owner_id": "TG_OWNER_ID", "forum_id": "TG_FORUM_ID", "api_token": "API_TOKEN",
-            "public_url": "PUBLIC_URL",
+            "owner_id": "TG_OWNER_ID", "api_token": "API_TOKEN", "public_url": "PUBLIC_URL",
         }
         missing = [var for var in required.values() if not environ.get(var, "").strip()]
         if missing:
@@ -57,7 +55,7 @@ class Env:
                           ("mail_host", "MAIL_HOST"), ("mail_port", "MAIL_PORT")):
             if environ.get(var, "").strip():
                 values[name] = environ[var].strip()
-        for name in ("api_id", "owner_id", "forum_id", "public_port", "internal_port", "mail_port"):
+        for name in ("api_id", "owner_id", "public_port", "internal_port", "mail_port"):
             if name in values:
                 try:
                     values[name] = int(values[name])

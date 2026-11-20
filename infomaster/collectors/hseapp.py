@@ -1,7 +1,7 @@
 """HSE App X deadlines (§5.2, §8.1, §8.4, D7): the port of Tablo's sources/hseapp.py (§5.1, research/hseapp).
 
 The app's own Keycloak client (public, no secret) gives a 3-hour access token and a refresh token whose 21-day window
-slides with every refresh. Both live in kv "hseapp.auth" and go nowhere else: not into the status, the log, the forum
+slides with every refresh. Both live in kv "hseapp.auth" and go nowhere else: not into the status, the log, the notices
 or the Mini App. The access token is refreshed when under 10 minutes are left, and at once on a 401; the refresh token
 rotates, so every answer is saved at once. A refresh answered 400 or 401 (invalid_grant: three weeks without a
 refresh, or a logout) erases the tokens: a login is needed. Two clients refreshing one token chain throw each other
@@ -18,7 +18,7 @@ the first " (", expires_at becomes a Moscow date. The collector never calls the 
 to the processing (processing/hseapp.py), which labels them in English and keeps them for the merge. A failed poll
 keeps what the last good one gave.
 
-The System topic hears once per change of state: a login is needed (with a button to the Mini App's screen) and the
+The owner hears once per change of state: a login is needed (it leads to «Machine → HSE App X») and the
 login is back; and once when the API has failed for 3 hours, and when it works again.
 """
 
@@ -52,7 +52,7 @@ SCOPE = "profile email"
 CALLBACK_PATH = "/hseapp/callback"  # on the public port: the browser comes back here after the login
 
 AUTH_KEY = "hseapp.auth"            # the tokens, a secret: unix seconds for the times, as in Tablo (§9)
-TOLD_KEY = "hseapp.login_told"      # the System topic has heard that a login is needed
+TOLD_KEY = "hseapp.login_told"      # the owner has heard that a login is needed
 REFRESH_MARGIN = 10 * 60            # seconds: the access token is refreshed this long before it expires
 REFRESH_LIFETIME = 21 * 86400       # seconds, when the answer does not say
 POLL_EVERY = 15 * 60                # seconds
@@ -60,7 +60,7 @@ TIMEOUT = 60                        # seconds, each request of a poll
 LOGIN_TIMEOUT = 30                  # seconds, the exchange of the code
 MAX_PAGES = 10
 PENDING_LOGINS = 5                  # login links that still work
-STALE_AFTER = dt.timedelta(hours=3)  # failing longer than this is told to the System topic (§5.1)
+STALE_AFTER = dt.timedelta(hours=3)  # failing longer than this is told to the owner (§5.1)
 LOGIN_ERROR = "login needed: "      # the status error when Keycloak ended the session
 
 
@@ -166,8 +166,8 @@ class Auth:
                                     "в адресе нет кода: скопируйте адрес из адресной строки целиком"))
         verifier, redirect_uri = self._pending.pop(state, (None, None)) if state else (None, None)
         if not verifier:
-            raise ValueError(Phrase("this login link is out of date: open a new one in the Mini App",
-                                    "эта ссылка входа устарела: откройте новую в Mini App"))
+            raise ValueError(Phrase("this login link is out of date: open a new one in Machine → HSE App X",
+                                    "эта ссылка входа устарела: откройте новую в «Машина → HSE App X»"))
         try:
             async with self._lock:
                 await self._token_request(session, {"grant_type": "authorization_code", "code": code,
@@ -239,7 +239,7 @@ def parse(items: list, completed: bool = False) -> list[Raw]:
 
 
 def describe(error: Exception) -> str:
-    """An error for the status and the System topic. HTTP errors by their status: aiohttp's text has the URL."""
+    """An error for the status and the notices. HTTP errors by their status: aiohttp's text has the URL."""
     if isinstance(error, aiohttp.ClientResponseError):
         return f"HTTP {error.status} {error.message}".strip()
     return f"{type(error).__name__}: {error}" if str(error) else type(error).__name__
@@ -254,7 +254,7 @@ class HseApp:
         self.store, self.settings, self.callback_url, self.now = store, settings, callback_url, now
         self.auth = Auth(store, now)
         self.on_poll: Callable[[list[Raw], list[Raw]], Awaitable[None]] | None = None  # active, done
-        # A line for the System topic; True asks for the button that opens the Mini App's HSE App X screen.
+        # A line for the owner (Web Push); True: a login is needed, «Machine → HSE App X».
         self.notify: Callable[[Phrase, bool], None] | None = None
         self.ok_at: str | None = None
         self.error: str | None = None
@@ -363,7 +363,7 @@ class HseApp:
                 break
         return items
 
-    # --- the System topic ---------------------------------------------------------------------
+    # --- the notices -------------------------------------------------------------------------
 
     def _tell_login(self) -> None:
         """One line per change of state: a login is needed (with the button), the login is back. Kept in kv, so a
@@ -376,14 +376,14 @@ class HseApp:
                 reason = self.error.removeprefix(LOGIN_ERROR) if (self.error or "").startswith(LOGIN_ERROR) else ""
                 why = f" ({reason})" if reason else ""
                 text = Alert(f"The HSE App X login is no longer valid{why}: its deadlines are not updated.\n"
-                             "Log in again with the button below or in the Mini App, Settings → HSE App X.",
+                             "Log in again in the web app, Machine → HSE App X.",
                              f"Вход в HSE App X больше не действует{why}: дедлайны оттуда не обновляются.\n"
-                             "Войти заново — кнопкой ниже или в Mini App, Настройки → HSE App X.")
+                             "Войти заново — в приложении, Машина → HSE App X.")
             else:
                 text = Alert("An HSE App X login is needed: without it no deadlines come from there.\n"
-                             "Log in with the button below or in the Mini App, Settings → HSE App X.",
+                             "Log in in the web app, Machine → HSE App X.",
                              "Нужен вход в HSE App X: без него дедлайны оттуда не приходят.\n"
-                             "Войти — кнопкой ниже или в Mini App, Настройки → HSE App X.")
+                             "Войти — в приложении, Машина → HSE App X.")
             self._notify(text, login=True)
         elif told and (logged_in or not enabled):
             self.store.put_json(TOLD_KEY, False)

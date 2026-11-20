@@ -241,7 +241,7 @@ class Subjects:
         try:
             await self.resolve(unknown)
             self._failed.pop(who, None)
-        except BudgetExceeded as e:  # the budget tells the System topic itself
+        except BudgetExceeded as e:  # the budget tells the owner itself
             log.info("subject names wait for the LLM limit: %s", e)
         except LLMError as e:
             self._failed[who] = (str(e), set(unknown))

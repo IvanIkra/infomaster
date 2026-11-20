@@ -57,7 +57,7 @@ class Twin:
                  notify: Callable[[Phrase], None]):
         self.env, self.inbox, self.chat_settings = env, inbox, chat_settings
         self.session = session
-        self.notify = notify  # a line for the System topic
+        self.notify = notify  # a line for the owner (Web Push)
         self.notify_login: Callable[[Phrase], None] | None = None  # the same, with a button to the login screen
         self.client: TelegramClient | None = None
         self.ok_at: str | None = None
@@ -110,11 +110,11 @@ class Twin:
 
     def _needs_login(self, why: Phrase) -> bool:
         self.login_needed, self.error = True, why
-        log.warning("%s; log in in the Mini App or with: %s", why, LOGIN_HINT)
+        log.warning("%s; log in in the web app or with: %s", why, LOGIN_HINT)
         (self.notify_login or self.notify)(Alert(
-            f"The chats are not read: {why.en}.\nLog in in the Mini App, Settings → Twin and chats (or on the server: "
+            f"The chats are not read: {why.en}.\nLog in in the web app, Machine → Twin and chats (or on the server: "
             f"{LOGIN_HINT}).",
-            f"Чаты не читаются: {why.ru}.\nВойти — в Mini App, Настройки → Твинк и чаты "
+            f"Чаты не читаются: {why.ru}.\nВойти — в приложении, Машина → Твинк и чаты "
             f"(или на сервере: {LOGIN_HINT})."))
         return False
 
@@ -262,9 +262,9 @@ class Twin:
     def _announce(self, chat_id: int) -> None:
         chat = self.inbox.chat(chat_id)
         self.notify(Phrase(f"A new chat in the twin's account: «{chat['title']}» ({chat['kind']}). It is off; it can "
-                           "be enabled in the Mini App.",
+                           "be enabled in the web app, Machine → Twin and chats.",
                            f"Новый чат в аккаунте твинка: «{chat['title']}» ({chat['kind']}). Он выключен, включить "
-                           "можно в Mini App."))
+                           "можно в приложении, Машина → Твинк и чаты."))
 
     # --- live updates -----------------------------------------------------------
 

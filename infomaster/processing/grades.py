@@ -20,7 +20,7 @@ in the same read); a work listed twice by the model counts once; a tab with many
 sheet removed in the settings, or a new name, drops its grades, so the next read is a baseline again.
 
 The API gives the newest event of each work still on its sheet within grades_window_days, newest first (Tablo's
-§3.7); the Mini App shows the grades. Nothing goes to the forum: the «Grades» topic is gone (D55).
+§3.7); the web app shows the grades.
 
 The owner's hand (D44). Every read keeps a view of each tab for the Mini App: the own row's cells under their headers
 and the works laid out in them, never another student's row. The owner may lay out a tab themselves: that layout stands

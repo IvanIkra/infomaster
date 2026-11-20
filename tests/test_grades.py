@@ -380,7 +380,7 @@ async def test_poll_end_to_end(google, grades, settings, llm, now):
     status = source.status()["sheets"]["abc123"]
     assert status["title"] == 'ДМ "ПИ"' and (status["tabs"], status["items"], status["error"]) == (2, 2, None)
     assert system == ['Таблица оценок «ДМ "ПИ"» подключена: вкладок со своей строкой — 2, оценок — 2. '
-                      "Они в Mini App, «Учёба»."]
+                      "Они в линзах курсов в приложении."]
     assert grades.new() == []
 
     google["data"] = workbook(hw_score=6.3, quiz=9)

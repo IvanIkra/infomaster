@@ -6,7 +6,7 @@ replaces what its earlier text gave. A deleted message is never parsed, and what
 
 Letters of the university mailbox (collectors/mail.py, §5.2) are messages too, with source "mail": all in one
 pseudo chat, `MAILBOX` (no Telegram chat has id 0), which is no row of `chats`. A letter is never edited or deleted,
-and its subject is kept for the forum, where it stands instead of a link (§8.3).
+and its subject is kept for the app, where it stands instead of a link.
 """
 
 import datetime as dt

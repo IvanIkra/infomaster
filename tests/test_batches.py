@@ -8,7 +8,6 @@ from infomaster import clock
 from infomaster.collectors.ruz import parse
 from infomaster.llm.budget import BudgetExceeded
 from infomaster.llm.client import BadAnswer, LLMError
-from infomaster.outputs.timetable import Timetable
 from infomaster.processing import batches as batches_module
 from infomaster.processing.batches import Batches, Changes, check
 from infomaster.processing.events import event_uid
@@ -673,7 +672,7 @@ async def test_a_moved_class_stays_listed_after_its_day(timetable, now):
     assert changes.events_gone == [] and batches.events.correction(uid)["id"] == fix
 
 
-async def test_deleted_superseded_version_never_comes_back(timetable, forum, now):
+async def test_deleted_superseded_version_never_comes_back(timetable, now):
     batches = timetable
     add(batches, 1, "Консультация 23.10 в 18:10")
     batches.llm.answers = [{"items": [item([1], events=[happening(end="2026-10-23T19:30")])]}]
@@ -684,21 +683,15 @@ async def test_deleted_superseded_version_never_comes_back(timetable, forum, now
     add(batches, 3, "Консультация переносится на 25.10 12:00")
     batches.llm.answers = [{"items": [item([3], events=[happening(start="2026-10-25T12:00", moves=f"e{v2}")])]}]
     [(_, v3)] = (await parse_chat(batches)).events_moved
-    poster = Timetable(forum, batches.store, batches.inbox, batches.schedule, 42, now=now)
 
     batches.inbox.delete([2], CHAT, now())  # the message of a superseded version: no news
     changes = await parse_chat(batches)
-    await poster.publish(changes)
     assert changes.events_gone == [] and batches.events.get(v2)["gone_at"] is not None
     assert batches.events.by_uid(batches.events.get(v1)["uid"])["id"] == v3
 
     batches.inbox.delete([3], CHAT, now())  # the version in force is withdrawn: the first one is back, not v2
     changes = await parse_chat(batches)
-    await poster.publish(changes)
     assert changes.events_gone == [v3] and batches.events.by_uid(batches.events.get(v1)["uid"])["id"] == v1
-    [post] = forum.texts("schedule")  # one post in all: the first version is back
-    assert post.startswith("✖️ Изменение <b>Alg consult</b> снято: сообщение удалено или исправлено; "
-                           "снова: пт 23.10 18:10–19:30\n")
     changes = await parse_chat(batches)  # nothing more to withdraw
     assert changes.events_gone == []
 

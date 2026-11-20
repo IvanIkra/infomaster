@@ -117,7 +117,7 @@ create table if not exists hidden_deadlines (  -- deadlines of the sources hidde
     reason text,                -- done, not_mine, duplicate (the web app, §8.6); null: hidden elsewhere, no reason
     kept text                   -- of a duplicate: the uid of the deadline it was merged into
 );
-create table if not exists bot_posts (  -- what the bot published, to edit or delete it later (§8.3)
+create table if not exists bot_posts (  -- what the forum's bot published, until D69: kept for old rows
     id integer primary key,
     topic text not null,
     msg_id integer not null,
@@ -192,7 +192,7 @@ create table if not exists files (      -- PDFs and images of chat messages, fet
     unique (source, chat_id, msg_id)
 );
 create index if not exists files_sha256 on files(sha256);
-create table if not exists sheets (     -- листочки (§6.3, D14): kept for good, the files live in the forum
+create table if not exists sheets (     -- листочки (§6.3, D14): kept for good
     id integer primary key,
     chat_id integer not null,
     msg_id integer not null,    -- the message with the PDF
@@ -204,14 +204,14 @@ create table if not exists sheets (     -- листочки (§6.3, D14): kept f
     due_assumed integer not null default 0,  -- none was given: `due` is the next seminar's, if any (§6.3)
     due_at text,                -- of an assumed date: the start of that seminar
     sent_at text,               -- the message's time (an own sheet's upload): the next seminar comes after it
-    status text not null,       -- new: waits for the forum; posted; failed (the file was lost)
+    status text not null,       -- new: waits to be published; posted (published); failed (the file was lost)
     error text,
     text text,                  -- its pages read locally, for the diff of a newer version; null until prepared
     summary text,               -- what the model read in it (pdf_content)
     changes text,               -- of a newer version: what changed, from the diff
     previous integer,           -- the version it updates: the same message, or the rules of D14, or the owner
     version integer not null default 1,
-    post_id integer,            -- the bot's message in «Листочки»; every version of a sheet edits the first one's
+    post_id integer,            -- the forum's message, until D69: kept for old rows
     created_at text not null
 );
 create index if not exists sheets_chat on sheets(chat_id, created_at);

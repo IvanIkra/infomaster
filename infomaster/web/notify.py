@@ -1,10 +1,8 @@
-"""The notifier (§8.6, stage 16.4): what the forum announces with a sound, as Web Push to the web app's devices.
-
-It is called where the forum is, so the forum can be switched off later (step 16.7) and this stays:
-- a new or moved deadline (the «Deadlines» topic's messages that notify; a withdrawn one goes quietly, D55);
+"""The notifier (§8.6, stage 16.4): Web Push to the web app's devices, the service's only notifications (D69):
+- a new or moved deadline (outputs/deadlines.py);
 - a reminder: the deadlines due tomorrow in the evening, today in the morning (D47);
 - a failure of a source or a login it needs (`Alert`: the twin, HSE App X, mail, RUZ, the wiki, a grade sheet);
-- the daily LLM limit spent (the 80 % warning goes quietly, as in the forum).
+- the daily LLM limit spent (the 80 % warning goes quietly).
 
 A message names its screen in the app: a deadline's card, the feed, «Machine». A deadline's messages share a tag, so
 a move replaces the news of it on the device instead of adding another.
@@ -21,11 +19,19 @@ from collections.abc import Callable, Coroutine, Iterable
 from .. import clock
 from ..i18n import Alert, Phrase, say, tr
 from ..llm.budget import Level, Notice
-from ..outputs.feed import day
 from ..processing.todo import Deadline, uid
 from .push import Push
 
 log = logging.getLogger(__name__)
+
+WEEKDAYS = {"en": ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"), "ru": ("пн", "вт", "ср", "чт", "пт", "сб", "вс")}
+
+
+def day(due: str, lang: str) -> str:
+    """'2026-10-22' -> 'Thu 22.10' (the date is day.month in both languages)."""
+    date = dt.date.fromisoformat(due)
+    return f"{WEEKDAYS[lang][date.weekday()]} {date:%d.%m}"
+
 
 BODY_CHARS = 400
 
@@ -74,7 +80,7 @@ class Notifier:
             message["silent"] = True
         self._spawn(self.push.send(message, urgency="high" if urgent else "normal"))
 
-    # --- what the forum announces ---------------------------------------------------------------------------
+    # --- what is announced ---------------------------------------------------------------------------------
 
     def deadline(self, d: Deadline, was: str | None = None) -> None:
         """New (`was` None) or moved from `was` (YYYY-MM-DD)."""
@@ -102,8 +108,8 @@ class Notifier:
         self.send(title, body, tag=f"reminder-{name}-{deadlines[0].due.isoformat()}", urgent=True, kind="reminders")
 
     def system(self, text: str | Phrase, login: str | None = None) -> None:
-        """A line of the System topic: it is pushed when the forum notifies of it, a failure or a login needed."""
-        if not isinstance(text, Alert):
+        """A line about the service: it is pushed when it is a failure (an Alert) or a login needed."""
+        if not isinstance(text, Alert) and login is None:
             return
         self.send("infomaster", say(text, self.lang()), "machine", tag=f"login-{login}" if login else None,
                   urgent=True, kind="failures")

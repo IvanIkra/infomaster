@@ -1,10 +1,8 @@
-"""The wiring in the service: a RUZ or HSE App X poll reaches the dictionary, the merged deadlines and the forum."""
+"""The wiring in the service: a RUZ or HSE App X poll reaches the dictionary, the merged deadlines and Web Push."""
 
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
-
-from telethon.tl import types
 
 from infomaster.app import Service
 from infomaster.collectors.ruz import parse
@@ -12,64 +10,55 @@ from infomaster.config import Env
 from infomaster.i18n import Alert, Phrase
 from infomaster.llm.budget import Level, Notice
 from infomaster.outputs import api
-from infomaster.outputs import forum as forum_module
 from infomaster.processing.batches import Changes
 
 FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
 
 
 def env() -> Env:
-    return Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, forum_id=-100, api_token="tok",
-               public_url="https://x.ts.net")
+    return Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, api_token="tok", public_url="https://x.ts.net")
 
 
-def fake_forum(service, forum, now) -> None:
-    service.feed.forum = service.timetable.forum = service.deadline_topic.forum = service.sheet_topic.forum = forum
-    service.forum.spawn = forum.spawn
-    service.ruz.now = service.schedule.now = service.timetable.now = service.feed.now = now  # Tue 2026-10-20
-    service.merged.now = service.deadline_topic.now = service.hseapp_deadlines.now = now
+def pushed(service, now) -> list:
+    """The service at Tue 2026-10-20, what goes to Web Push recorded: (kind, what)."""
+    told = []
+    service.ruz.now = service.schedule.now = service.merged.now = service.hseapp_deadlines.now = now
+    service.deadline_watch.now = service.reminders.now = now
+    service.deadline_watch.notify = lambda d, was: told.append(("deadline", d.title, was))
+    service.web.notifier.send = lambda title, body, *args, **kwargs: told.append(("push", title, body,
+                                                                                    kwargs.get("tag")))
+    return told
 
 
-async def test_after_poll(tmp_path, forum, namer, now, aiohttp_client):
+async def test_after_poll(tmp_path, namer, now, aiohttp_client):
     service = Service(env(), tmp_path)  # Telegram clients are made, never connected
-    fake_forum(service, forum, now)
+    told = pushed(service, now)
     service.subjects.llm = namer
     try:
-        await service.deadline_topic.refresh()  # the list was shown before RUZ came
+        await service.deadline_watch.refresh()  # the list was seen before RUZ came
         await service._after_poll(service.ruz._sync(parse(FEED)))
-        assert forum.texts("system") == ["РУЗ подключён: в расписании 9 пар."]
-        # The first poll is no news: its Midterms join the pinned list without messages of their own.
-        assert forum.texts("deadlines") == ["<b>Дедлайны</b>\n\n"
-                                            "📅 <b>RSF Midterm</b> — пн 26.10 · Foundations of Russian Statehood"
-                                            " · РУЗ\n"
-                                            "📅 <b>Prog Midterm</b> — чт 29.10 · Введение в программирование · РУЗ"]
-        assert forum.texts("news") == []  # the RUZ task leaves the news list to the batches
+        assert told == []  # the first poll is no news: its Midterms join quietly
+        assert [d.title for d in service.merged.visible()] == ["RSF Midterm", "Prog Midterm"]
         assert service._ruz_status() == {"ok_at": None, "error": "RUZ_ICAL_URL is not set", "classes": 9,
                                          "subjects_error": None}
         assert service.calendar.render("main").startswith(b"BEGIN:VCALENDAR")
+        assert service.calendar.edit_link("2000001@ruz.hse.ru") == \
+            "https://x.ts.net/web/#/c?uid=2000001%40ruz.hse.ru"  # the card in the web app (D69)
         await sources_reach_the_ports(service, aiohttp_client)
+        await midterm_follows_its_correction(service, told, now)
+        await dictionary_renames_the_midterms_at_once(service, told)
 
-        failing, published = [], []
+        async def broken():
+            raise RuntimeError("the sheets are down")
 
-        async def broken(changes):
-            failing.append(changes)
-            raise RuntimeError("the forum is down")
-
-        async def record(changes):
-            published.append(changes)
-
-        await midterm_follows_its_correction(service, forum, now)
-        await dictionary_renames_the_midterms_at_once(service, forum)
-        service.feed.publish, service.timetable.publish = broken, record
-        await service._publish(Changes())  # the news failing does not stop the timetable
-        assert len(failing) == len(published) == 1
+        service.sheet_publisher.publish = broken
+        await service._publish(Changes())  # the sheets failing does not stop the deadlines
     finally:
         service.store.close()
 
 
 async def sources_reach_the_ports(service, aiohttp_client):
-    """run() hands the service's sources to both ports: the Mini App's «Расписание» reads "ruz" by name, its
-    «HSE App X» reads "hseapp"."""
+    """run() hands the service's sources to both ports: «Machine» and /api/status read them by name."""
     assert set(service.sources) == {"telegram", "batches", "ruz", "hseapp", "mail", "sheets", "grades",
                                    "images", "wiki"}
     assert service.sources["ruz"]() == service._ruz_status()
@@ -88,8 +77,8 @@ async def sources_reach_the_ports(service, aiohttp_client):
         {"configured": False, "sheets": {}, "new": 0}
 
 
-async def midterm_follows_its_correction(service, forum, now):
-    """A chat moved the interim assessment: the batch run posts the Midterm's move, the owner's hiding moves it back."""
+async def midterm_follows_its_correction(service, told, now):
+    """A chat moved the interim assessment: the batch run tells the Midterm's move, the owner's hiding moves it back."""
     uid = "2000007@ruz.hse.ru"
     item = service.ruz.by_uid(uid)
     with service.store.db:
@@ -99,31 +88,29 @@ async def midterm_follows_its_correction(service, forum, now):
             "end": "2026-11-05T13:00:00", "room": "R401", "required": True}, now())
     service.batches.now = now
     await service.batches.run_chats([])
-    assert forum.texts("deadlines")[-1] == "↪️ <b>Prog Midterm</b> перенесён: чт 29.10 → чт 05.11"
+    assert told[-1] == ("deadline", "Prog Midterm", "2026-10-29")
     await service.schedule.set_hidden(moved, True)
-    assert forum.texts("deadlines")[-1] == "↪️ <b>Prog Midterm</b> перенесён: чт 05.11 → чт 29.10"
+    assert told[-1] == ("deadline", "Prog Midterm", "2026-11-05")
 
 
-async def dictionary_renames_the_midterms_at_once(service, forum):
-    """A manual entry in the Mini App: the Midterm's label follows now, the list is edited, nothing is posted."""
-    before = len(forum.messages)
+async def dictionary_renames_the_midterms_at_once(service, told):
+    """A manual entry in the dictionary: the Midterm's label follows now, and a rename is no news."""
+    before = len(told)
     service.subjects.set_manual("Foundations of Russian Statehood", "Statehood", "State")
-    await forum.settle()
+    await asyncio.gather(*service.bot._tasks)
     assert service.deadlines.get(service.ruz.by_uid("2000006@ruz.hse.ru")["deadline_id"])["label"] == \
         "State Midterm"
-    assert len(forum.messages) == before and "📅 <b>State Midterm</b> — пн 26.10" in forum.texts("deadlines")[0]
+    assert len(told) == before
 
 
-async def test_deadlines_wiring(tmp_path, forum, now):
-    """The first HSE App X poll joins quietly, later changes are posted; the buttons are the service's."""
+async def test_deadlines_wiring(tmp_path, now):
+    """The first HSE App X poll joins quietly, later changes are told; the owner's own changes are not."""
     service = Service(env(), tmp_path)
-    fake_forum(service, forum, now)
+    told = pushed(service, now)
     try:
         assert service.hseapp_deadlines.on_change == service._hseapp_changed
-        assert service.merged.on_change == service.deadline_topic.changed
-        handlers = [callback for callback, _ in service.forum.client.list_event_handlers()]
-        assert service.deadline_topic.on_button in handlers and service.reminders.on_button in handlers
-        await service.deadline_topic.refresh()
+        assert service.merged.on_change == service.deadline_watch.changed
+        await service.deadline_watch.refresh()
 
         def lists(*items):
             service.store.put_json("hseapp.deadlines", {"fetched_at": None, "done": [], "items": [
@@ -132,83 +119,50 @@ async def test_deadlines_wiring(tmp_path, forum, now):
 
         lists(("h1", "DM HW 3", "2026-10-22"), ("h2", "Calc HW 1", "2026-10-23"))
         await service._hseapp_changed(True)
-        assert forum.texts("deadlines") == ["<b>Дедлайны</b>\n\n🎓 <b>DM HW 3</b> — чт 22.10 · HSE App X\n"
-                                            "🎓 <b>Calc HW 1</b> — пт 23.10 · HSE App X"]
+        assert told == []
         lists(("h1", "DM HW 3", "2026-10-22"), ("h2", "Calc HW 1", "2026-10-23"), ("h3", "Eng essay", "2026-10-25"))
         await service._hseapp_changed(False)
-        assert forum.texts("deadlines")[-1] == "🆕 <b>Eng essay</b> — вс 25.10\nHSE App X"
+        assert told == [("deadline", "Eng essay", None)]
 
-        service.merged.add("Dentist", now().date(), "personal")  # the owner's: the list only
-        await forum.settle()
-        assert len(forum.texts("deadlines")) == 2 and "🏠 <b>Dentist</b> — сегодня" in forum.texts("deadlines")[0]
+        service.merged.add("Dentist", now().date(), "personal")  # the owner's: no news
+        await service.deadline_watch.settle()
+        assert len(told) == 1
 
         with service.store.db:  # what a batch run saved
             service.deadlines.add({"source": "tg", "chat_id": None, "msg_ids": [1], "course": None,
                                    "label": "Alg HW 2", "due": "2026-10-24"}, now())
         await service._publish(Changes())
-        assert forum.texts("deadlines")[-1] == "🆕 <b>Alg HW 2</b> — сб 24.10"
-
-        # The owner hides it (the Mini App, a button): the list follows, no message.
-        [alg] = [d for d in service.merged.visible() if d.title == "Alg HW 2"]
-        service.merged.remove(alg)
-        await forum.settle()
-        assert len(forum.texts("deadlines")) == 3 and "Alg HW 2" not in forum.texts("deadlines")[0]
+        assert told[-1] == ("deadline", "Alg HW 2", None)
     finally:
         service.store.close()
 
 
-async def test_hseapp_wiring(tmp_path):
-    """A poll reaches the labels and the lists; a login notice gets the button that opens the bot's chat."""
+async def test_notices_go_to_web_push(tmp_path, now):
+    """D69: the sources' failures, the logins they need and the spent LLM limit are pushed; nothing else is."""
     service = Service(env(), tmp_path)
+    told = pushed(service, now)
     try:
         assert service.hseapp.callback_url == "https://x.ts.net/hseapp/callback"
         assert service.hseapp.on_poll == service.hseapp_deadlines.after_poll
-        posts, tasks = [], []
-
-        async def post(topic, text, buttons=None, *, html=False):
-            posts.append((topic, text, buttons))
-
-        service.forum.post = post
-        service.forum.spawn = lambda coro: tasks.append(asyncio.ensure_future(coro))
-        service.forum.username = "example_bot"
+        service._to_system(Phrase("RUZ is available again.", "РУЗ снова доступен."))  # no failure: not pushed
+        service._to_system(Alert("RUZ is unavailable.", "РУЗ недоступен."))
         service.hseapp._tell_login()
-        await asyncio.gather(*tasks)
-        [(topic, text, [button])] = posts
-        assert topic == "system" and text.ru.startswith("Нужен вход в HSE App X")  # a Phrase: post() picks one
-        assert button.type.url == "https://t.me/example_bot?start=hseapp" and button.text == "Log in to HSE App X"
-        assert forum_module.start_screen("/start hseapp") == "hseapp" and forum_module.start_screen("/start") is None
-        assert forum_module.start_screen("/start other") is None
-        assert forum_module.start_screen("/start ev-0123456789ab") == "ev-0123456789ab"  # an event, from the calendar
-        assert forum_module.start_screen("/start ev-0123") is None
-        assert service.calendar.edit_link("2000001@ruz.hse.ru") == \
-            "https://x.ts.net/web/#/c?uid=2000001%40ruz.hse.ru"  # the card in the web app (D69)
-        service.forum.main_app = True  # a main Mini App: the link opens it at once
-        assert service.forum.event_link("0123456789ab") == "https://t.me/example_bot?startapp=ev-0123456789ab"
-        service.forum.main_app = False
-        assert forum_module.start_screen("/start m--1001234567890-15") == "m--1001234567890-15"  # a message's page
-        assert service.forum.message_url(-1001234567890, 15) == "https://t.me/example_bot?start=m--1001234567890-15"
-        assert service.forum.message_url(None, 15) is None
-        assert service.calendar.message_page is None  # the card quotes the message
-        several = [types.Username("old_bot", editable=True, active=False), types.Username("main", active=True)]
-        assert forum_module.bot_username(types.User(id=1, usernames=several)) == "main"
-        assert forum_module.bot_username(types.User(id=1, username="one_bot")) == "one_bot"
-        assert forum_module.bot_username(types.User(id=1)) is None
-        assert service.forum.screen_url("hseapp") == "https://x.ts.net/app/?screen=hseapp"
-
-        service.forum.username = None  # before the bot has started: the line goes without the button
-        service.hseapp._notify("HSE App X снова доступен.", login=True)
-        await asyncio.gather(*tasks)
-        assert posts[-1] == ("system", "HSE App X снова доступен.", None)
+        service._twin_notice(Phrase("The twin needs a login.", "Твинку нужен вход."))
+        service.budget.notify(Notice(Level.SOFT, 0.4, 0.5))  # the 80 % warning goes quietly
+        service.budget.notify(Notice(Level.HARD, 0.5, 0.5))
+        assert [(t[0], t[1], t[3]) for t in told] == [
+            ("push", "infomaster", None), ("push", "infomaster", "login-hseapp"), ("push", "infomaster", "login-twin"),
+            ("push", "The LLM limit is spent", "budget")]
     finally:
         service.store.close()
 
 
 async def test_watch_follows_the_twins_login_and_logout():
-    """A login in the Mini App is watched from then on, a logout is no loss, a lost connection ends the service."""
+    """A login in «Machine» is watched from then on, a logout is no loss, a lost connection ends the service."""
     loop = asyncio.get_running_loop()
     bot = SimpleNamespace(client=SimpleNamespace(disconnected=loop.create_future()))
     twin = SimpleNamespace(client=None, changed=asyncio.Event())
-    service, stop = SimpleNamespace(forum=bot, twin=twin), asyncio.Event()
+    service, stop = SimpleNamespace(bot=bot, twin=twin), asyncio.Event()
     watch = asyncio.create_task(Service._watch(service, stop))
     await asyncio.sleep(0)
 
@@ -229,39 +183,7 @@ async def test_watch_follows_the_twins_login_and_logout():
     second.disconnected.set_result(None)  # lost for good
     await asyncio.wait_for(watch, 1)
 
-    watch = asyncio.create_task(Service._watch(SimpleNamespace(forum=bot, twin=SimpleNamespace(
+    watch = asyncio.create_task(Service._watch(SimpleNamespace(bot=bot, twin=SimpleNamespace(
         client=None, changed=asyncio.Event())), stop))
     stop.set()
     await asyncio.wait_for(watch, 1)
-
-
-async def test_the_forum_is_quiet_but_for_what_asks_to_notify(tmp_path):
-    """D55: a post is silent unless its caller asks or it is an Alert (a source's failure); files are silent too.
-    The spent LLM limit notifies, the 80 % warning does not."""
-    service = Service(env(), tmp_path)
-    try:
-        forum, sent = service.forum, []
-
-        async def send(peer, *args, **kwargs):
-            sent.append(kwargs["silent"])
-            return SimpleNamespace(id=len(sent))
-
-        async def topic(key):
-            return 7
-
-        forum.client = SimpleNamespace(send_message=send, send_file=send)
-        forum._topic = topic
-        await forum.post("news", "<b>News</b>", html=True)
-        await forum.post("deadlines", "🆕 Calc HW 5", html=True, notify=True)
-        await forum.post("system", Phrase("RUZ is available again.", "РУЗ снова доступен."))
-        await forum.post("system", Alert("RUZ is unavailable.", "РУЗ недоступен."))
-        await forum.post_file("sheets", tmp_path / "list3.pdf", "list3.pdf", "Sheet 3")
-        assert sent == [True, False, True, False, True]
-
-        sent.clear()
-        forum.on_budget(Notice(Level.SOFT, 0.4, 0.5))
-        forum.on_budget(Notice(Level.HARD, 0.5, 0.5))
-        await asyncio.gather(*forum._tasks)
-        assert sent == [True, False]
-    finally:
-        service.store.close()

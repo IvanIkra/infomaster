@@ -1,78 +1,33 @@
-"""The «Дедлайны» topic (§6.4, §8.3, D24): the merged list pinned, and a message for every new or moved deadline.
+"""What is news in the deadlines (§6.4, D24, D69): a new or moved deadline goes to the web app's notifier (Web Push).
 
-- The pinned list: every deadline the merge shows (processing/merge.py: the list Tablo and HA get), in its order, with
-  its source's icon, the title, when it is due (today, tomorrow, overdue, else the weekday and the date), the course
-  as the source names it and, as in the news list, the source: the chat with a link to the message, the letter's
-  subject, RUZ, HSE App X or "own". The bot edits it in place, several messages in a row when it is long.
-- A message for every deadline that joins the list or moves there, from any source. The list is compared with the
-  one shown last (kv "deadlines.shown") by the row each deadline comes from (`Deadline.ref`), so a rename (a Midterm
-  once the dictionary knows its course, an HSE App X label once Haiku answers) only edits the list, and a move of the
-  chats or RUZ (a new row that moves the old one) is a move. A deadline its source withdrew (its message deleted or
-  edited, its class gone, gone from HSE App X) gets «withdrawn»; one that leaves the list otherwise (hidden, done in HSE
-  App X, past) leaves quietly, and a copy of the same work and date taking the place of another is no news.
-- Quiet: the first refresh (nothing shown yet) takes the list as it is, and so do the first poll of HSE App X and the
-  first RUZ poll for what they bring, so a source joining floods nothing. The owner's own changes (HA, the Mini App,
-  the buttons) only edit the list too.
-- A sheet's date the service assumed (its course's next seminar, §6.3) is marked "≈ … (assumed)" wherever it is
-  shown, until a real date replaces it.
-- Under the message of a new or moved deadline «Hide» hides it exactly as HA's to-do lists do (an own deadline,
-  «Delete», is deleted); a hidden one gets «Restore». Only the owner may press them. Texts and buttons are in the
-  forum's language (D41); the titles are the merge's, English.
-- Only the messages of new and moved deadlines notify (D55): the pinned list is edited silently, and a withdrawn
-  deadline is told silently too.
+The merged list (processing/merge.py: the one Tablo and HA get) is compared with the one seen last (kv
+"deadlines.shown") by the row each deadline comes from (`Deadline.ref`), so a rename (a Midterm once the dictionary
+knows its course, an HSE App X label once Haiku answers) is no news, and a move of the chats or RUZ (a new row that
+moves the old one) is a move. A copy of the same work and date taking the place of another is no news either; a
+deadline that leaves the list is told nothing.
+
+Quiet: the first comparison (nothing seen yet) takes the list as it is, and so do the first poll of HSE App X and the
+first RUZ poll for what they bring, so a source joining floods nothing. The owner's own changes (the web app, Claude,
+HA) are no news either.
 
 Several tasks change deadlines (the batches, the RUZ and HSE App X polls, the owner): one refresh runs at a time under
-a lock and compares the list as it is then, so nothing is told twice. The marks move on at midnight.
+a lock and compares the list as it is then, so nothing is told twice. At midnight the past rows are pruned.
 """
 
 import asyncio
 import datetime as dt
-import html
 import logging
-import re
 from collections.abc import Callable, Iterable
 
-from telethon import Button
-
 from .. import clock
-from ..collectors.inbox import Inbox
-from ..i18n import Phrase, tr
 from ..processing.merge import DeadlineList, same
 from ..processing.todo import Deadline
 from ..store import Store
-from .feed import MESSAGE_LIMIT, Board, day, icon, remember, source, split
-from .forum import Forum
 
 log = logging.getLogger(__name__)
 
-TOPIC = "deadlines"
-SHOWN_KEY = "deadlines.shown"   # the list as the forum showed it last: [{ref, title, due, source, course}]
-BUTTON = re.compile(rb"^dl:(hide|show)$")  # the deadline is the post's: bot_posts.key by the message id
-ICONS = {"hseapp": "🎓", "ical": "📅", "mail": "✉️", "tg": "💬", "ha": "🏠"}
-WHY = {"ical": Phrase("the class is gone from the timetable", "пары больше нет в расписании"),
-       "hseapp": Phrase("it is gone from HSE App X", "его больше нет в HSE App X")}
-WHY_MESSAGE = Phrase("the message was deleted or edited", "сообщение удалено или исправлено")
-MIDNIGHT_DELAY = 5              # seconds past midnight: today and tomorrow move on
-
-
-def due_mark(due: dt.date, today: dt.date, lang: str) -> str:
-    days = (due - today).days
-    if days < 0:
-        return tr(lang, "overdue", "просрочен") + f" ({day(due.isoformat(), lang)})"
-    if days == 0:
-        return tr(lang, "today", "сегодня")
-    if days == 1:
-        return tr(lang, "tomorrow", "завтра")
-    return day(due.isoformat(), lang)
-
-
-def assumed(d: Deadline, when: str, lang: str) -> str:
-    """When a deadline is due, marked when the date is only assumed (a sheet's next seminar, §6.3)."""
-    return f"≈ {when} ({tr(lang, 'assumed', 'предположительно')})" if d.assumed else when
-
-
-ASSUMED_WHY = Phrase("The sheet gives no date: due before the next seminar in RUZ.",
-                     "В листке нет срока: сдать до следующего семинара по РУЗ.")
+SHOWN_KEY = "deadlines.shown"   # the list as seen last: [{ref, title, due, source, course}]
+MIDNIGHT_DELAY = 5              # seconds past midnight
 
 
 def entry(d: Deadline) -> dict:
@@ -83,41 +38,35 @@ def from_entry(e: dict) -> Deadline:
     return Deadline(e["title"], dt.date.fromisoformat(e["due"]), "study", e["source"], e["course"], ref=e["ref"])
 
 
-def hide_button(d: Deadline, lang: str) -> list[list]:
-    text = tr(lang, "Delete", "Удалить") if d.source == "ha" else tr(lang, "Hide", "Скрыть")
-    return [[Button.inline(text, b"dl:hide")]]
-
-
-class DeadlineTopic:
-    def __init__(self, forum: Forum, store: Store, inbox: Inbox, merged: DeadlineList, owner_id: int,
-                 now: Callable[[], dt.datetime] = clock.now_utc):
-        self.forum, self.store, self.db, self.inbox = forum, store, store.db, inbox
-        self.merged, self.owner_id, self.now = merged, owner_id, now
+class DeadlineWatch:
+    def __init__(self, store: Store, merged: DeadlineList, now: Callable[[], dt.datetime] = clock.now_utc):
+        self.store, self.merged, self.now = store, merged, now
         self._lock = asyncio.Lock()
         self._quiet: set[str] = set()
-        # A new deadline (was None) or a moved one (was: its old date): the web app's notifier (§8.6) is told of what
-        # this topic notifies of.
+        self._tasks: set[asyncio.Task] = set()
+        # A new deadline (was None) or a moved one (was: its old date): the web app's notifier (§8.6).
         self.notify: Callable[[Deadline, str | None], None] | None = None
 
-    @property
-    def pinned(self) -> Board:
-        return Board(self.forum, self.db, TOPIC, "deadline_board", self.now)
-
-    # --- what changes the list ------------------------------------------------------------
-
     def quiet(self, refs: Iterable[str]) -> None:
-        """Deadlines a source brought that are no news: the next refresh takes them into the list without a message.
-        Call it right after they are saved, before any await, so no refresh sees them first."""
+        """Deadlines a source brought that are no news: the next refresh takes them into the list silently. Call it
+        right after they are saved, before any await, so no refresh sees them first."""
         self._quiet |= set(refs)
 
     def changed(self, quiet: set[str]) -> None:
-        """DeadlineList.on_change: the owner's change shows in the list, quietly."""
+        """DeadlineList.on_change: the owner's change is taken in, quietly."""
         self.quiet(quiet)
-        self.forum.spawn(self.refresh())
+        task = asyncio.create_task(self.refresh())
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def settle(self) -> None:
+        """Wait for the refreshes `changed` started (the tests)."""
+        while self._tasks:
+            await asyncio.gather(*list(self._tasks))
 
     async def run(self) -> None:
-        """At the start (the very first one takes the list as it is), then every midnight: the marks move on, past
-        deadlines leave, own and hidden rows long past are removed."""
+        """At the start (the very first one takes the list as it is), then every midnight: own and hidden rows long
+        past are removed."""
         while True:
             try:
                 self.merged.prune()
@@ -127,56 +76,26 @@ class DeadlineTopic:
             await asyncio.sleep(self._seconds_to_midnight())
 
     async def refresh(self) -> None:
-        """Compare the list with the one shown last, post what is news, bring the pinned list up to date."""
+        """Compare the list with the one seen last and tell the notifier what is news."""
         async with self._lock:
             shown = self.merged.visible()
             before = self.store.get_json(SHOWN_KEY)
             quiet = set(self._quiet)  # what came before this comparison; later ones wait for the next refresh
             self._quiet -= quiet
-            self.store.put_json(SHOWN_KEY, [entry(d) for d in shown])  # first: a failing post is not told twice
-            if before is not None:
-                for text, d, ref, was in self.messages(before, shown, quiet):
-                    if d is not None and self.notify is not None:
-                        self.notify(d, was)
-                    try:
-                        await self._post(text, d, ref)
-                    except Exception:
-                        log.exception("posting a deadline failed")
-            await self.pinned.sync(self.board(shown))
+            self.store.put_json(SHOWN_KEY, [entry(d) for d in shown])  # first: a failure is not told twice
+            if before is None or self.notify is None:
+                return
+            for d, was in self.news(before, shown, quiet):
+                try:
+                    self.notify(d, was)
+                except Exception:
+                    log.exception("notifying of a deadline failed")
 
-    # --- the pinned list ---------------------------------------------------------------------
-
-    def board(self, shown: list[Deadline]) -> list[str]:
-        today, lang = clock.local_day(self.now()), self.forum.lang
-        lines = []
-        for d in shown:
-            mark, where = self.where(d)
-            line = f"{mark} <b>{html.escape(d.title)}</b> — {assumed(d, due_mark(d.due, today, lang), lang)}"
-            if d.name:
-                line += f" · {html.escape(d.name)}"
-            lines.append(f"{line} · {where}")
-        return split(tr(lang, "<b>Deadlines</b>\n", "<b>Дедлайны</b>\n"),
-                     lines or [tr(lang, "No deadlines.", "Дедлайнов нет.")], MESSAGE_LIMIT)
-
-    def where(self, d: Deadline) -> tuple[str, str]:
-        """The icon and the source of a line, as the news list shows them: a chat's kind and its name with a link to
-        the message, a letter's subject; RUZ, HSE App X or "own" for the others."""
-        lang = self.forum.lang
-        if d.ref.startswith("dl:") and d.source in ("tg", "mail"):
-            row = self.merged.deadlines.get(int(d.ref[3:]))
-            if row is not None and (row["chat_id"] is not None or row["source"] == "mail"):
-                return icon(self.inbox, row), source(self.inbox, row, lang, self.forum.message_url)
-        names = {"ical": tr(lang, "RUZ", "РУЗ"), "hseapp": "HSE App X", "ha": tr(lang, "own", "свой")}
-        return ICONS.get(d.source, "•"), names.get(d.source, "?")
-
-    # --- the messages --------------------------------------------------------------------------
-
-    def messages(self, before: list[dict], shown: list[Deadline],
-                 quiet: set[str]) -> list[tuple[str, Deadline | None, str, str | None]]:
-        """(text, the deadline for the button or None, its ref, the date it moved from) of every change worth a
-        message, in list order."""
+    def news(self, before: list[dict], shown: list[Deadline], quiet: set[str]) -> list[tuple[Deadline, str | None]]:
+        """(the deadline, the date it moved from or None for a new one) of every change worth telling, in list
+        order."""
         refs = {d.ref for d in shown}
-        was = {e["ref"]: e for e in before if e["ref"] in refs}  # a shown deadline -> as it was shown last
+        was = {e["ref"]: e for e in before if e["ref"] in refs}  # a shown deadline -> as it was seen last
         lost = [e for e in before if e["ref"] not in refs]
         for e in list(lost):  # a move of the chats or RUZ: the old row points at the new one
             newer = self._newer(e["ref"])
@@ -189,20 +108,15 @@ class DeadlineTopic:
             if e is not None:
                 joined.remove(d)
                 lost.remove(e)
-
-        result = []
         new = {d.ref for d in joined}
+        result = []
         for d in shown:
             if d.ref in quiet:
                 continue
             if d.ref in new:
-                result.append((self._new(d), d, d.ref, None))
+                result.append((d, None))
             elif d.ref in was and was[d.ref]["due"] != d.due.isoformat():  # the same date: a rename, no news
-                result.append((self._moved(was[d.ref], d), d, d.ref, was[d.ref]["due"]))
-        today = clock.local_day(self.now()).isoformat()
-        for e in lost:
-            if e["ref"] not in quiet and e["due"] >= today and (why := self._withdrawn(e)):
-                result.append((self._gone(e, why), None, e["ref"], None))
+                result.append((d, was[d.ref]["due"]))
         return result
 
     def _newer(self, ref: str) -> str | None:
@@ -211,100 +125,6 @@ class DeadlineTopic:
             return None
         row = self.merged.deadlines.latest(int(ref[3:]))
         return f"dl:{row['id']}" if row is not None and f"dl:{row['id']}" != ref else None
-
-    def _withdrawn(self, e: dict) -> Phrase | None:
-        """Why the source withdrew a deadline; None when it left the list for another reason."""
-        ref = e["ref"]
-        if ref.startswith("dl:"):
-            row = self.merged.deadlines.get(int(ref[3:]))
-            if row is not None and row["gone_at"] is not None and row["moved_by"] is None:
-                return WHY.get(row["source"], WHY_MESSAGE)
-        elif ref.startswith("hseapp:"):
-            item_id = ref.removeprefix("hseapp:")
-            if all(item["id"] != item_id for item in self.merged.hseapp.current() + self.merged.hseapp.done()):
-                return WHY["hseapp"]
-        return None
-
-    def _new(self, d: Deadline) -> str:
-        lang = self.forum.lang
-        lines = [f"🆕 <b>{html.escape(d.title)}</b> — {assumed(d, day(d.due.isoformat(), lang), lang)}"]
-        if d.name:
-            lines.append(html.escape(d.name))
-        if d.source == "ical":
-            lines.append(tr(lang, "Interim assessment in RUZ", "Рубежный контроль в РУЗ"))
-        if d.assumed:
-            lines.append(ASSUMED_WHY.get(lang))
-        return "\n".join(lines + self._origin(d.ref, new=True))
-
-    def _moved(self, e: dict, d: Deadline) -> str:
-        lang = self.forum.lang
-        moved = f"{day(e['due'], lang)} → {assumed(d, day(d.due.isoformat(), lang), lang)}"
-        lines = [f"↪️ <b>{html.escape(d.title)}</b> " + tr(lang, f"moved: {moved}", f"перенесён: {moved}")]
-        return "\n".join(lines + self._origin(d.ref))
-
-    def _gone(self, e: dict, why: Phrase) -> str:
-        lang = self.forum.lang
-        withdrawn = tr(lang, "withdrawn", "снят")
-        return "\n".join([f"✖️ <b>{html.escape(e['title'])}</b> ({day(e['due'], lang)}) {withdrawn}: {why.get(lang)}"]
-                         + self._origin(e["ref"]))
-
-    def _origin(self, ref: str, new: bool = False) -> list[str]:
-        """Where the deadline came from: the message of a chat or the subject of a letter, HSE App X with the Russian
-        title."""
-        if ref.startswith("dl:"):
-            row = self.merged.deadlines.get(int(ref[3:]))
-            if row is not None and row["chat_id"] is not None:
-                return [source(self.inbox, row, self.forum.lang, self.forum.message_url)]
-        elif ref.startswith("hseapp:"):
-            item_id = ref.removeprefix("hseapp:")
-            item = next((item for item in self.merged.hseapp.current() if item["id"] == item_id), None)
-            if new and item is not None and item["title"] != item["label"]:
-                return [f"HSE App X: «{html.escape(item['title'])}»"]
-            return ["HSE App X"]
-        elif new:
-            return [self.forum.tr("Own deadline", "Свой дедлайн")]
-        return []
-
-    async def _post(self, text: str, d: Deadline | None, ref: str) -> None:
-        """A new or moved deadline (`d`) notifies; a withdrawn one goes silently (D55)."""
-        buttons = hide_button(d, self.forum.lang) if d is not None else None
-        msg_id = await self.forum.post(TOPIC, text, buttons=buttons, html=True, notify=d is not None)
-        row_id = int(ref[3:]) if ref.startswith("dl:") else None
-        remember(self.db, TOPIC, msg_id, "deadline", row_id, self.now(), key=ref if d is not None else None)
-
-    # --- the buttons -------------------------------------------------------------------------
-
-    async def on_button(self, event) -> None:
-        """«Hide», «Delete» or «Restore» under a deadline's message (Telethon's CallbackQuery)."""
-        t = self.forum.tr
-        if event.sender_id != self.owner_id:
-            await event.answer(t("No access", "Нет доступа"), alert=True)
-            return
-        action = event.pattern_match.group(1).decode()
-        post = self.db.execute("select key from bot_posts where topic = ? and kind = 'deadline' and msg_id = ?",
-                               (TOPIC, event.message_id)).fetchone()
-        d = self.merged.by_ref(post["key"]) if post is not None and post["key"] else None
-        if d is None:
-            await event.answer(t("This deadline is off the list", "Этого дедлайна больше нет в списке"), alert=True)
-            await event.edit(buttons=None)
-            return
-        if action == "show":
-            self.merged.restore(d)
-            await event.answer(t("Back on the list", "Снова в списке"))
-            await event.edit(buttons=hide_button(d, self.forum.lang))
-            return
-        if d.source == "ha":
-            self.merged.remove(d)
-            await event.answer(t("Deleted", "Удалён"))
-            await event.edit(buttons=None)
-            return
-        if self.merged.is_hidden(d):
-            await event.answer(t("Hidden already", "Уже скрыт"))
-        else:
-            self.merged.remove(d)
-            await event.answer(t("Hidden: gone from the list, Tablo and HA",
-                                 "Скрыт: в списке, в Tablo и в HA его больше нет"))
-        await event.edit(buttons=[[Button.inline(t("Restore", "Вернуть"), b"dl:show")]])
 
     def _seconds_to_midnight(self) -> float:
         local = self.now().astimezone(clock.TZ)

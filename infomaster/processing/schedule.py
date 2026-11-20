@@ -126,7 +126,7 @@ class Entry:
 
 @dataclass
 class MidtermChanges:
-    """What a sync did to the Midterm deadlines, for the Дедлайны topic."""
+    """What a sync did to the Midterm deadlines, as no news."""
     deadlines: list[int] = field(default_factory=list)
     moved: list[tuple[int, int]] = field(default_factory=list)
     gone: list[int] = field(default_factory=list)
@@ -185,7 +185,7 @@ class Schedule:
         self.db = store.db
         self.ruz, self.events, self.deadlines, self.subjects, self.inbox, self.now = (
             ruz, events, deadlines, subjects, inbox, now)
-        # Midterms moved by the owner's choice (hiding a correction), for the Дедлайны topic; a RUZ poll and a batch
+        # Midterms moved by the owner's choice (hiding a correction), as no news; a RUZ poll and a batch
         # run hand theirs over with their own changes.
         self.on_midterms: Callable[[MidtermChanges], Awaitable[None]] | None = None
         # Other deadlines that follow the timetable, synced with the Midterms: the sheets' assumed due dates.
@@ -391,7 +391,7 @@ class Schedule:
     # --- the owner's choices ------------------------------------------------------------
 
     async def set_hidden(self, event_id: int, hidden: bool) -> dict | None:
-        """Events.set_hidden for the forum buttons and the Mini App. Hiding a correction, or applying it again,
+        """Events.set_hidden for the web app and Claude. Hiding a correction, or applying it again,
         moves the class back or forth, and its Midterm with it."""
         row = self.events.set_hidden(event_id, hidden)
         if row is not None and row["class_uid"] is not None:
@@ -399,7 +399,7 @@ class Schedule:
         return row
 
     async def _follow_midterms(self) -> None:
-        """The Midterms (and the sheets' assumed dates) follow the classes as the owner left them; the forum hears of
+        """The Midterms (and the sheets' assumed dates) follow the classes as the owner left them; the deadlines hear of
         the ones that moved."""
         if (midterms := self.sync_deadlines()) and self.on_midterms is not None:
             try:

@@ -15,7 +15,7 @@ PASSWORD = "app-password-123"
 
 
 def env(user: str = "student@edu.hse.ru", password: str = PASSWORD) -> Env:
-    return Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, forum_id=-100, api_token="tok",
+    return Env(api_id=1, api_hash="h", bot_token="1:t", owner_id=42, api_token="tok",
                public_url="https://infomaster.example.ts.net", mail_user=user, mail_password=password)
 
 

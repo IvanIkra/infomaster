@@ -42,9 +42,9 @@ class Connector:
         self.endpoint = Endpoint(self.registry, self, self._record)
         self.app: web.Application | None = None
 
-    def attach(self, app: web.Application) -> web.Application:
+    def attach(self, app: web.Application, miniapp: bool = True) -> web.Application:
         """The connector's routes and tools on the public port's app (the Mini App's): the tools act on the
-        services it holds."""
+        services it holds. Without the Mini App (D69) its «Claude connector» screen's API is left out."""
         self.app = app
         catalog.register(self.registry, app)
         if app.get(LIBRARY_KEY) is not None:  # put there by library.links.add_routes, before this
@@ -52,9 +52,10 @@ class Connector:
         oauth.add_routes(app, self.oauth)
         app[CONNECTOR_KEY] = self
         app.router.add_route("*", "/mcp", self._mcp)
-        app.router.add_get("/app/api/connector", screen)
-        app.router.add_delete("/app/api/connector/connections/{grant_id}", revoke)
-        app.router.add_post("/app/api/connector/changes/{change_id}/undo", undo)
+        if miniapp:
+            app.router.add_get("/app/api/connector", screen)
+            app.router.add_delete("/app/api/connector/connections/{grant_id}", revoke)
+            app.router.add_post("/app/api/connector/changes/{change_id}/undo", undo)
         return app
 
     async def _mcp(self, request: web.Request) -> web.Response:

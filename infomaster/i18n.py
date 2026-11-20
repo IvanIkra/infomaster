@@ -1,14 +1,13 @@
-"""The languages of what the owner reads (D41): English or Russian, English by default.
+"""The language of what the owner reads (D41): English or Russian, English by default.
 
-Two general settings: `forum_language` for the bot (its posts, buttons and answers in the forum and in its chat, and
-what the models write for them: a sheet's summary and what changed in it) and `miniapp_language` for the Mini App and
-the page the browser comes back to after the HSE login. What Tablo and the iCal feeds get is English either way, so
-the news, the deadline labels and the course titles the models write stay English in the forum too.
+One general setting, `miniapp_language` (its name is kept from the Mini App's time): the web app, the bot's answers,
+what the models write for the owner (a sheet's summary and what changed in it) and the page the browser comes back
+to after the HSE login. What Tablo and the iCal feeds get is English either way, so the news, the deadline labels and
+the course titles the models write stay English.
 
-Text made away from its output (a collector's line for the System topic, the reason a login failed, an error kept for
-a status) is a Phrase with both languages; the output picks one when it shows it: the forum when it posts, the Mini
-App when it answers. str() of a Phrase is the English: the log and the API for Tablo. An Alert is a Phrase about a
-source that stopped working: the System topic posts it with a notification, every other line goes silently (D55).
+Text made away from its output (a collector's line for the owner, the reason a login failed, an error kept for a
+status) is a Phrase with both languages; the output picks one when it shows it. str() of a Phrase is the English: the
+log and the API for Tablo. An Alert is a Phrase about a source that stopped working: it is pushed (D63).
 """
 
 from dataclasses import dataclass
@@ -31,7 +30,7 @@ class Phrase:
 
 @dataclass(frozen=True)
 class Alert(Phrase):
-    """A line about a failure of a source (it is unavailable, a login is needed): the forum notifies of it (D55)."""
+    """A line about a failure of a source (it is unavailable, a login is needed): it is pushed (D63)."""
 
 
 def tr(lang: str, en: str, ru: str) -> str:

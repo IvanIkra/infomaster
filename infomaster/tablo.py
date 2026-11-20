@@ -10,8 +10,8 @@ sources-overview.md; the service is stopped, the file is opened read-only):
   one set by hand here already wins, Haiku's answer here gives way.
 Rows 30 days past their date are skipped: the next change of the lists would remove them anyway.
 
-The «Дедлайны» topic must not post the copied own deadlines as new ones: when it has shown a list already, they are
-added to the list it showed (kv "deadlines.shown"), as the owner's changes are quiet (outputs/deadlines.py).
+The copied own deadlines are no news to push: when a list was seen already, they are added to it (kv
+"deadlines.shown"), as the owner's changes are quiet (outputs/deadlines.py).
 """
 
 import datetime as dt

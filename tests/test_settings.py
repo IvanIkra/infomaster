@@ -78,9 +78,10 @@ def test_bad_chat_settings(values):
 
 
 def test_languages(settings):
-    """D41: English by default, each its own, only English or Russian."""
-    assert settings.get("forum_language") == settings.get("miniapp_language") == "en"
-    assert settings.set("forum_language", "ru") == "ru" and settings.get("miniapp_language") == "en"
+    """D41: English by default, only English or Russian; the forum's language went with the forum (D69)."""
+    assert settings.get("miniapp_language") == "en"
+    with pytest.raises(SettingsError):
+        settings.set("forum_language", "ru")
     for wrong in ("de", "RU", "", None):
         with pytest.raises(SettingsError):
             settings.set("miniapp_language", wrong)

@@ -9,7 +9,6 @@ from aiohttp import web
 from infomaster import clock
 from infomaster.collectors import ruz as ruz_module
 from infomaster.collectors.ruz import Ruz, parse
-from infomaster.outputs.timetable import Timetable
 
 FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
 
@@ -226,31 +225,28 @@ async def test_other_errors_hide_the_link(store, now, caplog):
     assert ruz._hide_url("GET /v3/ruz/cal/0f1e2d3c-secret failed") == "GET <RUZ_ICAL_URL> failed"
 
 
-async def test_empty_feed_before_the_timetable(server, store, now, schedule, forum):
-    """Between terms the feed is empty: no 'first poll' every hour, the System topic hears once classes come."""
+async def test_empty_feed_before_the_timetable(server, store, now, schedule):
+    """Between terms the feed is empty: no 'first poll' every hour, only once classes come."""
     ruz = collector(server["url"], store, now)
     schedule.ruz = ruz
-    timetable = Timetable(forum, store, schedule.inbox, schedule, 42, now=now)
 
     async def on_poll(diff):
         ruz.polls.append(diff)
-        await timetable.publish_ruz(diff)
 
     ruz.on_poll = on_poll
     server["body"] = calendar()
     for _ in range(3):
         await ruz.poll()
-    assert [diff.first for diff in ruz.polls] == [False] * 3 and forum.messages == {}
+    assert [diff.first for diff in ruz.polls] == [False] * 3
     assert ruz.status() == {"ok_at": "2026-10-20T12:00:00", "error": None, "classes": 0}
 
     server["body"], server["etag"] = FEED, 'W/"v2"'
     await ruz.poll()
     await ruz.poll()
     assert [diff.first for diff in ruz.polls[3:]] == [True, False]
-    assert forum.texts("system") == ["РУЗ подключён: в расписании 9 пар."] and forum.texts("schedule") == []
 
 
-async def test_a_new_link_is_a_first_poll(server, store, now, schedule, forum):
+async def test_a_new_link_is_a_first_poll(server, store, now, schedule):
     """RUZ_ICAL_URL changed: another feed, not a list of changes. No «убрана» for every class of the old one."""
     ruz = collector(server["url"], store, now)
     await ruz.poll()
@@ -259,16 +255,13 @@ async def test_a_new_link_is_a_first_poll(server, store, now, schedule, forum):
         vevent("2000008@ruz.hse.ru", "Calculus", "2026-10-28 09:30", "2026-10-28 10:50")), 'W/"other"'
     relinked = collector(server["url"] + "?new-link", store, now)
     schedule.ruz = relinked
-    timetable = Timetable(forum, store, schedule.inbox, schedule, 42, now=now)
 
     async def on_poll(diff):
         relinked.polls.append(diff)
-        await timetable.publish_ruz(diff)
 
     relinked.on_poll = on_poll
     diff = await relinked.poll()
     assert diff.first and diff.relinked and server["if_none_match"][-1] is None
-    assert forum.texts("system") == ["Ссылка РУЗ сменилась: в расписании 2 пар."] and forum.texts("schedule") == []
     assert [item["uid"] for item in relinked.classes(since="2026-10-20T12:00:00")] == [
         "other-1@ruz.hse.ru", "2000008@ruz.hse.ru"]  # the old feed's classes ahead are gone from the feeds
 

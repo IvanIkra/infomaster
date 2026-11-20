@@ -1,7 +1,7 @@
 """The web app (§8.6, D61, stage 16): a home-screen app on the public port that takes the place of the forum and
 the Mini App.
 
-On the public port, next to the Mini App and the connector:
+On the public port, next to the connector:
 - /web/: the app's page; /web/static/*: its scripts, styles, fonts and icons; /web/sw.js: the service worker, whose
   scope is /web/; /web/manifest.webmanifest;
 - /web/api/*: JSON for the app, behind the session cookie (auth.py); what the screens read comes from views.py,
@@ -12,7 +12,7 @@ The owner's changes (stage 16.3) are the connector's write tools (§8.5), called
 checks, and every change goes into the connector's journal (`via` web) with the steps that undo it.
 
 Notifications (stage 16.4): a device turns them on with its browser's push subscription (push.py); the notifier
-(notify.py) sends what the forum announces with a sound.
+(notify.py) sends the deadlines' news, reminders and failures (D69).
 
 News (stage 16.7): the live news in rank order, an item with the message it came from, and «Hide» through the
 connector's hide_news.
