@@ -733,7 +733,7 @@ twice.
 
 | Reads | Writes |
 |---|---|
-| `get_status` (what needs attention, every source, the LLM spending), `list_deadlines`, `list_hidden_deadlines`, `get_timetable` (a range of days), `list_news`, `search_messages` (text, chat, days; 14 days are kept), `get_message` (as D50's page), `list_chats`, `list_chat_senders`, `list_courses`, `get_settings`, `list_sheets`, `get_sheet` (the text; a scan's first page as its JPEG while the file is kept), `list_grades`, `get_gradebook` | deadlines: `add_deadline`, `edit_deadline`, `hide_deadline`, `delete_deadline`, `unhide_deadline`; the timetable: `add_event`, `edit_event`, `set_event_options`, `remove_event`, `correct_class`; `edit_sheet`; `update_chat_settings`; the dictionary: `set_course`, `delete_course`; settings: `update_general_settings`, `update_reminders`, `update_images`, `update_pdf_limits`; grades: `update_grade_settings`, `add_gradebook`, `update_gradebook`, `remove_gradebook`, `read_gradebook_now`, `set_tab_layout`, `reset_tab_layout`, `add_grade`, `change_grade`, `delete_grade` |
+| `get_status` (what needs attention, every source, the LLM spending), `list_deadlines`, `list_hidden_deadlines`, `get_timetable` (a range of days), `list_news`, `search_messages` (text, chat, days; 14 days are kept), `get_message` (as D50's page), `list_chats`, `list_chat_senders`, `list_courses`, `get_settings`, `list_sheets`, `get_sheet` (the text; a scan's first page as its JPEG while the file is kept), `list_grades`, `get_gradebook` | deadlines: `add_deadline`, `edit_deadline`, `hide_deadline` (with a reason: done, not_mine, duplicate of `kept`), `delete_deadline`, `unhide_deadline`, `confirm_deadline_date` (an assumed date, §6.3), `set_deadline_course`; the timetable: `add_event`, `edit_event`, `set_event_options`, `remove_event`, `correct_class`; `edit_sheet`; `update_chat_settings`; the dictionary: `set_course`, `delete_course`; settings: `update_general_settings`, `update_reminders`, `update_images`, `update_pdf_limits`; grades: `update_grade_settings`, `add_gradebook`, `update_gradebook`, `remove_gradebook`, `read_gradebook_now`, `set_tab_layout`, `reset_tab_layout`, `add_grade`, `change_grade`, `delete_grade` |
 
 Not exposed: the secrets of `.env`, the twin's login and logout, the HSE App X login, the LLM limit and the model
 prices (a lower price would raise the limit too), anything of the summaries.
@@ -768,7 +768,8 @@ before the change. The Mini App's **Settings → Claude connector** screen shows
 with **Revoke**, and the last 50 changes with **Undo**. An undo runs at the time it is asked for: when what it acts on
 has changed since (a deadline its source dropped), it fails, keeps the error and changes nothing more. Some changes
 say what an undo does not bring back (removing a gradebook forgets its grades, own corrections and tab layouts), and
-some cannot be undone at all ("read now"). The last 200 changes are kept.
+some cannot be undone at all ("read now"). The last 200 changes are kept. The web app's changes go into the same
+journal through the same tools (`via` web, §8.6); the Mini App's screen lists Claude's only.
 
 **Prompt injection.** Claude reads messages strangers wrote. Tool results are JSON, never prose; a result that
 carries chat text or what a model made of it has an `untrusted` field saying that `text`, `full`, `short`, `summary`,
@@ -819,10 +820,35 @@ way, and the key is what they share, so a course's lens is one filter over all o
   works on the 0–10 scale, not a formal grade), its knowledge base documents with links, the counts of its sheets and
   raw material.
 
-**Screens**: the feed with the lenses, the course's lens (grades, next class, shelves), the week as a grid with the
-deadlines of each day above it, and an item's card over them. Still to come in the steps of stage 16 (§11.1): the
-«Check» queue and the card's actions («Done», «Not mine», «Edit», «It is a duplicate»), «Machine» with the sources,
-the journal and the settings, «+», and the shelves of sheets and raw material.
+**Changes** (step 16.3, D62). The owner's changes are the connector's write tools (§8.5), called through
+`Connector.act`: the same checks as Claude's calls, and every change goes into the connector's journal (`via` web)
+with the steps that undo it. After a change a note at the top of the screen offers **Undo** for 10 seconds.
+
+- `POST /web/api/deadlines/{action}` `{uid, ...}`: `done` and `not-mine` hide a source's deadline with that reason
+  (`hidden_deadlines.reason`; HA, Tablo and the merge see every reason the same, as hidden), and delete an own one;
+  `edit` `{title?, due?, category?}` is the Mini App's edit (a source's deadline becomes an own copy; a sheet's
+  assumed date given another one is its real date, §6.3); `merge` `{keep}` hides `uid` as a duplicate of `keep`
+  (`reason` duplicate, `kept`); `confirm` makes an assumed date real; `course` `{course: a lens key}` sets the course
+  of a deadline from a chat, a letter or RUZ;
+- `GET /web/api/check?course=`: the «Check» queue (`web/check.py`), only what the service is unsure of, the soonest
+  first, upcoming deadlines only: an assumed date (answers: «Right», another date); a likely duplicate, two deadlines
+  of one course the merge kept apart that are the same work on dates up to a week apart, or carry the same number
+  («Sheet 12» and «HW 12»), never two of HSE App X or two Midterms (answers: «Merge», keeping a real date over an
+  assumed one, then the more reliable source as the merge orders them; «They are different»); a deadline from a
+  chat, a letter or RUZ without a course (answers: a course of the lenses, «Outside the courses»). The feed carries
+  the same questions in `check`;
+- `POST /web/api/check/put-aside` `{id}`: «They are different», «Outside the courses»: the question is kept in
+  `web_checked` and not asked again, until the change is undone. Its id holds the deadlines' uids, which change with
+  a title or a date, so a changed deadline is asked about anew;
+- `POST /web/api/changes/{id}/undo`: the undo of a journaled change.
+
+**Screens**: the feed with the lenses and the «Check, please» box (the first two questions with their quick answer),
+the course's lens (grades, next class, shelves), the week as a grid with the deadlines of each day above it, an
+item's card over them with «Done», «Edit», «Not mine» (an own one: «Delete»), «It is a duplicate…» (the course's
+deadlines within two weeks to pick the one that stays) and, for an assumed date, «The date is right», and the «Check»
+queue one question at a time («Check · 1 of 3», «Later» puts one off for the visit). Still to come in the steps of
+stage 16 (§11.1): «Machine» with the sources, the journal and the settings, «+», and the shelves of sheets and raw
+material.
 
 ## 9. Storage (SQLite)
 
@@ -838,7 +864,7 @@ Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Ta
 | `subjects` | the dictionary (§2.2) |
 | `news` | parsed news, `replaced_by` |
 | `deadlines` | deadlines from external sources, `moved_by` |
-| `own_deadlines`, `hidden_deadlines` | own and hidden ones (§5.4) |
+| `own_deadlines`, `hidden_deadlines` | own and hidden ones (§5.4); a hidden one keeps why, when the web app says (`reason`: done, not_mine, duplicate of `kept`) |
 | `events` | events from chats (consultations, events) and changes to RUZ classes; own events and changes have the source `own` (D44) |
 | `classes` | classes from RUZ |
 | `sheets` | problem sheets: message, file hash, course, number, due date, text, summary, previous version, the bot's message id |
@@ -847,8 +873,9 @@ Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Ta
 | `bot_posts` | what the bot published: topic, message id, what it refers to (for edits and hiding) |
 | `llm_runs` | the LLM journal |
 | `connector_clients`, `connector_grants`, `connector_tokens` | the MCP connector's OAuth (§8.5): registered clients, the connections the owner allowed with their refresh token, access tokens; tokens as SHA-256 |
-| `connector_changes` | the journal of changes made through the connector, with their undo steps (§8.5) |
+| `connector_changes` | the journal of changes made through the connector or the web app (`via`), with their undo steps (§8.5) |
 | `web_sessions`, `web_passkeys` | the web app's login (§8.6): a session per device with the SHA-256 of its token, the owner's passkeys (COSE public key, sign count) |
+| `web_checked` | the «Check» questions the owner put aside (§8.6) |
 
 ## 10. Settings and secrets
 
@@ -944,9 +971,9 @@ own; Claude is an optional door, not the brain (D53).
       then a passkey; sessions per device;
     - 16.2 reading (done): one feed of classes and deadlines with the class now, the week, an item's card with its
       source and history, a course's lens with its grades, next class and knowledge base;
-    - 16.3 actions: «Done» and «Not mine» as two reasons of a hidden deadline (Tablo and HA still see both as
-      hidden), editing, merging duplicates by hand, confirming an assumed date; the «Check» queue; every change
-      journaled with an undo;
+    - 16.3 actions (done, D62): «Done» and «Not mine» as two reasons of a hidden deadline (Tablo and HA still see
+      both as hidden), editing, merging duplicates by hand, confirming an assumed date, a course for a deadline
+      without one; the «Check» queue; every change journaled with an undo;
     - 16.4 Web Push: subscriptions per device and one notifier for what the forum announces now (new and moved
       deadlines, reminders, failures, the LLM budget, a login the twin or HSE App X needs);
     - 16.5 «+»: uploads to the class in progress, one line parsed by Haiku within the budget and confirmed, Share

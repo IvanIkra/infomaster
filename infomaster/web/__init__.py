@@ -4,9 +4,12 @@ the Mini App.
 On the public port, next to the Mini App and the connector:
 - /web/: the app's page; /web/static/*: its scripts, styles, fonts and icons; /web/sw.js: the service worker, whose
   scope is /web/; /web/manifest.webmanifest;
-- /web/api/*: JSON for the app, behind the session cookie (auth.py); what the screens read comes from views.py.
-  A request that changes something must come from the app's own origin: the cookie is SameSite=Strict already,
-  and the Origin header is checked too.
+- /web/api/*: JSON for the app, behind the session cookie (auth.py); what the screens read comes from views.py,
+  the «Check» queue from check.py. A request that changes something must come from the app's own origin: the cookie
+  is SameSite=Strict already, and the Origin header is checked too.
+
+The owner's changes (stage 16.3) are the connector's write tools (§8.5), called through `Connector.act`: the same
+checks, and every change goes into the connector's journal (`via` web) with the steps that undo it.
 
 The client is plain ES modules, no build step: Preact and htm are vendored in static/vendor, the fonts in static/fonts.
 """
@@ -21,8 +24,10 @@ from urllib.parse import urlsplit
 from aiohttp import web
 
 from ..config import Env
+from ..connector.tools import Context, ToolError
 from ..store import Store
 from .auth import COOKIE, COOKIE_PATH, SESSION_IDLE, Auth, AuthError, device_name
+from .check import Check
 from .views import Data
 
 STATIC = Path(__file__).parent / "static"
@@ -38,6 +43,8 @@ class WebApp:
         self.origin = f"{parts.scheme}://{parts.netloc}"
         self.lang = lang
         self.data = data  # what the screens read; set by the service, left out by the login's tests
+        self.check = Check(data, store) if data is not None else None
+        self.connector = None  # the service's Connector: the owner's changes are its tools, journaled with undo
         self.auth = Auth(store, parts.hostname or "", self.origin, send_code, lang, now)
 
     def attach(self, app: web.Application) -> web.Application:
@@ -62,10 +69,20 @@ class WebApp:
                ("GET", "/week", week),
                ("GET", "/deadline", deadline),
                ("GET", "/class", class_),
-               ("GET", "/course", course)]
+               ("GET", "/course", course),
+               ("GET", "/check", check),
+               ("POST", "/check/put-aside", put_aside),
+               ("POST", "/deadlines/{action}", deadline_action),
+               ("POST", "/changes/{change_id}/undo", undo)]
         for method, path, handler in api:
             app.router.add_route(method, "/web/api" + path, guarded(handler))
+        if self.connector is not None and self.check is not None:
+            self.connector.registry.op("_ask_again", self._ask_again)
         return app
+
+    async def _ask_again(self, ctx: Context, args: dict) -> None:
+        """The undo of a question put aside: the «Check» queue asks it again."""
+        self.check.ask_again(args["id"])
 
 
 WEB_KEY = web.AppKey("web", WebApp)
@@ -226,8 +243,11 @@ def _course(request: web.Request) -> str | None:
 
 
 async def feed(request: web.Request) -> web.Response:
-    """?course=<key>: the feed, all courses or one course's lens."""
-    return web.json_response(_data(request).feed(_course(request)))
+    """?course=<key>: the feed, all courses or one course's lens, with the «Check» questions of it."""
+    course = _course(request)
+    answer = _data(request).feed(course)
+    answer["check"] = request.app[WEB_KEY].check.items(course)
+    return web.json_response(answer)
 
 
 async def week(request: web.Request) -> web.Response:
@@ -253,3 +273,95 @@ async def class_(request: web.Request) -> web.Response:
 async def course(request: web.Request) -> web.Response:
     found = _data(request).course(" ".join(request.query.get("key", "").split()))
     return web.json_response(found) if found else error(404, "no such course")
+
+
+# --- the owner's changes (stage 16.3) ------------------------------------------------------------------------
+
+def _connector(request: web.Request):
+    connector = request.app[WEB_KEY].connector
+    if connector is None:
+        raise web.HTTPServiceUnavailable(text="changes are not wired")
+    return connector
+
+
+async def check(request: web.Request) -> web.Response:
+    """?course=<key>: the «Check» questions, and the courses a deadline without one may take."""
+    data = _data(request)
+    return web.json_response({"items": request.app[WEB_KEY].check.items(_course(request)),
+                              "courses": data.courses(), "today": data.now().date().isoformat()})
+
+
+def _text(data: dict, name: str) -> str:
+    value = data.get(name)
+    if not isinstance(value, str) or not value.strip():
+        raise web.HTTPBadRequest(text=f"{name} expected")
+    return value.strip()
+
+
+def _change(change_id: int, output) -> web.Response:
+    return web.json_response({"change": {"id": change_id, "summary": output.summary,
+                                         "undo": output.undo is not None, "note": output.note}})
+
+
+async def deadline_action(request: web.Request) -> web.Response:
+    """POST /deadlines/{action} {uid, ...}: done, not-mine, edit {title?, due?, category?}, confirm (an assumed
+    date), merge {keep} (uid is the duplicate that goes), course {course: a key of the lenses}. An own deadline is
+    deleted when it is done, not the owner's or a duplicate. The answer: the change, for its undo."""
+    data, connector = await body(request), _connector(request)
+    action, item_uid = request.match_info["action"], _text(data, "uid")
+    merged = _data(request).merged
+    d = merged.find(item_uid) or next((own for own in merged.todo.own() if own.key == item_uid), None)
+    if d is None:
+        return error(404, "this deadline is off the list already")
+    own = d.source == "ha"
+    if action in ("done", "not-mine"):
+        tool, arguments = ("delete_deadline", {"uid": item_uid}) if own else \
+            ("hide_deadline", {"uid": item_uid, "reason": action.replace("-", "_")})
+    elif action == "merge":
+        keep = _text(data, "keep")
+        tool, arguments = ("delete_deadline", {"uid": item_uid}) if own else \
+            ("hide_deadline", {"uid": item_uid, "reason": "duplicate", "kept": keep})
+        if own and keep == item_uid:
+            return error(400, "a deadline cannot be a duplicate of itself")
+    elif action == "edit":
+        tool = "edit_deadline"
+        arguments = {"uid": item_uid, **{name: data[name] for name in ("title", "due", "category") if name in data}}
+    elif action == "confirm":
+        tool, arguments = "confirm_deadline_date", {"uid": item_uid}
+    elif action == "course":
+        name = _data(request).course_name(_text(data, "course"))
+        if name is None:
+            return error(400, "no such course")
+        tool, arguments = "set_deadline_course", {"uid": item_uid, "course": name}
+    else:
+        return error(404, "no such action")
+    try:
+        change_id, output = await connector.act(tool, arguments)
+    except ToolError as e:
+        return error(400, str(e))
+    return _change(change_id, output)
+
+
+async def put_aside(request: web.Request) -> web.Response:
+    """{id}: a «Check» question answered «leave it»: not asked again, until it is undone."""
+    question, app = _text(await body(request), "id"), request.app[WEB_KEY]
+    connector = _connector(request)
+    if not app.check.put_away(question):
+        return error(404, "no such question")
+    kind = question.split(":", 1)[0]
+    summary = {"dup": "Marked two deadlines as different", "course": "Left a deadline outside the courses",
+               "assumed": "Left an assumed date as it is"}.get(kind, "Put a question aside")
+    undo = [{"tool": "_ask_again", "arguments": {"id": question}}]
+    change_id = connector.journal("put_aside", {"id": question}, summary, undo)
+    return web.json_response({"change": {"id": change_id, "summary": summary, "undo": True, "note": ""}})
+
+
+async def undo(request: web.Request) -> web.Response:
+    """Undo a change of the journal: the web app's own, or one Claude made through the connector."""
+    connector = _connector(request)
+    try:
+        change = await connector.undo(_id(request, "change_id"))
+    except ToolError as e:
+        return error(400, str(e))
+    return web.json_response({"change": {"id": change["id"], "summary": change["summary"],
+                                         "undone_at": change["undone_at"]}})

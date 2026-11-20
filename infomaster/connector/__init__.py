@@ -24,7 +24,7 @@ from . import catalog, oauth
 from . import library as library_tools
 from .changes import Changes
 from .mcp import Endpoint
-from .tools import Context, Output, Registry, ToolError
+from .tools import Context, Output, Registry, ToolError, check
 
 
 class Connector:
@@ -73,6 +73,24 @@ class Connector:
     def _record(self, grant_id: int | None, tool: str, arguments: dict, output: Output) -> int:
         return self.changes.record(grant_id, tool, arguments, output.summary, output.undo, output.note)
 
+    async def act(self, tool: str, arguments: dict, via: str = "web") -> tuple[int, Output]:
+        """A write tool called by the owner elsewhere (the web app, §8.6): checked like a client's call and journaled
+        with its undo. ToolError when the tool refuses."""
+        found = self.registry.tools.get(tool)
+        if found is None or not found.write:
+            raise ToolError(f"no such change: {tool}")
+        if problems := check(found.schema, arguments):
+            raise ToolError("; ".join(problems))
+        output = await found.run(Context(self.app, self), arguments)
+        if not isinstance(output, Output):
+            output = Output(output)
+        return self.changes.record(None, tool, arguments, output.summary, output.undo, output.note, via), output
+
+    def journal(self, tool: str, arguments: dict, summary: str, undo: list[dict] | None,
+                note: str = "", via: str = "web") -> int:
+        """A change made without a tool (a question of the web app's «Check» put aside), for its undo."""
+        return self.changes.record(None, tool, arguments, summary, undo, note, via)
+
     async def undo(self, change_id: int) -> dict:
         """Run a change's undo steps; ToolError with the reason when it cannot be done."""
         change = self.changes.get(change_id)
@@ -102,7 +120,7 @@ class Connector:
                                 for c in self.oauth.connections()],
                 "changes": [{"id": c["id"], "at": c["at"], "tool": c["tool"], "summary": c["summary"],
                              "undo": c["undo"] is not None, "note": c["note"], "undone_at": c["undone_at"],
-                             "undo_error": c["undo_error"]} for c in self.changes.recent()],
+                             "undo_error": c["undo_error"]} for c in self.changes.recent(via="claude")],
                 "tools": {"read": sum(not t.write for t in tools), "write": sum(t.write for t in tools)}}
 
 

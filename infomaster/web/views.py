@@ -28,6 +28,8 @@ FEED_DAYS = 14          # classes of the feed, from today on; deadlines come how
 PAST_COURSE_DAYS = 30   # a course of the lenses had a class this recently, or has one ahead
 AHEAD_COURSE_DAYS = 60
 QUOTE_CHARS = 700       # of a source message on a card
+TWIN_DAYS = 14          # «It is a duplicate…» offers the deadlines this close to the card's
+TWINS = 8
 SOURCE_NAMES = {"hseapp": Phrase("HSE App X", "HSE App X"), "ical": Phrase("the timetable", "РУЗ"),
                 "ha": Phrase("added by you", "добавлен вами")}
 
@@ -81,6 +83,15 @@ class Data:
 
     def deadline_key(self, d: Deadline) -> str | None:
         return d.course or self.key(d.name)
+
+    def course_name(self, key: str) -> str | None:
+        """A name of the course for a key, as a deadline's row keeps it: the dictionary's, else the timetable's; None
+        for no such course."""
+        named = next((name for name, s in sorted(self.schedule.subjects.all().items()) if s.abbr == key), None)
+        if named is not None:
+            return named
+        return next((item["subject"] for item in self.schedule.ruz.classes() if self.key(item["subject"]) == key),
+                    None)
 
     # --- items --------------------------------------------------------------------------------------------
 
@@ -232,7 +243,17 @@ class Data:
             history.append({"at": None, "what": "hseapp", "due": d.due.isoformat(), "from": "HSE App X"})
         elif d.source == "ha":
             history.append({"at": None, "what": "own", "due": d.due.isoformat(), "from": None})
-        return {**item, "quote": quote, "link": link, "history": history}
+        return {**item, "quote": quote, "link": link, "history": history, "own": d.source == "ha",
+                "twins": self.twins(d, now.date())}
+
+    def twins(self, d: Deadline, today: dt.date) -> list[dict]:
+        """What «It is a duplicate…» offers: the other deadlines of the course (of any, for one without a course)
+        within two weeks of it, the nearest date first."""
+        key = self.deadline_key(d)
+        found = [x for x in self.merged.visible() if uid(x) != uid(d) and abs((x.due - d.due).days) <= TWIN_DAYS
+                 and (key is None or self.deadline_key(x) == key)]
+        found.sort(key=lambda x: (abs((x.due - d.due).days), x.due))
+        return [self.deadline_item(x, today) for x in found[:TWINS]]
 
     def class_card(self, entry_uid: str) -> dict | None:
         """A class or an event with its course, the deadlines handed in at it, the message that changed it, and

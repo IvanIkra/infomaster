@@ -139,6 +139,7 @@ class Service:
         self.web = WebApp(env, self.store, send_code=self._to_owner, lang=language,
                           data=Data(self.schedule, self.merged, self.library, self.grades, self.library_links,
                                     language))
+        self.web.connector = self.connector  # the owner's changes are the connector's tools, journaled with undo
         self.inbox.wake = self.batches.wake
         self.batches.publish = self._publish
         self.batches.notify = self._to_system

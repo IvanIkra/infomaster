@@ -2,10 +2,10 @@
 // to the screens (screens.js).
 import { render } from "preact";
 import { useEffect, useState } from "preact/hooks";
-import { ApiError, ICONS, api, go, html, icon, route } from "./common.js";
+import { ApiError, CHANGED, ICONS, TOAST, api, go, html, icon, route } from "./common.js";
 import { getLang, setLang, t, when } from "./i18n.js";
 import * as passkey from "./passkey.js";
-import { Card, Feed, Week } from "./screens.js";
+import { Card, CheckQueue, Feed, Week } from "./screens.js";
 
 const LANG_KEY = "infomaster.lang";  // the login screen's choice, before the server's setting is known
 
@@ -164,6 +164,38 @@ function Devices({ onOut }) {
   </main>`;
 }
 
+// --- the note after a change, with its undo ------------------------------------------------------------------
+
+function Toast() {
+  const [note, setNote] = useState(null);  // {text, changeId}
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let timer = null;
+    const show = (event) => {
+      clearTimeout(timer);
+      setNote(event.detail);
+      timer = setTimeout(() => setNote(null), 10000);
+    };
+    window.addEventListener(TOAST, show);
+    return () => { clearTimeout(timer); window.removeEventListener(TOAST, show); };
+  }, []);
+  if (!note) return null;
+  const undo = async () => {
+    setBusy(true);
+    try {
+      await api("POST", `/changes/${note.changeId}/undo`, {});
+      window.dispatchEvent(new Event(CHANGED));
+      setNote({ text: t("undone"), changeId: null });
+    } catch (e) {
+      setNote({ text: e.message, changeId: null });
+    } finally { setBusy(false); }
+  };
+  return html`<div class="toast" role="status"><div>
+    <span>${note.text}</span>
+    ${note.changeId !== null && html`<button disabled=${busy} onClick=${undo}>${t("undo")}</button>`}
+  </div></div>`;
+}
+
 // --- the frame ---------------------------------------------------------------------------------------------
 
 let base = { path: "/", params: new URLSearchParams() };  // the screen under a card
@@ -199,13 +231,17 @@ function App() {
   if (at.path === "/machine/login") return html`<${Devices} onOut=${out} />`;
 
   const card = at.path === "/d" || at.path === "/c";
-  if (!card) base = at;
+  const check = at.path === "/check";
+  if (!card && !check) base = at;
   const close = () => go(base.path, Object.fromEntries(base.params));
   const screen = base.path === "/week"
     ? html`<${Week} start=${base.params.get("start")} course=${base.params.get("course")} onOut=${out} />`
     : html`<${Feed} course=${base.path === "/course" ? base.params.get("key") : null} onOut=${out} />`;
   return html`${screen}${card && html`<${Card} key=${at.params.get("uid")} kind=${at.path.slice(1)}
-    uid=${at.params.get("uid")} onClose=${close} onOut=${out} />`}`;
+    uid=${at.params.get("uid")} onClose=${close} onOut=${out} />`}
+    ${check && html`<${CheckQueue} start=${at.params.get("id")} course=${at.params.get("course")} onClose=${close}
+      onOut=${out} />`}
+    <${Toast} />`;
 }
 
 let saved = null;

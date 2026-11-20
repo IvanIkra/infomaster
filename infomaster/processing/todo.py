@@ -5,7 +5,9 @@ App and the forum buttons act the same way:
 - an item added there is the owner's own deadline (`own_deadlines`, uid `ha-<id>`);
 - ticking off or deleting an own one deletes it; one from a source is hidden for good (`hidden_deadlines`), even when
   the source sends it again: that is how Haiku's mistakes go away. The row it came from is kept too, so a rename of
-  that row (a Midterm named by the dictionary, an HSE App X label once Haiku answers) does not bring it back;
+  that row (a Midterm named by the dictionary, an HSE App X label once Haiku answers) does not bring it back. The web
+  app also keeps why (`reason`): done, not mine, or a duplicate of another (`kept`); HA, Tablo and the merge see
+  every reason the same, as hidden;
 - editing one from a source hides it and keeps an own copy with the new title, date or list; editing an own one
   changes it.
 Rows 30 days past their date are removed at every change of the lists.
@@ -20,6 +22,7 @@ from dataclasses import dataclass, field
 from ..store import Store
 
 CATEGORIES = ("study", "personal")
+REASONS = ("done", "not_mine", "duplicate")  # why the owner hid a deadline (the web app)
 KEEP_DAYS = 30  # past that, an own or a hidden deadline is off every list anyway
 OWN_PREFIX = "ha-"
 
@@ -85,14 +88,18 @@ class Todo:
         key = f"{OWN_PREFIX}{cursor.lastrowid}"
         return Deadline(title, due, category, "ha", key=key, ref=key)
 
-    def remove(self, d: Deadline) -> None:
-        """Deleted or done: an own deadline goes away, one from a source is hidden."""
+    def remove(self, d: Deadline, reason: str | None = None, kept: str | None = None) -> None:
+        """Deleted or done: an own deadline goes away, one from a source is hidden, with the reason when given."""
+        if reason is not None and reason not in REASONS:
+            raise ValueError(f"reason must be one of {', '.join(REASONS)}")
         if d.source == "ha":
             self.db.execute("delete from own_deadlines where id = ?", (own_id(d),))
         else:
             self.db.execute(
-                "insert or ignore into hidden_deadlines(uid, source, course, title, due, ref) values(?, ?, ?, ?, ?, ?)",
-                (uid(d), d.source, d.course, d.title, d.due.isoformat(), d.ref or None))
+                "insert or ignore into hidden_deadlines(uid, source, course, title, due, ref, reason, kept) "
+                "values(?, ?, ?, ?, ?, ?, ?, ?)",
+                (uid(d), d.source, d.course, d.title, d.due.isoformat(), d.ref or None, reason,
+                 kept if reason == "duplicate" else None))
 
     def edit(self, d: Deadline, title: str | None, due: dt.date | None, category: str | None = None) -> Deadline:
         due, category = due or d.due, category or d.category

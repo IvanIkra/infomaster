@@ -241,3 +241,46 @@ blockquote {
 .wk-now { position: absolute; left: -3px; right: -3px; border-top: 2px solid var(--acc); }
 .wk-now::before { content: ""; position: absolute; left: -3px; top: -5px; width: 8px; height: 8px; border-radius: 4px;
                   background: var(--acc); }
+
+/* the owner's changes (16.3) */
+.acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.acts .btn { width: auto; flex: 1 1 100%; }
+.field {
+  width: 100%; min-height: 46px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg);
+  color: var(--fg); font: 600 16px var(--fb); padding: 0 12px;
+}
+.field:focus { border-color: var(--acc); outline: none; }
+form.acts .field { flex: 1 1 160px; width: auto; }
+form.acts .btn { flex: 0 0 auto; padding: 0 20px; }
+.views button[aria-checked="true"] { background: var(--chip-bg); color: var(--chip-fg); }
+.toast {
+  position: fixed; left: 0; right: 0; top: calc(env(safe-area-inset-top) + 12px); z-index: 20;
+  padding: 0 18px; pointer-events: none;
+}
+.toast > div {
+  max-width: 524px; margin: 0 auto; display: flex; align-items: center; gap: 12px; min-height: 48px;
+  padding: 6px 8px 6px 16px; border-radius: 16px; background: var(--now-bg); color: var(--now-fg);
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.25); pointer-events: auto; font-weight: 700; font-size: 14px;
+}
+.toast span { flex: 1; }
+.toast button { min-height: 36px; padding: 0 14px; border: 0; border-radius: var(--rc); background: none;
+                color: var(--now-lab); font: 800 14px var(--fb); cursor: pointer; }
+
+/* the «Check» queue */
+.check { border: 1px solid var(--rev-line); background: var(--rev-bg); border-radius: var(--r); padding: 12px 14px;
+         display: flex; flex-direction: column; gap: 4px; }
+.check .lab { color: var(--rev-fg); }
+.cq { display: flex; align-items: center; gap: 10px; min-height: 48px; }
+.cq + .cq { border-top: 1px dashed var(--rev-line); }
+.cq-text { flex: 1; min-width: 0; border: 0; background: none; padding: 6px 0; text-align: left; cursor: pointer;
+           font-size: 14px; color: var(--rev-fg); }
+.cq .sec { min-height: 36px; padding: 0 14px; }
+.cq-more { align-self: flex-start; border: 0; background: none; padding: 6px 0; cursor: pointer; font-size: 13px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.choice { border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column;
+          gap: 4px; background: var(--bg); min-width: 0; }
+.choice.kept { border-color: var(--fg); }
+.choice b { font: 600 17px/1.25 var(--fh); overflow-wrap: anywhere; }
+.choice small { font-size: 12px; color: var(--mut); }
+.choice .when { font-size: 13px; margin: 0; }
+.picks { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -258,18 +258,103 @@ async def edit_deadline(ctx: Context, args: dict) -> Output:
         return Output({"uid": d.key, **body}, summary,
                       [step("edit_deadline", uid=d.key, title=d.title, due=d.due.isoformat(), category=d.category)])
     new = sorted(own_keys(ctx) - before)
+    if not new and d.assumed:  # a sheet's assumed date given a real one: the chats' deadline itself moved (§6.3)
+        return Output({"uid": None, **body}, summary + " (the sheet's real date now)", None,
+                      "the sheet's date is real now: change it again to move it")
     return Output({"uid": new[0] if new else None, "hidden_original": uid(d), **body},
                   summary + " (the source's one is hidden, an own copy stands for it)",
                   [*(step("delete_deadline", uid=key) for key in new), step("unhide_deadline", uid=uid(d))])
+
+
+REASON_WORDS = {"done": "as done", "not_mine": "as not the owner's", "duplicate": "as a duplicate"}
 
 
 async def hide_deadline(ctx: Context, args: dict) -> Output:
     d = listed(ctx, args["uid"])
     if d.source == "ha":
         raise ToolError("this is an own deadline: delete it with delete_deadline")
-    await mini_app(ctx.app, miniapp.delete_deadline, uid=args["uid"])
-    return Output({"hidden": uid(d)}, f"Hid the deadline «{d.title}» ({d.due.isoformat()}) of {d.source}",
+    reason, kept = args.get("reason"), args.get("kept")
+    if reason == "duplicate":
+        if not kept:
+            raise ToolError("a duplicate needs `kept`: the uid of the deadline that stays")
+        if kept == args["uid"]:
+            raise ToolError("a deadline cannot be a duplicate of itself")
+        listed(ctx, kept)
+    if reason is None:
+        await mini_app(ctx.app, miniapp.delete_deadline, uid=args["uid"])
+    else:
+        ctx.app[miniapp.DEADLINES_KEY].remove(d, reason, kept)
+    words = f" {REASON_WORDS[reason]}" if reason else ""
+    return Output({"hidden": uid(d), "reason": reason},
+                  f"Hid the deadline «{d.title}» ({d.due.isoformat()}) of {d.source}{words}",
                   [step("unhide_deadline", uid=uid(d))])
+
+
+def deadline_row(ctx: Context, d) -> dict | None:
+    """The chats', mail's or RUZ's row of a deadline of the list; None for HSE App X and own ones."""
+    if not d.ref.startswith("dl:") or not d.ref[3:].isdigit():
+        return None
+    return ctx.app[miniapp.DEADLINES_KEY].deadlines.get(int(d.ref[3:]))
+
+
+async def confirm_deadline_date(ctx: Context, args: dict) -> Output:
+    """A sheet's assumed date (§6.3) is right: it is the sheet's real date now, and the mark goes."""
+    d = listed(ctx, args["uid"])
+    row = deadline_row(ctx, d)
+    if not d.assumed or row is None:
+        raise ToolError("this deadline's date is not an assumed one")
+    sheet = None
+    if row["sheet_id"] is not None and ctx.app.get(miniapp.SHEETS_KEY) is not None:
+        sheet = ctx.app[miniapp.SHEETS_KEY].sheets.get(row["sheet_id"])
+    if sheet is not None:  # the Mini App's way: the sheet's date given, the same one (its caption is edited)
+        await mini_app(ctx.app, miniapp.edit_deadline, {"due": d.due.isoformat()}, uid=args["uid"])
+    else:
+        deadlines = ctx.app[miniapp.DEADLINES_KEY].deadlines
+        with deadlines.db:
+            deadlines.confirm(row["id"])
+    return Output({"uid": args["uid"], "due": d.due.isoformat()},
+                  f"Confirmed the date of «{d.title}»: {d.due.isoformat()}",
+                  [step("_assume_again", deadline_id=row["id"], sheet_id=sheet["id"] if sheet else None,
+                        due_at=sheet["due_at"] if sheet else None)],
+                  "the sheet's caption in the forum keeps the date as confirmed" if sheet else "")
+
+
+async def assume_again(ctx: Context, args: dict) -> None:
+    """The undo of confirm_deadline_date: the date is an assumed one again and follows the timetable."""
+    deadlines = ctx.app[miniapp.DEADLINES_KEY].deadlines
+    with deadlines.db:
+        row = deadlines.get(args["deadline_id"])
+        if row is None or row["moved_by"] is not None or row["gone_at"] is not None:
+            raise ToolError("the deadline has changed since")
+        deadlines.db.execute("update deadlines set assumed = 1 where id = ?", (row["id"],))
+        if args.get("sheet_id") is not None:
+            deadlines.db.execute("update sheets set due_assumed = 1, due_at = coalesce(?, due_at) where id = ?",
+                                 (args.get("due_at"), args["sheet_id"]))
+
+
+async def set_deadline_course(ctx: Context, args: dict) -> Output:
+    """The course of a deadline whose chat or letter named none (or named it wrong)."""
+    d = listed(ctx, args["uid"])
+    row = deadline_row(ctx, d)
+    if row is None:
+        raise ToolError("only a deadline of a chat, a letter or RUZ has a course to set")
+    course = " ".join(args["course"].split())
+    if not course:
+        raise ToolError("course is empty")
+    deadlines = ctx.app[miniapp.DEADLINES_KEY].deadlines
+    with deadlines.db:
+        deadlines.rename(row["id"], row["label"], course)
+    return Output({"uid": args["uid"], "course": course}, f"Set the course of «{d.title}» to {course}",
+                  [step("_set_course_back", deadline_id=row["id"], course=row["course"])])
+
+
+async def set_course_back(ctx: Context, args: dict) -> None:
+    deadlines = ctx.app[miniapp.DEADLINES_KEY].deadlines
+    row = deadlines.get(args["deadline_id"])
+    if row is None:
+        raise ToolError("the deadline is gone")
+    with deadlines.db:
+        deadlines.rename(row["id"], row["label"], args.get("course"))
 
 
 async def delete_deadline(ctx: Context, args: dict) -> Output:
@@ -781,8 +866,23 @@ def register(registry: Registry, app) -> None:
           {"uid": UID, "title": {"type": "string", "maxLength": miniapp.TITLE_LIMIT}, "due": DATE,
            "category": {"type": "string", "enum": list(CATEGORIES)}}, edit_deadline, ("uid",))
     write("hide_deadline", "Hide a deadline",
-          "Hide a deadline of a source (a chat, mail, HSE App X, RUZ) for good, even if the source sends it again.",
-          {"uid": UID}, hide_deadline, ("uid",))
+          "Hide a deadline of a source (a chat, mail, HSE App X, RUZ) for good, even if the source sends it again. "
+          "reason, if known: done (handed in), not_mine (not the owner's work), duplicate (the same work as `kept`, "
+          "which stays).",
+          {"uid": UID, "reason": {"type": "string", "enum": ["done", "not_mine", "duplicate"]},
+           "kept": {**UID, "description": "of a duplicate: the uid of the deadline that stays"}},
+          hide_deadline, ("uid",))
+    write("confirm_deadline_date", "Confirm an assumed date",
+          "A sheet's due date the service assumed (assumed: true, its course's next seminar) is right: it becomes "
+          "the real date and stops following the timetable.", {"uid": UID}, confirm_deadline_date, ("uid",),
+          destructive=False)
+    write("set_deadline_course", "Set a deadline's course",
+          "The course of a deadline from a chat, a letter or RUZ, for one that has none or a wrong one. course: a "
+          "name of the course dictionary (list_courses) or the timetable's.",
+          {"uid": UID, "course": {"type": "string", "maxLength": 200}}, set_deadline_course, ("uid", "course"),
+          destructive=False)
+    registry.op("_assume_again", assume_again)
+    registry.op("_set_course_back", set_course_back)
     write("delete_deadline", "Delete an own deadline", "Delete one of the owner's own deadlines.", {"uid": UID},
           delete_deadline, ("uid",))
     write("unhide_deadline", "Restore a hidden deadline", "Bring back a hidden deadline, if its source still has it.",

@@ -209,9 +209,10 @@ class DeadlineList:
         """A new own deadline; ValueError for an empty title or an unknown category."""
         return self._change(lambda: self.todo.add(title, due, category))
 
-    def remove(self, d: Deadline) -> None:
-        """Done or deleted: an own one is deleted, one from a source is hidden for good."""
-        self._change(lambda: self.todo.remove(d))
+    def remove(self, d: Deadline, reason: str | None = None, kept: str | None = None) -> None:
+        """Done or deleted: an own one is deleted, one from a source is hidden for good (why, when the web app says:
+        done, not_mine, or duplicate of `kept`)."""
+        self._change(lambda: self.todo.remove(d, reason, kept))
 
     def edit(self, d: Deadline, title: str | None, due: dt.date | None, category: str | None = None) -> Deadline:
         """A new title, date or list; one from a source becomes an own copy. ValueError for an empty title."""

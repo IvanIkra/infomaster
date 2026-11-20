@@ -1,6 +1,7 @@
-// The screens that read (stage 16.2): the feed with its lenses, a course's lens, the week, an item's card.
+// The screens (stages 16.2, 16.3): the feed with its lenses and the «Check» questions, a course's lens, the week, an
+// item's card with its actions, and the «Check» queue one question at a time.
 import { useEffect, useRef, useState } from "preact/hooks";
-import { ApiError, ICONS, api, go, html, icon } from "./common.js";
+import { ApiError, CHANGED, ICONS, act, api, changed, go, html, icon, toast } from "./common.js";
 import { day, kind, t, today } from "./i18n.js";
 
 const hm = (iso) => iso.slice(11, 16);
@@ -28,8 +29,12 @@ function useLoad(path, onOut) {
     load();
     const visible = () => { if (document.visibilityState === "visible") load(); };
     document.addEventListener("visibilitychange", visible);
+    window.addEventListener(CHANGED, load);
     const timer = setInterval(load, 300000);
-    return () => { alive = false; document.removeEventListener("visibilitychange", visible); clearInterval(timer); };
+    return () => {
+      alive = false; clearInterval(timer);
+      document.removeEventListener("visibilitychange", visible); window.removeEventListener(CHANGED, load);
+    };
   }, [path]);
   return state;
 }
@@ -145,6 +150,7 @@ export function Feed({ course, onOut }) {
     ${data && html`<div class="feed">
       ${!course && isIos() && !standalone() && html`<div class="hint">${t("installIos")}</div>`}
       ${course && info && info.key && html`<${CourseHead} info=${info} todayIso=${data.today} />`}
+      ${data.check.length > 0 && html`<${CheckBox} items=${data.check} course=${course} />`}
       ${!course && data.current && html`<${NowCard} item=${data.current} now=${data.now} />`}
       ${data.overdue.length > 0 && html`<section class="overdue">
         <div class="lab" style="color:var(--rev-fg)">${t("overdue")} · ${data.overdue.length}</div>
@@ -278,9 +284,20 @@ export function Card({ kind: what, uid, onClose, onOut }) {
     <section class="sheet" role="dialog" aria-label=${data ? data.title : ""}><div>
       <div class="grab" aria-hidden="true"></div>
       <div class="err" role="alert">${error}</div>
-      ${data && (what === "d" ? html`<${DeadlineCard} d=${data} />` : html`<${ClassCard} c=${data} />`)}
+      ${data && (what === "d" ? html`<${DeadlineCard} d=${data} onClose=${onClose} />` : html`<${ClassCard} c=${data} />`)}
       <button class="sec wide" onClick=${onClose}>${t("close")}</button>
     </div></section>`;
+}
+
+// Run a change; its error stays on the screen, and `after` runs once it is done.
+function useAct(after) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const run = async (job) => {
+    setBusy(true); setError("");
+    try { await job(); if (after) after(); } catch (e) { setError(e.message); } finally { setBusy(false); }
+  };
+  return { busy, error, run };
 }
 
 function CourseLink({ course, title }) {
@@ -303,7 +320,70 @@ function Quote({ quote, link, from }) {
   </div>`;
 }
 
-function DeadlineCard({ d }) {
+function DeadlineActions({ d, onClose }) {
+  const [mode, setMode] = useState(null);  // null, "edit" or "twin"
+  const { busy, error, run } = useAct();
+  const doIt = (action, text, extra = {}) => run(() => act(action, { uid: d.uid, ...extra }, t(text), onClose));
+  return html`<div class="stack" style="gap:10px">
+    <div class="err" role="alert">${error}</div>
+    ${mode === null && html`<div class="acts">
+      <button class="btn" disabled=${busy} onClick=${() => doIt("done", d.own ? "deleted" : "markedDone")}>
+        ${icon(ICONS.check)}${t("done")}</button>
+      ${d.assumed && html`<button class="sec" disabled=${busy} onClick=${() => doIt("confirm", "confirmed")}>
+        ${t("dateRight")}</button>`}
+      <button class="sec" disabled=${busy} onClick=${() => setMode("edit")}>${icon(ICONS.edit, 18)}${t("edit")}</button>
+      <button class="sec" disabled=${busy} onClick=${() => doIt("not-mine", d.own ? "deleted" : "hiddenNotMine")}>
+        ${d.own ? t("delete") : t("notMine")}</button>
+      <button class="sec" disabled=${busy} onClick=${() => setMode("twin")}>${t("isDuplicate")}</button>
+    </div>`}
+    ${mode === "edit" && html`<${EditForm} d=${d} busy=${busy} onCancel=${() => setMode(null)}
+      onSave=${(fields) => doIt("edit", "saved", fields)} />`}
+    ${mode === "twin" && html`<div class="box stack" style="gap:6px">
+      <div class="note">${t("twinOf")}</div>
+      ${d.twins.length ? d.twins.map((x) => html`<button key=${x.uid} class="it" disabled=${busy}
+          onClick=${() => doIt("merge", "merged", { keep: x.uid })}>
+          <span class="k kd"></span><span class="ttl"><b>${x.title}</b><small>${[shortDay(x.due), x.course_title,
+            x.from].filter(Boolean).join(" · ")}</small></span>${icon(ICONS.merge, 18)}</button>`)
+        : html`<div class="note">${t("noTwins")}</div>`}
+      <button class="sec wide" onClick=${() => setMode(null)}>${t("cancel")}</button>
+    </div>`}
+  </div>`;
+}
+
+function EditForm({ d, busy, onSave, onCancel }) {
+  const [title, setTitle] = useState(d.title);
+  const [due, setDue] = useState(d.due);
+  const [category, setCategory] = useState(d.category);
+  const submit = (event) => {
+    event.preventDefault();
+    const fields = {};
+    if (title.trim() !== d.title) fields.title = title.trim();
+    if (due !== d.due) fields.due = due;
+    if (category !== d.category) fields.category = category;
+    if (Object.keys(fields).length) onSave(fields); else onCancel();
+  };
+  return html`<form class="box stack" style="gap:10px" onSubmit=${submit}>
+    <label class="lab" for="e-title">${t("title")}</label>
+    <input id="e-title" class="field" value=${title} maxlength="200" required
+           onInput=${(e) => setTitle(e.target.value)} />
+    <label class="lab" for="e-due">${t("date")}</label>
+    <input id="e-due" class="field" type="date" value=${due} required onInput=${(e) => setDue(e.target.value)} />
+    <div class="views" role="radiogroup" style="box-shadow:none;align-self:flex-start">
+      ${["study", "personal"].map((c) => html`<button key=${c} type="button" role="radio"
+        aria-checked=${category === c} aria-selected=${category === c} onClick=${() => setCategory(c)}>
+        ${t(c)}</button>`)}
+    </div>
+    ${!d.own && html`<div class="note small">${t("editNote")}</div>`}
+    <div class="acts">
+      <button class="btn" type="submit" disabled=${busy || !title.trim() || !due}>${t("save")}</button>
+      <button class="sec" type="button" onClick=${onCancel}>${t("cancel")}</button>
+    </div>
+  </form>`;
+}
+
+const shortDay = (iso) => capital(day(iso, { weekday: "short", day: "numeric", month: "short" }));
+
+function DeadlineCard({ d, onClose }) {
   const when = [capital(day(d.due, { weekday: "short", day: "numeric", month: "long" })),
                 d.at_class && `${t("atClass")} ${hm(d.at_class.start)}`].filter(Boolean).join(", ");
   const what = { found: t("found"), moved: t("movedFrom"), hseapp: t("fromHseApp"), own: t("ownAdded") };
@@ -327,7 +407,8 @@ function DeadlineCard({ d }) {
           ? html`: <s class="mut">${day(h.was, { day: "numeric", month: "short" })}</s> → ${day(h.due,
             { day: "numeric", month: "short" })}` : ""}${h.from && h.what !== "hseapp" ? html` · ${h.from}` : ""}</span>
       </li>`)}</ol>
-    </div>`}`;
+    </div>`}
+    <${DeadlineActions} d=${d} onClose=${onClose} />`;
 }
 
 function ClassCard({ c }) {
@@ -356,3 +437,123 @@ const todayIso = () => {
   const now = new Date();
   return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 };
+
+// --- the «Check» queue ---------------------------------------------------------------------------------------
+
+function question(q) {
+  if (q.kind === "duplicate") return t("sameQ", { a: q.items[0].title, b: q.items[1].title });
+  if (q.kind === "assumed") return t("assumedQ", { title: q.item.title });
+  return t("courseQ", { title: q.item.title });
+}
+
+// The feed's box: how many questions, the first two with their quick answer; a tap opens the queue at it.
+function CheckBox({ items, course }) {
+  const { busy, error, run } = useAct();
+  const quick = (q) => {
+    if (q.kind === "duplicate") {
+      const drop = q.items.find((x) => x.uid !== q.keep);
+      return [t("merge"), () => run(() => act("merge", { uid: drop.uid, keep: q.keep }, t("merged")))];
+    }
+    if (q.kind === "assumed") return [t("right"), () => run(() => act("confirm", { uid: q.item.uid }, t("confirmed")))];
+    return [t("choose"), () => go("/check", { id: q.id, course })];
+  };
+  return html`<section class="check">
+    <div class="lab">${t("checkPlease")} · ${items.length}</div>
+    ${items.slice(0, 2).map((q) => {
+      const [label, answer] = quick(q);
+      return html`<div class="cq" key=${q.id}>
+        <button class="cq-text" onClick=${() => go("/check", { id: q.id, course })}>${question(q)}</button>
+        <button class="sec" disabled=${busy} onClick=${answer}>${label}</button>
+      </div>`;
+    })}
+    ${items.length > 2 && html`<button class="acc cq-more" onClick=${() => go("/check", { course })}>
+      ${t("moreN", { n: items.length - 2 })}</button>`}
+    <div class="err" role="alert">${error}</div>
+  </section>`;
+}
+
+export function CheckQueue({ start, course, onClose, onOut }) {
+  const { data, error } = useLoad("/check" + (course ? "?course=" + encodeURIComponent(course) : ""), onOut);
+  const [later, setLater] = useState([]);  // put off for this visit
+  const [first, setFirst] = useState(start);
+  const { busy, error: failed, run } = useAct();
+  if (!data) {
+    return html`<div class="scrim" onClick=${onClose}></div><section class="sheet" role="dialog"><div>
+      <div class="err">${error}</div></div></section>`;
+  }
+  const open = data.items.filter((q) => !later.includes(q.id));
+  const at = Math.max(0, open.findIndex((q) => q.id === first));
+  const q = open[at];
+  const next = () => setFirst(open[at + 1] ? open[at + 1].id : null);
+  const answer = (action, data, text) => run(async () => { await act(action, data, t(text)); next(); });
+  const aside = () => run(async () => {
+    const answered = await api("POST", "/check/put-aside", { id: q.id });
+    next();
+    changed();
+    toast(t("putAside"), answered.change.id);
+  });
+  return html`<div class="scrim" onClick=${onClose}></div>
+    <section class="sheet" role="dialog" aria-label=${t("checkPlease")}><div>
+      <div class="grab" aria-hidden="true"></div>
+      ${q ? html`<span class="lab">${t("checkOf", { i: at + 1, n: open.length })}</span>
+        ${q.kind === "duplicate" && html`<${SameQuestion} q=${q} busy=${busy}
+          onMerge=${() => answer("merge", { uid: q.items.find((x) => x.uid !== q.keep).uid, keep: q.keep }, "merged")}
+          onDifferent=${aside} />`}
+        ${q.kind === "assumed" && html`<${AssumedQuestion} q=${q} busy=${busy}
+          onRight=${() => answer("confirm", { uid: q.item.uid }, "confirmed")}
+          onDate=${(due) => answer("edit", { uid: q.item.uid, due }, "saved")} />`}
+        ${q.kind === "course" && html`<${CourseQuestion} q=${q} courses=${data.courses} busy=${busy}
+          onPick=${(key) => answer("course", { uid: q.item.uid, course: key }, "courseSet")} onOutside=${aside} />`}
+        <div class="err" role="alert">${failed || error}</div>
+        <button class="sec wide" disabled=${busy} onClick=${() => { setLater([...later, q.id]); next(); }}>
+          ${t("laterDecide")}</button>`
+      : html`<h1>${later.length ? t("checkLater") : t("allChecked")}</h1>
+        <button class="sec wide" onClick=${onClose}>${t("close")}</button>`}
+    </div></section>`;
+}
+
+function Choice({ d, kept }) {
+  return html`<div class=${"choice" + (kept ? " kept" : "")}>
+    <b>${d.title}</b>
+    <small>${[d.from, d.course_title].filter(Boolean).join(" · ")}</small>
+    <span class="when">${shortDay(d.due)}${d.at_class ? `, ${t("atClass")} ${hm(d.at_class.start)}` : ""}</span>
+    ${d.assumed && html`<span><span class="chip">${t("assumed")}</span></span>`}
+  </div>`;
+}
+
+function SameQuestion({ q, busy, onMerge, onDifferent }) {
+  const keep = q.items.find((x) => x.uid === q.keep);
+  return html`<h1>${t("sameTitle")}</h1>
+    <div class="note">${t("sameText", { course: keep.course_title || q.course })}</div>
+    <div class="pair">${q.items.map((d) => html`<${Choice} key=${d.uid} d=${d} kept=${d.uid === q.keep} />`)}</div>
+    <div class="box"><span class="lab">${t("stays")}</span>
+      <div><b>${keep.title}</b> · ${shortDay(keep.due)}${keep.from ? ` · ${keep.from}` : ""}</div></div>
+    <div class="acts">
+      <button class="btn" disabled=${busy} onClick=${onMerge}>${icon(ICONS.merge)}${t("merge")}</button>
+      <button class="sec" disabled=${busy} onClick=${onDifferent}>${t("different")}</button>
+    </div>`;
+}
+
+function AssumedQuestion({ q, busy, onRight, onDate }) {
+  const [due, setDue] = useState(null);
+  return html`<h1>${t("assumedTitle")}</h1>
+    <div class="note">${t("assumedText")}</div>
+    <${Choice} d=${q.item} />
+    ${due === null ? html`<div class="acts">
+        <button class="btn" disabled=${busy} onClick=${onRight}>${icon(ICONS.check)}${t("right")}</button>
+        <button class="sec" disabled=${busy} onClick=${() => setDue(q.item.due)}>${t("otherDate")}</button>
+      </div>`
+      : html`<form class="acts" onSubmit=${(e) => { e.preventDefault(); onDate(due); }}>
+        <input class="field" type="date" value=${due} required onInput=${(e) => setDue(e.target.value)} />
+        <button class="btn" type="submit" disabled=${busy || !due || due === q.item.due}>${t("save")}</button>
+      </form>`}`;
+}
+
+function CourseQuestion({ q, courses, busy, onPick, onOutside }) {
+  return html`<h1>${t("courseTitle")}</h1>
+    <div class="note">${t("courseText")}</div>
+    <${Choice} d=${q.item} />
+    <div class="picks">${courses.map((c) => html`<button key=${c.key} class="lens" disabled=${busy} title=${c.title}
+      onClick=${() => onPick(c.key)}>${c.key}</button>`)}</div>
+    <button class="sec wide" disabled=${busy} onClick=${onOutside}>${t("outside")}</button>`;
+}

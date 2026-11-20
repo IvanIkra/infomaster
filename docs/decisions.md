@@ -310,6 +310,20 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   only. The forum and the Mini App work until the last step of the stage, then the forum is switched off; the bot
   stays for forwarded files and login codes.
 
+- **D62. The web app's changes are the connector's tools, and «Check» asks only what the service is unsure of,
+  20.11.2026.** This adds to §8.6 and is step 16.3 of §11.1. The web app does not get handlers of its own for
+  deadlines: it calls the connector's write tools (§8.5), so one set of checks serves the Mini App, Claude and the app,
+  and every change lands in one journal (`connector_changes.via`) with the undo the tool worked out; the app offers it
+  right after the change, and «Machine» will list the journal (16.6). A hidden deadline now keeps why: done, not mine,
+  or a duplicate of the one that stays. The merge, HA and Tablo still see one thing, a hidden deadline, so nothing
+  changes for them; the reason is for the owner and for later screens. The «Check» queue holds three questions: an
+  assumed date, a likely duplicate and a deadline without a course. A likely duplicate is narrower than "the same
+  course and date": two works of a course often fall on one day, so the pair must be the same work as the merge
+  compares it, or carry the same number, on dates up to a week apart; two items of HSE App X or two Midterms are never
+  asked about, those sources list each work once. A question put aside is remembered by the deadlines' uids, so it
+  comes back when one of them changes. Two connector tools come with it, `confirm_deadline_date` and
+  `set_deadline_course`, and `hide_deadline` takes the reason.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

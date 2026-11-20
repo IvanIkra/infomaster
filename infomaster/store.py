@@ -112,7 +112,9 @@ create table if not exists hidden_deadlines (  -- deadlines of the sources hidde
     course text,                -- the abbr the merge compares by, null when the dictionary had none
     title text not null,
     due text not null,
-    ref text                    -- the row it came from (dl:<id>, hseapp:<id>): hidden through renames too
+    ref text,                   -- the row it came from (dl:<id>, hseapp:<id>): hidden through renames too
+    reason text,                -- done, not_mine, duplicate (the web app, §8.6); null: hidden elsewhere, no reason
+    kept text                   -- of a duplicate: the uid of the deadline it was merged into
 );
 create table if not exists bot_posts (  -- what the bot published, to edit or delete it later (§8.3)
     id integer primary key,
@@ -273,6 +275,8 @@ UPGRADES = (
     ("sheets", "sent_at", "text"),
     ("files", "url", "text"),  # the link a PDF came from (D59); null for a message's own file
     ("files", "tries", "integer not null default 0"),  # failed downloads: the file is given up after MAX_TRIES
+    ("hidden_deadlines", "reason", "text"),  # why the owner hid it (the web app, §8.6)
+    ("hidden_deadlines", "kept", "text"),
 )
 
 

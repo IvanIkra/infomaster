@@ -34,6 +34,10 @@ export const ICONS = {
   key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
   link: '<path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/>',
+  check: '<path d="M5 12l5 5L20 7"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/>',
+  cross: '<path d="M6 6l12 12M18 6L6 18"/>',
+  merge: '<path d="M7 4v5a5 5 0 0 0 5 5h0a5 5 0 0 1 5 5v1M17 4v5a5 5 0 0 1-5 5"/>',
 };
 
 // #/path?query: the screen and its parameters
@@ -45,4 +49,24 @@ export function route() {
 export function go(path, params = {}) {
   const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
   location.hash = path + (query ? "?" + query : "");
+}
+
+// After a change: every loaded screen reads its data again, and a note with «Undo» shows at the bottom.
+export const CHANGED = "infomaster:changed";
+export const TOAST = "infomaster:toast";
+export const changed = () => window.dispatchEvent(new Event(CHANGED));
+export const toast = (text, changeId = null) =>
+  window.dispatchEvent(new CustomEvent(TOAST, { detail: { text, changeId } }));
+
+// One of the owner's changes of a deadline (POST /deadlines/{action}): `before` runs first (a card closes, so it does
+// not ask for a deadline that is gone), then the screens reload and the note offers its undo.
+export async function act(action, data, text, before) {
+  const answer = await api("POST", `/deadlines/${action}`, data);
+  if (before) {
+    before();
+    await new Promise((done) => setTimeout(done, 50));  // the hash changes, and the card is gone, in a later task
+  }
+  changed();
+  toast(text, answer.change.undo ? answer.change.id : null);
+  return answer;
 }

@@ -204,7 +204,7 @@ def test_own_and_hidden(merged):
     merged.remove(item)
     assert merged.changes[-1] == set() and merged.is_hidden(item)
     assert merged.todo.hidden_rows() == [{"uid": uid(item), "source": "tg", "course": None, "title": "Calc HW 3",
-                                          "due": "2026-10-21", "ref": f"dl:{calc}"}]
+                                          "due": "2026-10-21", "ref": f"dl:{calc}", "reason": None, "kept": None}]
     add(merged, "Calc HW 3", "2026-10-21", course="Математический анализ", msg_id=9)
     assert [d.title for d in merged.all()] == ["Prog HW 1", "Dentist"]
 
