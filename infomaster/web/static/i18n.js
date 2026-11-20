@@ -100,6 +100,7 @@ const TEXTS = {
   shelves: ["Shelves", "Полки"],
   knowledge: ["Knowledge base", "База знаний"],
   docsN: ["{n} documents", "документов: {n}"],
+  versions: ["Earlier versions", "Прежние версии"],
   sheets: ["Sheets", "Листочки"],
   sheetsN: ["{n} sheets", "листочков: {n}"],
   grades: ["Grades", "Оценки"],

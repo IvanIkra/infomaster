@@ -123,6 +123,7 @@ async def test_overview(machine, merged):
         ("HSE App X needs a login", "machine/hseapp"),
         ("A wiki page is not read: DM", "machine/processing"),
         ("The calendar feeds are off: no CALENDAR_SECRET in .env", None)]
+    assert seen["library"] is None  # no library on this port
     assert seen["has"] == {"twin": True, "settings": True, "grades": True, "reminders": True, "pdf": False,
                            "connector": True, "hseapp": True}
     feed = (await call(machine, "GET", "/feed", token=machine.token))

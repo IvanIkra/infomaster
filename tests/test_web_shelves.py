@@ -58,6 +58,7 @@ async def build(aiohttp_client, store, budget, journal, schedule, merged, now, t
     client = await aiohttp_client(webapp.attach(app))
     client.token = await log_in(client, sent, seconds)
     client.library, client.connector, client.sheets, client.topic = library, connector, sheets, topic
+    client.links = links
     return client
 
 
@@ -166,7 +167,15 @@ async def test_a_sheets_pdf_has_three_homes(shelves, batches, llm):
     await two_sheets(shelves, batches, llm)
     [copy] = [row for row in shelves.library.items(course=CALC)
               if row["source"] == "sheet" and row["name"] == "list3.pdf"]
-    shelves.library.remove(copy["id"])  # the library's copy is gone: the kept file answers behind the session
+    shelves.library.remove(copy["id"])  # the library's copy is gone: the kept file by a signed link (D69)
+    links = shelves.links
+    links.kept = shelves.sheets.files.by_hash
+    [version] = (await ask(shelves, "GET", "/sheets/1"))["versions_list"]
+    assert version["file_url"].startswith(env().public_url + "/library/") and version["file_url"].endswith("list3.pdf")
+    served = await shelves.get(local(version["file_url"]))  # no session needed: Safari opens it from the iPhone app
+    assert served.status == 200 and await served.read() == SHEET3
+    assert served.headers["Content-Type"] == "application/pdf" and "inline" in served.headers["Content-Disposition"]
+    links.kept = None  # without the signed route, it answers behind the session
     [version] = (await ask(shelves, "GET", "/sheets/1"))["versions_list"]
     assert version["file_url"] == "/web/api/shelf/sheets/1/file"
     response = await call(shelves, "GET", "/shelf/sheets/1/file", token=shelves.token)
@@ -324,3 +333,23 @@ async def test_everything_is_behind_the_session_and_the_origin(shelves):
     wrong = await call(shelves, "POST", "/shelf/sort", {"ids": [1], "course": "Calc"}, token=shelves.token,
                        origin="https://evil.example")
     assert wrong.status == 403
+
+
+async def test_the_lens_links_every_version_of_a_document(shelves):
+    async def chunks(data):
+        yield data
+
+    for number in (1, 2):
+        draft = shelves.library.draft(CALC, "book", note=f"version {number}")
+        await shelves.library.put_text(draft["id"], "source", f"v{number}")
+        await shelves.library.put(draft["id"], "pdf", chunks(f"%PDF-{number}".encode()))
+        shelves.library.publish(draft["id"])
+    response = await call(shelves, "GET", "/course?key=Calc", token=shelves.token)
+    [book] = (await response.json())["documents"]
+    assert [v["version"] for v in book["versions"]] == [2, 1] and book["url"] == book["versions"][0]["url"]
+    assert [v["note"] for v in book["versions"]] == ["version 2", "version 1"]
+    for version, body in zip(book["versions"], (b"%PDF-2", b"%PDF-1"), strict=True):
+        served = await shelves.get(local(version["url"]))  # each version opens by a link of its own (D69)
+        assert served.status == 200 and await served.read() == body
+    machine = await (await call(shelves, "GET", "/machine", token=shelves.token)).json()
+    assert machine["library"]["documents"] == 1 and machine["library"]["bytes"] > 0  # its disk, in «Machine»

@@ -231,7 +231,11 @@ function CourseHead({ info, todayIso }) {
     ${open === "docs" && html`<div class="box">${info.documents.length ? info.documents.map((d) => html`
       <div class="doc" key=${d.id}><span><b>${d.title}</b><div class="mut small">${d.kind === "book" ? t("book")
         : d.kind === "cheatsheet" ? t("cheatsheet") : d.day ? day(d.day, { day: "numeric", month: "long" }) : ""}
-        </div></span>${d.url && html`<a class="sec" href=${d.url} target="_blank" rel="noopener">PDF</a>`}</div>`)
+        </div>${d.versions.length > 1 && html`<div class="mut small">${t("versions")}: ${d.versions.slice(1)
+          .map((v) => v.url ? html`<a key=${v.version} href=${v.url} target="_blank" rel="noopener">v${v.version}</a> `
+            : html`<span key=${v.version}>v${v.version} </span>`)}</div>`}
+        </span>${d.url && html`<a class="sec" href=${d.url} target="_blank" rel="noopener">${d.kind === "cheatsheet"
+          ? "MD" : "PDF"} v${d.versions[0].version}</a>`}</div>`)
       : html`<div class="note">—</div>`}</div>`}
     ${open === "grades" && html`<div class="box">${g.works.length ? g.works.map((w) => html`
       <${GradeRow} key=${w.id} w=${w} />`) : html`<div class="note">${t("noGrades")}</div>`}</div>`}

@@ -418,14 +418,17 @@ class Data:
         for doc in self.library.documents(names[0]):
             if not doc["version"]:
                 continue
-            full = self.library.document(doc["id"])
-            version = next((v for v in full["versions"] if v["version"] == doc["version"]), None)
-            url = None
-            if version is not None and self.links is not None:
-                part = "source" if doc["kind"] == "cheatsheet" else "pdf"
+            part = "source" if doc["kind"] == "cheatsheet" else "pdf"
+            versions = []  # every published version with its own link, the newest first (D69)
+            for version in self.library.document(doc["id"])["versions"]:
                 version = {**version, "kind": doc["kind"], "title": doc["title"]}
-                url = self.links.version(version, part) if self.library.part_path(version, part) else None
-            docs.append({"id": doc["id"], "kind": doc["kind"], "title": doc["title"], "day": doc["day"], "url": url})
+                url = self.links.version(version, part) \
+                    if self.links is not None and self.library.part_path(version, part) else None
+                versions.append({"version": version["version"], "published_at": version["published_at"],
+                                 "note": version["note"], "url": url})
+            newest = next((v for v in versions if v["version"] == doc["version"]), None)
+            docs.append({"id": doc["id"], "kind": doc["kind"], "title": doc["title"], "day": doc["day"],
+                         "url": newest["url"] if newest else None, "versions": versions})
         order = {"book": 0, "cheatsheet": 1}
         docs.sort(key=lambda d: d["day"] or "", reverse=True)
         docs.sort(key=lambda d: order.get(d["kind"], 2))

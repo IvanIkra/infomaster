@@ -3,7 +3,8 @@
 Claude Code on the owner's machine moves a lecture's recording or a built PDF with `curl`; the Mini App opens a PDF
 the same way. A link names one file and one direction and expires; it is signed with a key kept in the database, so
 the service's restart keeps the links it gave. On the public port, next to the Mini App:
-- GET /library/<token>/<name>: a material's file, or a version's source or PDF;
+- GET /library/<token>/<name>: a material's file, a version's source or PDF, or a sheet's PDF the sheets keep for 14
+  days (D69: it opens outside the app's session, as an iPhone's Home Screen app opens a link in Safari);
 - PUT /library/<token>: the bytes of a draft material or of a draft version's source or PDF (POST too).
 """
 
@@ -14,6 +15,7 @@ import json
 import secrets
 import time
 from collections.abc import Callable
+from pathlib import Path
 from urllib.parse import quote
 
 from aiohttp import web
@@ -43,6 +45,7 @@ class Links:
             key = secrets.token_hex(32)
             store.put_json(SECRET_KEY, key)
         self.key = bytes.fromhex(key)
+        self.kept: Callable[[str], Path | None] | None = None  # a sheet's PDF by its hash, while the sheets keep it
 
     def _sign(self, payload: dict) -> str:
         body = _b64(json.dumps(payload, separators=(",", ":")).encode())
@@ -75,6 +78,13 @@ class Links:
         """The download link of a version's source or PDF."""
         token = self._sign({"a": "get", "v": version["id"], "p": part, "e": int(self.seconds() + ttl)})
         return f"{self.public_url}/library/{token}/{quote(file_name(version, part))}"
+
+    def kept_pdf(self, sha256: str, name: str | None, ttl: int = GET_TTL) -> str | None:
+        """The download link of a sheet's PDF the sheets keep (Files.by_hash); None when it is gone."""
+        if self.kept is None or self.kept(sha256) is None:
+            return None
+        token = self._sign({"a": "get", "k": sha256, "e": int(self.seconds() + ttl)})
+        return f"{self.public_url}/library/{token}/{quote(name or 'sheet.pdf')}"
 
     def version_upload(self, version_id: int, part: str, ttl: int = PUT_TTL) -> str:
         token = self._sign({"a": "put", "v": version_id, "p": part, "e": int(self.seconds() + ttl)})
@@ -111,6 +121,11 @@ async def download(request: web.Request) -> web.StreamResponse:
         if path is None:
             raise web.HTTPNotFound(text="the file is gone")
         name, media_type = row["name"] or "file", row["media_type"] or "application/octet-stream"
+    elif "k" in payload:
+        path = links.kept(str(payload["k"])) if links.kept is not None else None
+        if path is None:
+            raise web.HTTPNotFound(text="the file is gone")
+        name, media_type = request.match_info.get("name") or "sheet.pdf", "application/pdf"
     else:
         version = library.version(payload.get("v", 0))
         path = library.part_path(version, payload.get("p", "")) if version else None

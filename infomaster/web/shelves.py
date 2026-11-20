@@ -164,9 +164,11 @@ def _file_url(request: web.Request, version: dict) -> str | None:
         found = data.library.from_origin("sheet", version["chat_id"], version["msg_id"], version["sha256"])
         if found is not None and data.library.path(found) is not None:
             return data.links.material(found)
-    if topic.files.by_hash(version["sha256"]) is not None:
-        return f"/web/api/shelf/sheets/{version['id']}/file"
-    return None
+    if topic.files.by_hash(version["sha256"]) is None:
+        return None
+    if data.links is not None and data.links.kept is not None:  # signed: it opens outside the session too (D69)
+        return data.links.kept_pdf(version["sha256"], version["name"])
+    return f"/web/api/shelf/sheets/{version['id']}/file"
 
 
 async def home(request: web.Request) -> web.Response:

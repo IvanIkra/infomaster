@@ -8,6 +8,8 @@ const TEXTS = {
   machine: ["Machine", "Машина"],
   back: ["Back", "Назад"],
   attention: ["Needs attention", "Требует внимания"],
+  library: ["Library on disk", "Библиотека на диске"],
+  free: ["{size} free", "свободно {size}"],
   allWorks: ["Everything works.", "Всё работает."],
   sources: ["Sources", "Источники"],
   setup: ["Setup", "Настройка"],
@@ -313,6 +315,14 @@ const Go = ({ href, title, value, bad }) => html`<a class="link" href=${href}>${
   <span>${value !== undefined && value !== null && html`<em class=${bad ? "bad" : ""}>${value}</em>`}
   ${icon(ICONS.next, 16)}</span></a>`;
 
+// Bytes as the owner reads them: «840 MB», «12.4 GB».
+const size = (bytes) => {
+  const units = getLang() === "ru" ? ["Б", "КБ", "МБ", "ГБ", "ТБ"] : ["B", "KB", "MB", "GB", "TB"];
+  let n = bytes || 0, unit = 0;
+  while (n >= 1000 && unit < units.length - 1) { n /= 1000; unit += 1; }
+  return `${unit && n < 100 ? n.toFixed(1).replace(".", getLang() === "ru" ? "," : ".") : Math.round(n)} ${units[unit]}`;
+};
+
 const State = ({ state }) => html`<span class=${"st st-" + state}>${m(state)}</span>`;
 
 // The field that saves on leaving it (change), not on every key.
@@ -372,6 +382,8 @@ export function Machine({ onOut, onLang }) {
         ${data.has.connector && html`<${Go} href="#/machine/connector" title=${m("connector")}
           value=${data.connections} />`}
         <${Go} href="#/machine/push" title=${m("notifications")} value=${data.push} />
+        ${data.library && html`<${Go} href="#/shelf" title=${m("library")} value=${size(data.library.bytes)
+          + (data.library.free_bytes != null ? " · " + m("free", { size: size(data.library.free_bytes) }) : "")} />`}
         <${Go} href="#/machine/login" title=${m("loginDevices")} />
       <//>
       ${data.has.settings && html`<div class="langs">

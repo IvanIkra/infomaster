@@ -23,9 +23,9 @@ alone. tablo.ics keeps the bare title: Tablo takes SUMMARY for the course name.
 
 main and optional also say where an event came from and how to change it, since a calendar app shows the notes and
 one link: DESCRIPTION ends with "From: <the chat> <link to the message>" (a letter's subject, RUZ, "you" for an own
-one) and "Edit: <link>", which opens the event's card in the Mini App (Forum.event_link); no URL, which iOS shows
-under Location as a web page card above the room. The
-source's link is to the message's page in the Mini App (D50), which your own account sees without being in the chat.
+one) and "Edit: <link>", which opens the event's card in the web app (§8.6, D69), where the source message is quoted
+too; no URL, which iOS shows under Location as a web page card above the room. The source's link is the message's
+own (t.me), or a page of `message_page` when one is given.
 tablo.ics has neither; no feed has URL, which Tablo also takes for an online class (§4.2).
 """
 
@@ -70,8 +70,8 @@ def origin_line(entry: Entry, page: Callable[[int, int], str | None] | None = No
 
 def build(entries: list[Entry], feed: str, stamp: dt.datetime, edit_link: Callable[[str], str | None] | None = None,
           message_page: Callable[[int, int], str | None] | None = None) -> bytes:
-    """One of FEEDS as iCalendar text; `edit_link(uid)` is the link to an entry's card in the Mini App,
-    `message_page(chat_id, msg_id)` to a source message's page there."""
+    """One of FEEDS as iCalendar text; `edit_link(uid)` is the link to an entry's card in the web app,
+    `message_page(chat_id, msg_id)` to a source message's page, when there is one."""
     calendar = icalendar.Calendar()
     calendar.add("prodid", "-//infomaster//timetable//EN")
     calendar.add("version", "2.0")
@@ -118,8 +118,8 @@ def build(entries: list[Entry], feed: str, stamp: dt.datetime, edit_link: Callab
 class CalendarFeed:
     def __init__(self, schedule: Schedule, now: Callable[[], dt.datetime] = clock.now_utc):
         self.schedule, self.now = schedule, now
-        self.edit_link: Callable[[str], str | None] | None = None  # uid -> its card in the Mini App
-        self.message_page: Callable[[int, int], str | None] | None = None  # a source message -> its page there
+        self.edit_link: Callable[[str], str | None] | None = None  # uid -> its card in the web app
+        self.message_page: Callable[[int, int], str | None] | None = None  # a source message -> a page of its own
 
     def render(self, feed: str) -> bytes:
         return build(self.schedule.entries(), feed, self.now(), self.edit_link, self.message_page)

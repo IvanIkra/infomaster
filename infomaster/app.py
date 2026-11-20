@@ -5,6 +5,7 @@ import contextlib
 import logging
 import signal
 from pathlib import Path
+from urllib.parse import quote
 
 from aiohttp import web
 
@@ -45,7 +46,7 @@ from .processing.hseapp import HseAppDeadlines
 from .processing.images import Images
 from .processing.merge import DeadlineList
 from .processing.news import News
-from .processing.schedule import MidtermChanges, Schedule, event_key
+from .processing.schedule import MidtermChanges, Schedule
 from .processing.sheets import Sheets
 from .processing.subjects import Subjects
 from .settings import ChatSettings, Settings
@@ -99,8 +100,8 @@ class Service:
         self.feed = Feed(self.forum, self.store, self.inbox, self.news, self.settings, env.owner_id)
         self.timetable = Timetable(self.forum, self.store, self.inbox, self.schedule, env.owner_id)
         self.calendar = CalendarFeed(self.schedule)
-        self.calendar.edit_link = lambda uid: self.forum.event_link(event_key(uid))  # a card, from the calendar
-        self.calendar.message_page = self.forum.message_url  # a source message's page (D50)
+        # From the calendar: an entry's card in the web app, which quotes its source message too (D69).
+        self.calendar.edit_link = lambda uid: f"{env.public_url}/web/#/c?uid={quote(uid, safe='')}"
         self.hseapp = HseApp(self.store, self.settings, callback_url=env.public_url + CALLBACK_PATH)
         self.hseapp_deadlines = HseAppDeadlines(self.store, self.subjects, self.llm)
         self.mail = Mail(env, self.store, self.settings, self.inbox)
@@ -124,6 +125,7 @@ class Service:
         self.library = Library(self.store, data_dir)
         self.library.same_course = self.schedule.same_course
         self.library_links = library_links.Links(self.store, self.library, env.public_url)
+        self.library_links.kept = self.files.by_hash  # a sheet's kept PDF by a signed link (D69)
         # Its sources (§6.8): materials the batches find in study chats (files by the twin, after the run), every
         # sheet's PDF, and what the owner sends the bot (files by the bot itself).
         self.library_feed = ChatMaterials(self.store, self.library, self.inbox)

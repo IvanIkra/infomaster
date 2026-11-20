@@ -14,7 +14,6 @@ from infomaster.llm.budget import Level, Notice
 from infomaster.outputs import api
 from infomaster.outputs import forum as forum_module
 from infomaster.processing.batches import Changes
-from infomaster.processing.schedule import event_key
 
 FEED = (Path(__file__).parent / "fixtures" / "ruz.ics").read_bytes()
 
@@ -182,14 +181,14 @@ async def test_hseapp_wiring(tmp_path):
         assert forum_module.start_screen("/start ev-0123456789ab") == "ev-0123456789ab"  # an event, from the calendar
         assert forum_module.start_screen("/start ev-0123") is None
         assert service.calendar.edit_link("2000001@ruz.hse.ru") == \
-            f"https://t.me/example_bot?start=ev-{event_key('2000001@ruz.hse.ru')}"
+            "https://x.ts.net/web/#/c?uid=2000001%40ruz.hse.ru"  # the card in the web app (D69)
         service.forum.main_app = True  # a main Mini App: the link opens it at once
         assert service.forum.event_link("0123456789ab") == "https://t.me/example_bot?startapp=ev-0123456789ab"
         service.forum.main_app = False
         assert forum_module.start_screen("/start m--1001234567890-15") == "m--1001234567890-15"  # a message's page
         assert service.forum.message_url(-1001234567890, 15) == "https://t.me/example_bot?start=m--1001234567890-15"
         assert service.forum.message_url(None, 15) is None
-        assert service.calendar.message_page == service.forum.message_url
+        assert service.calendar.message_page is None  # the card quotes the message
         several = [types.Username("old_bot", editable=True, active=False), types.Username("main", active=True)]
         assert forum_module.bot_username(types.User(id=1, usernames=several)) == "main"
         assert forum_module.bot_username(types.User(id=1, username="one_bot")) == "one_bot"

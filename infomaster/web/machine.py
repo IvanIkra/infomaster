@@ -23,6 +23,7 @@ from aiohttp import web
 from .. import clock
 from ..connector.tools import ToolError, mini_app
 from ..i18n import json_default, say, tr
+from ..library.links import LIBRARY_KEY
 from ..outputs import miniapp
 from ..outputs.api import SOURCES_KEY
 
@@ -236,6 +237,7 @@ async def overview(request: web.Request) -> web.Response:
         "llm": {**budget.status(), "limit_usd": budget.settings.get("llm_daily_limit_usd")} if budget else None,
         "connections": len(connector.oauth.connections()) if connector else None,
         "push": len(machine.web.push.devices()),
+        "library": library.usage() if (library := app.get(LIBRARY_KEY)) is not None else None,  # its disk (D69)
         "has": {"twin": app.get(miniapp.TWIN_KEY) is not None, "settings": settings is not None,
                 "grades": app.get(miniapp.GRADES_KEY) is not None, "reminders": app.get(miniapp.REMINDERS_KEY)
                 is not None, "pdf": app.get(miniapp.SHEETS_KEY) is not None, "connector": connector is not None,
