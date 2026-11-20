@@ -169,6 +169,8 @@ export function Feed({ course, push, onOut }) {
     <header class="top">
       ${header}
       <button class="rb" aria-label=${t("search")} disabled>${icon(ICONS.search)}</button>
+      <a class="rb" href="#/shelf" aria-label=${t("shelves")}>${icon(ICONS.shelf)}
+        ${data && data.inbox > 0 && html`<span class="count">${data.inbox}</span>`}</a>
       <a class="rb" href="#/machine" aria-label=${data && data.problems ? t("machineBad", { n: data.problems })
         : t("machineOk")}><span class=${data && data.problems ? "dot bad" : "dot"}></span></a>
     </header>
@@ -196,7 +198,10 @@ export function Feed({ course, push, onOut }) {
 function CourseHead({ info, todayIso }) {
   const [open, setOpen] = useState(null);
   const g = info.grades, n = info.next;
-  const toggle = (name) => setOpen(open === name ? null : name);
+  const toggle = (name) => {
+    if (name === "sheets" || name === "raw") go("/" + name, { course: info.key });  // the shelves' own screens
+    else setOpen(open === name ? null : name);
+  };
   const shelf = (name, title, note, badge) => html`<button class="shelf" aria-expanded=${open === name}
     onClick=${() => toggle(name)}><b>${title}${badge ? html`<span class="count">${badge}</span>` : ""}</b>
     <span>${note}</span></button>`;
@@ -231,7 +236,6 @@ function CourseHead({ info, todayIso }) {
       <div class="doc" key=${i}><span>${w.label}${w.new ? html` <span class="chip">new</span>` : ""}</span>
         <b>${w.value === null ? "—" : String(w.value).replace(".", getDecimal())}</b></div>`)
       : html`<div class="note">${t("noGrades")}</div>`}</div>`}
-    ${(open === "sheets" || open === "raw") && html`<div class="note">${t("soon")}</div>`}
   </div>`;
 }
 

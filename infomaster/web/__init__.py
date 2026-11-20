@@ -17,6 +17,9 @@ Notifications (stage 16.4): a device turns them on with its browser's push subsc
 News (stage 16.7): the live news in rank order, an item with the message it came from, and «Hide» through the
 connector's hide_news.
 
+Shelves (stage 16.8, shelves.py): the problem sheets with their PDFs and versions, the library's raw material by
+course and the sorting of its inbox, under /web/api/shelf; the changes are the connector's tools.
+
 «Machine» (stage 16.6, machine.py): the sources and their freshness, the journal of changes with undo, and the Mini
 App's settings, under /web/api/machine.
 
@@ -48,6 +51,7 @@ from .machine import MACHINE_KEY, Machine
 from .notify import Notifier
 from .push import Push, PushError
 from .quick import Quick, QuickError
+from .shelves import SHELVES_KEY, Shelves
 from .views import Data
 
 STATIC = Path(__file__).parent / "static"
@@ -70,6 +74,7 @@ class WebApp:
         self.push = Push(store, env.public_url, now)
         self.notifier = Notifier(self.push, lang)
         self.machine = Machine(self)
+        self.shelves = Shelves(self)
 
     def attach(self, app: web.Application) -> web.Application:
         app[WEB_KEY] = self
@@ -112,7 +117,9 @@ class WebApp:
                ("POST", "/add/note", add_note),
                ("POST", "/add/{what}", add_by_hand)]
         api += [(method, "/machine" + path, handler) for method, path, handler in self.machine.routes()]
+        api += [(method, "/shelf" + path, handler) for method, path, handler in self.shelves.routes()]
         app[MACHINE_KEY] = self.machine
+        app[SHELVES_KEY] = self.shelves
         for method, path, handler in api:
             app.router.add_route(method, "/web/api" + path, guarded(handler))
         if self.connector is not None and self.check is not None:
@@ -292,6 +299,8 @@ async def feed(request: web.Request) -> web.Response:
     answer["check"] = request.app[WEB_KEY].check.items(course)
     answer["problems"] = len(request.app[WEB_KEY].machine.attention(request.app))  # the status dot
     answer["news"] = _data(request).important_news()  # the mark on the News view
+    library = _data(request).library
+    answer["inbox"] = library.inbox_count() if library is not None else 0  # the mark on the shelves
     return web.json_response(answer)
 
 

@@ -368,6 +368,21 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   show, by the same rules. «Hide» is a connector tool, `hide_news`, so it is journaled and can be undone, which the
   forum's button could not do.
 
+- **D67. The shelves keep a sheet's PDF in the app and change everything through the connector, 20.11.2026.** This
+  adds to §8.6 and is step 16.8 of §11.1. The forum gives a sheet's PDF as a file in its post, and nothing else serves
+  it: the sheets keep the file 14 days. The post goes with the forum at 16.10, so the app opens a version's PDF by
+  the library's copy first (every sheet is copied into the library when it is read, and that copy is kept), then by
+  the kept file behind the session, and shows «file gone» when both are gone. The kept file's route needs the session, which a link opened
+  outside the app may lack on an iPhone, so there only the library's copy is certain to open; a signed link for the
+  fallback is left for the switch (§11.1, 16.10). A course has two names, the model's on a sheet and the timetable's in the
+  library, so the app speaks the lenses' keys and turns a key into a name before a tool is called: a sheet edited to
+  another course stands in that course's lens, and a sorted item in that course's raw shelf. Every change is a
+  connector tool, so Claude sees the same ones: the existing `edit_sheet`, `sort_material`, `update_material` and
+  `remove_material` come with their undo, and `join_sheet` and `delete_sheet` are new. Neither can be undone, as the
+  forum's post is deleted or its file replaced; the journal says so, and the app asks before it does either. An own
+  sheet's PDF is a multipart upload that no tool takes, so it is kept as the Mini App keeps it and journaled by hand,
+  with the undo that deletes it. «New material» stays in «+» (D64): the shelves sort and change what is there.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

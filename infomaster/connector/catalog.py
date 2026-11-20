@@ -13,6 +13,7 @@ import datetime as dt
 from .. import clock
 from ..collectors.grades import sheet_id
 from ..collectors.inbox import MAILBOX
+from ..i18n import say
 from ..outputs import miniapp
 from ..outputs.api import SOURCES_KEY
 from ..processing.events import IN_FORCE, OWN
@@ -538,6 +539,39 @@ async def edit_sheet(ctx: Context, args: dict) -> Output:
                   [step("edit_sheet", sheet_id=sheet["id"], **old)])
 
 
+async def delete_sheet(ctx: Context, args: dict) -> Output:
+    """An own sheet with all its versions and its messages in the forum; a chat's sheet is not the owner's to delete."""
+    topic = need(ctx, miniapp.SHEETS_KEY)
+    sheet = topic.sheets.get(args["sheet_id"])
+    if sheet is None:
+        raise ToolError("no such sheet")
+    if not await topic.remove(sheet["id"]):
+        raise ToolError("it is not an own sheet: only the sheets the owner uploaded can be deleted")
+    return Output({"deleted": sheet["id"]}, f"Deleted the own sheet «{sheet['name']}»", None,
+                  "the sheet's messages in the forum are deleted: upload the file again to bring it back")
+
+
+async def remove_own_sheet(ctx: Context, args: dict) -> None:
+    """The undo of an own sheet's upload."""
+    if not await need(ctx, miniapp.SHEETS_KEY).remove(args["sheet_id"]):
+        raise ToolError("the sheet is gone already")
+
+
+async def join_sheet(ctx: Context, args: dict) -> Output:
+    """A sheet posted as new becomes a newer version of another one; the file replaces the older one's."""
+    topic = need(ctx, miniapp.SHEETS_KEY)
+    sheet, older = topic.sheets.get(args["sheet_id"]), topic.sheets.get(args["previous"])
+    if sheet is None or older is None:
+        raise ToolError("no such sheet")
+    try:
+        await topic.join(sheet["id"], older["id"])
+    except ValueError as e:
+        raise ToolError(say(e.args[0], "en") if e.args else "it cannot be joined") from None
+    return Output({"sheet_id": sheet["id"], "previous": older["id"]},
+                  f"Joined the sheet «{sheet['name']}» to «{older['name']}» as its newer version", None,
+                  "the old message in the forum holds the new file now and the sheet's own message is deleted")
+
+
 async def update_chat_settings(ctx: Context, args: dict) -> Output:
     chat_id = args["chat_id"]
     chat = ctx.app[miniapp.INBOX_KEY].chat(chat_id)
@@ -1008,6 +1042,16 @@ def register(registry: Registry, app) -> None:
               {"sheet_id": {"type": "integer"}, "course": {"type": "string"}, "number": {"type": "string"},
                "due": {"type": ["string", "null"], "description": "YYYY-MM-DD, or null"},
                "summary": {"type": "string"}}, edit_sheet, ("sheet_id",))
+        write("delete_sheet", "Delete an own sheet",
+              "An own sheet (one the owner uploaded) with every version and its messages in the forum. It cannot be "
+              "undone; a chat's sheet is refused.", {"sheet_id": {"type": "integer"}}, delete_sheet, ("sheet_id",))
+        write("join_sheet", "Join a sheet to another as its newer version",
+              "A sheet that was posted as new becomes the newer version of another sheet (sheet_id of list_sheets, "
+              "the newer one first): its file replaces the older one's in the forum. It cannot be undone.",
+              {"sheet_id": {"type": "integer", "description": "the sheet that becomes a newer version"},
+               "previous": {"type": "integer", "description": "the sheet it updates"}}, join_sheet,
+              ("sheet_id", "previous"), idempotent=False)
+        registry.op("_remove_own_sheet", remove_own_sheet)
         write("update_pdf_limits", "Change the limits of whole PDFs",
               "For chats with pdf_content: how many pages and tokens of one PDF are read, whichever comes first.",
               {"pdf_pages": {"type": "integer", "minimum": 1, "maximum": 50},

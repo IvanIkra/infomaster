@@ -737,7 +737,7 @@ twice.
 
 | Reads | Writes |
 |---|---|
-| `get_status` (what needs attention, every source, the LLM spending), `list_deadlines`, `list_hidden_deadlines`, `get_timetable` (a range of days), `list_news`, `search_messages` (text, chat, days; 14 days are kept), `get_message` (as D50's page), `list_chats`, `list_chat_senders`, `list_courses`, `get_settings`, `list_sheets`, `get_sheet` (the text; a scan's first page as its JPEG while the file is kept), `list_grades`, `get_gradebook` | deadlines: `add_deadline` (with a course for the web app's lens), `edit_deadline`, `hide_deadline` (with a reason: done, not_mine, duplicate of `kept`), `delete_deadline`, `unhide_deadline`, `confirm_deadline_date` (an assumed date, §6.3), `set_deadline_course`; the timetable: `add_event`, `edit_event`, `set_event_options`, `remove_event`, `correct_class`; `edit_sheet`; `update_chat_settings`; the dictionary: `set_course`, `delete_course`; settings: `update_general_settings`, `update_reminders`, `update_images`, `update_pdf_limits`; grades: `update_grade_settings`, `add_gradebook`, `update_gradebook`, `remove_gradebook`, `read_gradebook_now`, `set_tab_layout`, `reset_tab_layout`, `add_grade`, `change_grade`, `delete_grade` |
+| `get_status` (what needs attention, every source, the LLM spending), `list_deadlines`, `list_hidden_deadlines`, `get_timetable` (a range of days), `list_news`, `search_messages` (text, chat, days; 14 days are kept), `get_message` (as D50's page), `list_chats`, `list_chat_senders`, `list_courses`, `get_settings`, `list_sheets`, `get_sheet` (the text; a scan's first page as its JPEG while the file is kept), `list_grades`, `get_gradebook` | deadlines: `add_deadline` (with a course for the web app's lens), `edit_deadline`, `hide_deadline` (with a reason: done, not_mine, duplicate of `kept`), `delete_deadline`, `unhide_deadline`, `confirm_deadline_date` (an assumed date, §6.3), `set_deadline_course`; the timetable: `add_event`, `edit_event`, `set_event_options`, `remove_event`, `correct_class`; `edit_sheet`, `join_sheet` (a sheet becomes a newer version of another), `delete_sheet` (an own sheet; neither can be undone); `update_chat_settings`; the dictionary: `set_course`, `delete_course`; settings: `update_general_settings`, `update_reminders`, `update_images`, `update_pdf_limits`; grades: `update_grade_settings`, `add_gradebook`, `update_gradebook`, `remove_gradebook`, `read_gradebook_now`, `set_tab_layout`, `reset_tab_layout`, `add_grade`, `change_grade`, `delete_grade` |
 
 Not exposed: the secrets of `.env`, the twin's login and logout, the HSE App X login, the LLM limit and the model
 prices (a lower price would raise the limit too), anything of the summaries.
@@ -920,13 +920,35 @@ needs the owner (`problems` in the feed):
 - `POST /web/api/news/{id}/hide`: the connector's `hide_news`, journaled; its undo shows the item again, and the items
   that replaced it since.
 
+**Shelves** (step 16.8, D67, `web/shelves.py`): the problem sheets, the library's raw material and its inbox, behind
+the books button in the feed's header (a mark counts the inbox) and the course lens's «Sheets» and «Raw» shelves:
+
+- `GET /web/api/shelf`: what the entry shows: the sheets' count, the inbox's count and the courses with material;
+- `GET /web/api/shelf/sheets[?course=<key>]`: the sheets of a course (a lens's key) or all of them, each with its
+  versions' count, due date (marked when it is a guess), source and state (waiting for the forum, not read);
+  `GET /shelf/sheets/{id}`: a sheet with every version, its summary, what each version changed and its PDF, and the
+  sheets it may become a newer version of. A version's PDF opens by the library's copy (made when the sheet was read,
+  kept for good, a signed link), else by the file the sheets keep for 14 days (`GET /shelf/sheets/{id}/file`, behind
+  the session), else it is shown as gone;
+- changes of a sheet: `PATCH /shelf/sheets/{id}` (course as a key, number, due, summary: `edit_sheet`, with its undo),
+  `POST /shelf/sheets/{id}/join {previous}` (`join_sheet`), `DELETE /shelf/sheets/{id}` (`delete_sheet`, an own sheet
+  only); the last two have no undo, and the journal says why. `POST /shelf/sheets` (multipart: course, number, due and
+  the PDF) adds an own sheet as the Mini App does and journals it with the undo that deletes it;
+- raw material: `GET /shelf/raw?course=<key>` (a course's classes with their items, and the items of no class),
+  `GET /shelf/inbox` (what has no course, and the courses to sort it into), `GET /shelf/classes?course=<key>` (where
+  an item can go), `GET /shelf/items/{id}` (the whole text, its class, a signed link to its file, the items on it);
+- sorting and changing: `POST /shelf/sort {ids, class_uid | course}` (`sort_material`; `course: null` puts the items
+  back in the inbox), `PATCH /shelf/items/{id}` (title, note, status: `update_material`), `DELETE /shelf/items/{id}`
+  (`remove_material`); all journaled with their undo. Without the library the feed has no mark and the library's
+  screens answer 404, the sheets work.
+
 **Screens**: the feed with the lenses and the «Check, please» box (the first two questions with their quick answer),
 the course's lens (grades, next class, shelves), the week as a grid with the deadlines of each day above it, an
 item's card over them with «Done», «Edit», «Not mine» (an own one: «Delete»), «It is a duplicate…» (the course's
 deadlines within two weeks to pick the one that stays) and, for an assumed date, «The date is right», and the «Check»
 queue one question at a time («Check · 1 of 3», «Later» puts one off for the visit). «Machine» with the sources, what
-needs attention, the journal and the settings (16.6), «+» (16.5) and the news (16.7). Still to come (D66): the shelves
-of sheets and raw material (16.8) and the corrections (16.9).
+needs attention, the journal and the settings (16.6), «+» (16.5), the news (16.7) and the shelves of sheets and raw
+material with the inbox (16.8). Still to come (D66): the corrections (16.9).
 
 ## 9. Storage (SQLite)
 
@@ -1061,11 +1083,15 @@ own; Claude is an optional door, not the brain (D53).
       Mini App's settings moved over, the notifications' kinds and quiet hours;
     - 16.7 news (done, D66): the live news in rank order as a third view next to the list and the week, an item's
       card with its message, «Hide» with undo;
-    - 16.8 the shelves: problem sheets with their PDFs and versions, raw material, sorting the library's inbox;
+    - 16.8 the shelves (done, D67): problem sheets with their PDFs and versions, raw material by course, sorting the
+      library's inbox; changes are the connector's tools, two of them new (`join_sheet`, `delete_sheet`);
     - 16.9 corrections: moving, cancelling and changing a class, hiding a chat's event, the main or optional
       calendar, the hidden deadlines and events with «Restore», correcting grades;
     - 16.10 the switch, once the app has everything the forum and the Mini App give (D66): the links of calendars
-      and cards lead to the app; the forum's topics and the Mini App are switched off.
+      and cards lead to the app; the forum's topics and the Mini App are switched off. Still missing from the app,
+      to settle before the switch (D67): every version of a knowledge document with its own link (the lens's
+      «Knowledge» shelf links the newest only), the library's disk usage, and the fallback PDF of a sheet in an app
+      added to the iPhone's Home Screen.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

@@ -105,7 +105,6 @@ const TEXTS = {
   grades: ["Grades", "Оценки"],
   raw: ["Raw material", "Сырьё"],
   rawN: ["{n} items", "записей: {n}"],
-  soon: ["opens in a later step", "откроется на следующих шагах"],
   ahead: ["Ahead in the course", "Дальше по курсу"],
   book: ["book", "книга"],
   cheatsheet: ["cheat sheet", "шпаргалка"],

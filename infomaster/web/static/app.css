@@ -343,3 +343,9 @@ select.field.narrow { width: 150px; }
 .it.news { align-items: flex-start; }
 .it.news .k { margin-top: 6px; }
 .it.news .ttl { overflow-wrap: anywhere; }
+
+/* the shelves (16.8) */
+.list > a.row:last-child { border-bottom: 0; }
+.row > .count, .row > .chip { flex-shrink: 0; }
+.rb { position: relative; }
+.rb .count { position: absolute; top: -4px; right: -4px; }

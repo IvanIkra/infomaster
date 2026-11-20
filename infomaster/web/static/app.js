@@ -9,6 +9,7 @@ import { Card, CheckQueue, Feed, Week } from "./screens.js";
 import { Notifications } from "./notifications.js";
 import { AddSheet } from "./add.js";
 import { NewsCard, NewsList } from "./news.js";
+import { Inbox, ItemCard, RawList, SheetCard, SheetList, ShelfHome } from "./shelves.js";
 import { Chat, Chats, ConnectorScreen, Courses, Gradebook, Gradebooks, HseApp, Journal, Llm, Machine,
          NotificationPrefs, Processing, Tab } from "./machine.js";
 
@@ -252,16 +253,25 @@ function App() {
 
   const card = at.path === "/d" || at.path === "/c";
   const newsCard = at.path === "/n";
+  const shelfCard = at.path === "/s" || at.path === "/i";
   const check = at.path === "/check";
   const adding = at.path === "/add";
-  if (!card && !newsCard && !check && !adding) base = at;
+  if (!card && !newsCard && !shelfCard && !check && !adding) base = at;
   const close = () => go(base.path, Object.fromEntries(base.params));
-  const screen = base.path === "/news" ? html`<${NewsList} onOut=${out} />` : base.path === "/week"
+  const shelf = base.path === "/shelf" ? html`<${ShelfHome} onOut=${out} />`
+    : base.path === "/sheets" ? html`<${SheetList} course=${base.params.get("course")} onOut=${out} />`
+    : base.path === "/raw" ? html`<${RawList} course=${base.params.get("course")} onOut=${out} />`
+    : base.path === "/inbox" ? html`<${Inbox} onOut=${out} />` : null;
+  const screen = shelf ? shelf : base.path === "/news" ? html`<${NewsList} onOut=${out} />` : base.path === "/week"
     ? html`<${Week} start=${base.params.get("start")} course=${base.params.get("course")} onOut=${out} />`
     : html`<${Feed} course=${base.path === "/course" ? base.params.get("key") : null} push=${me.push} onOut=${out} />`;
   return html`${screen}${card && html`<${Card} key=${at.params.get("uid")} kind=${at.path.slice(1)}
     uid=${at.params.get("uid")} onClose=${close} onOut=${out} />`}
     ${newsCard && html`<${NewsCard} key=${at.params.get("id")} id=${at.params.get("id")} onClose=${close}
+      onOut=${out} />`}
+    ${at.path === "/s" && html`<${SheetCard} key=${at.params.get("id")} id=${at.params.get("id")} onClose=${close}
+      onOut=${out} />`}
+    ${at.path === "/i" && html`<${ItemCard} key=${at.params.get("id")} id=${at.params.get("id")} onClose=${close}
       onOut=${out} />`}
     ${check && html`<${CheckQueue} start=${at.params.get("id")} course=${at.params.get("course")} onClose=${close}
       onOut=${out} />`}

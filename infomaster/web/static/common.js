@@ -43,6 +43,7 @@ export const ICONS = {
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
   file: '<path d="M6 3h8l4 4v14H6zM14 3v4h4"/>',
   note: '<path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5"/>',
+  shelf: '<path d="M5 4h4v16H5zM11 4h4v16h-4zM17.5 5l3 .8-3.2 14-3-.8z"/>',
 };
 
 // #/path?query: the screen and its parameters
