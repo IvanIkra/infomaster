@@ -17,7 +17,9 @@ uses the Russian names.
    (`python3 -c "import secrets; print(secrets.token_urlsafe(24))"`); the feeds for your own calendar need a
    different secret in `CALENDAR_PUBLIC_SECRET`. Without the link the timetable holds only events from chats;
    without a secret its feeds are off.
-4. Fill in the rest of `.env` following `.env.example` and run `docker compose up -d --build`.
+4. Fill in the rest of `.env` following `.env.example`, with `APP_UID` set to your user's id on the host (`id -u`):
+   the service runs as that user, not as root, so `./data` must be that user's (`mkdir -p data`). Run
+   `docker compose up -d --build`.
 5. Send `/start` to the bot: it answers with the web app's address. Open it and log in (see [Web app](#web-app)).
 6. **Twin.** A separate Telegram account (neither your main one nor a bot). Log it in from the web app under
    **Machine → Twin and chats**: phone, code (it comes to the twin's Telegram or by SMS; do not forward it in

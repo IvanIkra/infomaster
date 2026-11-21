@@ -4,7 +4,10 @@
 # Bridge network with explicit DNS, as Tablo: the host's routing sends container traffic into AmneziaWG.
 services:
   infomaster:
-    build: .
+    build:
+      context: .
+      args:
+        APP_UID: ${APP_UID:-1000}  # the host user that owns ./data (D79): the service runs as it, not as root
     image: infomaster:latest
     container_name: infomaster
     restart: unless-stopped

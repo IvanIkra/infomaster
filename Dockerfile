@@ -13,6 +13,12 @@ RUN uv sync --locked --no-dev --no-install-project --no-cache
 
 COPY infomaster infomaster
 
+# The service runs as a plain user (D79): a flaw in a parser does not run as root over the data directory. APP_UID
+# is the owner of data/ on the host (.env), so its files stay the host user's; the code stays root's, read-only.
+ARG APP_UID=1000
+RUN useradd --uid "$APP_UID" --user-group --no-create-home --home-dir /app/data --shell /usr/sbin/nologin app
+USER app
+
 # 8080: public (the web app and the connector, behind Funnel); 8081: internal (API for Tablo and HA)
 EXPOSE 8080 8081
 CMD ["python", "-m", "infomaster", "--data", "data"]
