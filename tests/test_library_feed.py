@@ -138,7 +138,7 @@ async def test_batch_materials(batches, library, twin, store):
 
     prompt = batches.llm.prompts[0]
     assert batches.llm.schemas == [STUDY_SCHEMA]
-    assert "- 2 · Студентка А · Tue 2026-10-20 11:30 · album with 1 · files: photo\n  (no text)" in prompt
+    assert "- 2 · \"Студентка А\" · Tue 2026-10-20 11:30 · album with 1 · files: photo\n  (no text)" in prompt
     assert "files: voice" in prompt and "- 6 ·" not in prompt
     assert changes.news == [] and batches.inbox.pending(CHAT) == []
 

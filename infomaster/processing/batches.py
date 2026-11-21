@@ -484,9 +484,28 @@ def _event(raw: dict) -> dict | None:
     if end is not None and (start is None or end <= start):
         end = None
     required = raw.get("required")
-    return {"course": (raw.get("course") or "").strip(), "title": title, "start": start, "end": end,
-            "room": (raw.get("room") or "").strip(), "kind": (raw.get("kind") or "").strip().lower() or "event",
+    return {"course": _text(raw.get("course"), COURSE_CHARS), "title": _text(title, TEXT_CHARS), "start": start,
+            "end": end, "room": _text(raw.get("room"), ROOM_CHARS),
+            "kind": _text(raw.get("kind"), KIND_CHARS).lower() or "event",
             "required": required if isinstance(required, bool) else True, "moves": moves, "cancels": cancels}
+
+
+COURSE_CHARS = 80   # a course name as the model gives it: it enters the dictionary and every later prompt (D79)
+ROOM_CHARS = 200    # a room, or a meeting's link
+KIND_CHARS = 40
+TEXT_CHARS = 400    # a label or a title past its retry: Tablo's budget is far below
+
+
+def _text(value, limit: int) -> str:
+    """A field of the model's answer on one line, within `limit` characters."""
+    return " ".join(str(value or "").split())[:limit]
+
+
+def quoted(value) -> str:
+    """A name someone else wrote (a sender, a file, a forward), quoted on one line: it cannot pass for the head's own
+    marks ("listed person", "pinned") or start a line of its own (D79)."""
+    text = " ".join(str(value or "").split()).replace('"', "'")
+    return f'"{text}"' if text else ""
 
 
 def _importance(value) -> int:
@@ -502,7 +521,7 @@ def _materials(raw_item: dict, msg_ids: set[int], sheets: list[dict]) -> list[di
         if msg_id not in msg_ids or msg_id in taken:
             continue
         kind = raw.get("kind") if raw.get("kind") in MATERIAL_KINDS else "file"
-        found[msg_id] = {"msg_id": msg_id, "course": " ".join(str(raw.get("course") or "").split()), "kind": kind,
+        found[msg_id] = {"msg_id": msg_id, "course": _text(raw.get("course"), COURSE_CHARS), "kind": kind,
                          "title": " ".join(str(raw.get("title") or "").split())[:MATERIAL_TITLE_CHARS]}
     return list(found.values())
 
@@ -521,13 +540,14 @@ def check(answer: dict, msg_ids: set[int], pdfs: set[int] = frozenset(), materia
                 "replaces": (raw_news.get("replaces") or "").strip()} if full or short else None
         deadlines = []
         for raw_deadline in raw.get("deadlines") or []:
-            label, due = (raw_deadline.get("label") or "").strip(), _due(raw_deadline.get("due"))
+            label, due = _text(raw_deadline.get("label"), TEXT_CHARS), _due(raw_deadline.get("due"))
+            moves = (raw_deadline.get("moves") or "").strip() if isinstance(raw_deadline.get("moves"), str) else ""
             if label and due:
-                deadlines.append({"course": (raw_deadline.get("course") or "").strip(), "label": label, "due": due,
-                                  "moves": (raw_deadline.get("moves") or "").strip()})
+                deadlines.append({"course": _text(raw_deadline.get("course"), COURSE_CHARS), "label": label,
+                                  "due": due, "moves": moves if re.fullmatch(r"d\d+", moves) else ""})
         events = [event for raw_event in raw.get("events") or [] if (event := _event(raw_event))]
         sheets = list({raw_sheet["msg_id"]: {
-            "msg_id": raw_sheet["msg_id"], "course": (raw_sheet.get("course") or "").strip(),
+            "msg_id": raw_sheet["msg_id"], "course": _text(raw_sheet.get("course"), COURSE_CHARS),
             "number": " ".join(str(raw_sheet.get("number") or "").split())[:60], "due": _due(raw_sheet.get("due"))}
             for raw_sheet in raw.get("sheets") or [] if raw_sheet.get("msg_id") in pdfs}.values())
         found = _materials(raw, msg_ids, sheets) if materials else []
@@ -1034,14 +1054,14 @@ class Batches:
 
     @staticmethod
     def _earlier_lines(message: dict, people: set[int]) -> list[str]:
-        head = [str(message["msg_id"]), message["sender_name"] or "unknown sender"]
+        head = [str(message["msg_id"]), quoted(message["sender_name"]) or "unknown sender"]
         if message["sender_id"] in people:
             head.append("listed person")
         head.append(f"{dt.datetime.fromisoformat(message['at']):%a %Y-%m-%d %H:%M}")
         if message["reply_to"]:
             head.append(f"reply to {message['reply_to']}")
         if message["files"]:
-            head.append("files: " + ", ".join(f.get("name") or f["kind"] for f in message["files"]))
+            head.append("files: " + ", ".join(quoted(f.get("name")) or f["kind"] for f in message["files"]))
         text = " ".join(message["text"].split())
         if len(text) > CONTEXT_CHARS:
             text = text[:CONTEXT_CHARS - 1].rstrip() + "…"
@@ -1065,7 +1085,7 @@ class Batches:
     def _render(self, chat: dict, message: dict, by_id: dict, album_first: dict, people: set[int],
                 note: str | None, scans: dict[int, int]) -> list[str]:
         chat_id = chat["id"]
-        head = [str(message["msg_id"]), message["sender_name"] or "unknown sender"]
+        head = [str(message["msg_id"]), quoted(message["sender_name"]) or "unknown sender"]
         if message["sender_id"] in people:
             head.append("listed person")
         head.append(f"{dt.datetime.fromisoformat(message['at']):%a %Y-%m-%d %H:%M}")
@@ -1077,11 +1097,11 @@ class Batches:
         if first is not None and first != message["msg_id"]:
             head.append(f"album with {first}")
         if message["forward"]:
-            head.append(f"forwarded from {message['forward'].get('from') or 'unknown'}")
+            head.append(f"forwarded from {quoted(message['forward'].get('from')) or 'unknown'}")
         if message["reply_to"]:
             head.append(f"reply to {message['reply_to']}" if message["reply_to"] in by_id else "reply")
         if message["files"]:
-            head.append("files: " + ", ".join(f.get("name") or f["kind"] for f in message["files"]))
+            head.append("files: " + ", ".join(quoted(f.get("name")) or f["kind"] for f in message["files"]))
         lines = ["- " + " · ".join(head)]
         if message["subject"]:
             lines.append(f"  Subject: {' '.join(message['subject'].split())}")

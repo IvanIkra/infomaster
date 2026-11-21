@@ -475,11 +475,17 @@ async def test_undo_events_and_settings(client, sent, connector, schedule, store
     assert bad["isError"]
 
     schedule.inbox.put_chat(-1001, "Матан", "group", None, 0)
-    data(await call(client, token, "update_chat_settings", {"chat_id": -1001, "enabled": True, "note": "Calculus"}))
+    refused = await call(client, token, "update_chat_settings", {"chat_id": -1001, "enabled": True})
+    assert refused["isError"] and "web app" in refused["content"][0]["text"]  # D79: the owner turns a chat on
+    await connector.act("update_chat_settings", {"chat_id": -1001, "enabled": True})  # as the web app does
+    data(await call(client, token, "update_chat_settings", {"chat_id": -1001, "note": "Calculus"}))
     chats = ChatSettings(store)
     assert chats.get(-1001, "enabled") and chats.get(-1001, "note") == "Calculus"
     await undo_last(connector)
-    assert not chats.get(-1001, "enabled") and chats.get(-1001, "note") == ""
+    assert chats.get(-1001, "enabled") and chats.get(-1001, "note") == ""
+    data(await call(client, token, "update_chat_settings", {"chat_id": -1001, "enabled": False}))  # off: anyone
+    await undo_last(connector)
+    assert chats.get(-1001, "enabled")
 
     # A dictionary entry Haiku made, overridden by hand, comes back as Haiku's.
     schedule.subjects._put("Алгебра", "Algebra", "Alg", manual=False)

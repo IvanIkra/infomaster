@@ -224,7 +224,7 @@ async def test_batch_sees_what_was_read(batches, llm):
 
     assert llm.tasks() == ["image", "image", "image", "batch"]
     prompt = llm.calls[-1].prompt
-    assert "- 1 · Староста" in prompt and "- 2 · Староста" in prompt
+    assert "- 1 · \"Староста\"" in prompt and "- 2 · \"Староста\"" in prompt
     assert "- 3 ·" not in prompt and "- 4 ·" not in prompt  # nothing to read: parsed without a call
     assert ("  Image, as another model read it: Screenshot of the Calculus timetable\n  | Пн 26.10 | 9:30 | R405\n"
             "  | КР-1 30.10 18:10") in prompt
