@@ -12,6 +12,7 @@ starts reading as soon as the login is done, without a restart. A terminal works
 """
 
 import asyncio
+import datetime as dt
 import logging
 import re
 from collections.abc import Callable
@@ -31,6 +32,7 @@ from .inbox import RETENTION, Inbox
 
 log = logging.getLogger(__name__)
 
+FRESH_EDIT = dt.timedelta(hours=1)  # an old message's edit is news while its edit_date is this recent (D74)
 QUOTE_LIMIT = 500  # characters of a replied message that is not stored itself
 LOGIN_HINT = "docker compose run --rm infomaster python -m infomaster login"
 
@@ -285,9 +287,16 @@ class Twin:
         if not self.chat_settings.enabled(event.chat_id):
             return
         at = message.edit_date or clock.now_utc()
-        if not self.inbox.edit(event.chat_id, message.id, message_text(message), message_files(message), at) \
-                and not self.inbox.has(event.chat_id, message.id) and message.date >= clock.now_utc() - RETENTION:
-            await self._store(message, event.chat_id)  # an older message edited: its new text is news
+        if self.inbox.edit(event.chat_id, message.id, message_text(message), message_files(message), at) \
+                or self.inbox.has(event.chat_id, message.id):
+            return
+        # A message not stored, maybe one past its 14 days (D74): its new text is news. Telegram also sends an edit
+        # for a reaction or a link preview, without a new edit_date: an old message is taken only when just edited.
+        now = clock.now_utc()
+        if message.date >= now - RETENTION:
+            await self._store(message, event.chat_id)
+        elif message.edit_date is not None and message.edit_date >= now - FRESH_EDIT:
+            await self._store(message, event.chat_id, edited_at=message.edit_date)
 
     async def _on_delete(self, event: events.MessageDeleted.Event) -> None:
         self.inbox.delete(event.deleted_ids, event.chat_id, clock.now_utc())
@@ -315,8 +324,9 @@ class Twin:
         except (errors.FloodError, errors.ServerError, ConnectionError, TimeoutError) as e:
             raise NotNow(f"the download failed on the way: {e}") from e
 
-    async def _store(self, message: Message, chat_id: int) -> bool:
-        """Store one message of an enabled chat; False when there is nothing to keep or it is stored already."""
+    async def _store(self, message: Message, chat_id: int, edited_at: dt.datetime | None = None) -> bool:
+        """Store one message of an enabled chat; False when there is nothing to keep or it is stored already.
+        `edited_at`: a message past its 14 days, edited just now (D74)."""
         if not isinstance(message, types.Message) or self.inbox.has(chat_id, message.id):
             return False
         fields = message_fields(message)
@@ -328,7 +338,7 @@ class Twin:
             replied = await message.get_reply_message()
             if replied is not None:
                 fields["reply_quote"] = message_text(replied)[:QUOTE_LIMIT] or None
-        return self.inbox.add(chat_id, message.id, fields)
+        return self.inbox.add(chat_id, message.id, fields, edited_at=edited_at)
 
 
 # --- Telegram objects to rows -----------------------------------------------------

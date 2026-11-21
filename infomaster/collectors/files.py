@@ -29,7 +29,7 @@ from .. import clock
 from ..i18n import Phrase
 from ..processing import pdf
 from ..store import Store
-from .inbox import MAILBOX, RETENTION
+from .inbox import MAILBOX, RETENTION, kept_from
 from .links import LinkError, document_links
 
 log = logging.getLogger(__name__)
@@ -200,7 +200,7 @@ class Files:
             tries = MAX_TRIES if isinstance(e, FileNotFoundError | ValueError | pdf.PdfError) else tries + 1
         finally:
             part.unlink(missing_ok=True)
-        return self._put("tg", chat_id, msg_id, message["at"], meta.get("name"), meta.get("size"), values, kind,
+        return self._put("tg", chat_id, msg_id, kept_from(message), meta.get("name"), meta.get("size"), values, kind,
                          None, tries)
 
     def _put(self, source: str, chat_id: int, msg_id: int, at: str, name: str | None, size: int | None,
@@ -279,7 +279,7 @@ class Files:
         tries = tries + 1 if failed and not values["sha256"] else MAX_TRIES
         if values["sha256"]:
             log.info("the PDF of %s (message %s in %s) is read", url, msg_id, chat_id)
-        return self._put(source, chat_id, msg_id, message["at"], name, None, values, "pdf", url, tries)
+        return self._put(source, chat_id, msg_id, kept_from(message), name, None, values, "pdf", url, tries)
 
     def _store(self, part: Path, kind: str) -> dict:
         """The downloaded file under its hash, a PDF with its first page read. In a thread."""

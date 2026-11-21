@@ -297,6 +297,28 @@ async def test_edit_replaces_what_the_message_gave(batches, now):
     assert [d["due"] for d in batches.deadlines.upcoming(clock.local_day(batches.now()))] == ["2026-10-24"]
 
 
+async def test_an_old_message_edited_replaces_what_it_gave(batches, now):
+    """Past its 14 days a message is gone from the inbox; edited, it comes back and its new text wins (D74)."""
+    add(batches, 1, "ДЗ 5 до 22.10")
+    batches.llm.answers = [{"items": [item([1], deadlines=[deadline()])]}]
+    await parse_chat(batches)
+    [old_news] = batches.news.live(batches.now(), 24)
+    [old_hw] = batches.deadlines.upcoming(clock.local_day(batches.now()))
+    batches.db.execute("delete from messages")  # pruned
+
+    now.moment += dt.timedelta(days=1)
+    batches.inbox.add(CHAT, 1, {"sender_id": 7, "sender_name": "Староста", "at": now() - dt.timedelta(days=20),
+                                "text": "ДЗ 5 до 24.10"}, edited_at=now())
+    batches.llm.answers = [{"items": [item([1], full="Calc HW 5 due Sat Oct 24",
+                                           deadlines=[deadline(due="2026-10-24")])]}]
+    changes = await parse_chat(batches)
+    assert f"edited {now():%a %Y-%m-%d}" in batches.llm.prompts[1]
+    assert f"(edited after it was read; its earlier news: n{old_news['id']})" in batches.llm.prompts[1]
+    assert batches.news.get(old_news["id"])["replaced_by"] == changes.news[0]
+    assert changes.moved == [(old_hw["id"], changes.moved[0][1])]
+    assert [d["due"] for d in batches.deadlines.upcoming(clock.local_day(batches.now()))] == ["2026-10-24"]
+
+
 async def test_deleted_message_withdraws(batches):
     add(batches, 1, "ДЗ 5 до 22.10")
     add(batches, 2, "дополнение", grouped_id=55)

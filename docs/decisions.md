@@ -526,3 +526,12 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
 - [x] The HSE App X login notification links to the bot (D38).
 - [x] Remove the LLM sensors ("LLM run: …", "LLM cost today") without a replacement (D40).
 - [x] Bring Tablo's documents (`docs/software/04`, `05`, `07`) in line with the new scheme.
+- **D74. An old message's edit is news, 21.11.2026.** Stage 17.5 of §11.1. A channel's post edited weeks after it
+  was posted (a moved due date) was lost: the twin dropped edits of messages past their 14 days (D29), since such a
+  message would have been pruned at once. Now an enabled chat's message that is not stored, whatever its age, is
+  stored on an edit whose `edit_date` is less than an hour old, with `edited_at` set to it; Telegram also sends edits
+  for reactions and link previews without a new `edit_date`, and those still change nothing. The 14 days of a message
+  and of its file count from its last edit (`kept_from`), and so does the 24 hours of a non-study chat's news (D30).
+  Its batch treats it as a message read before: what its earlier text gave and is still in force (news, deadlines,
+  events, found by the message's id) is replaced or withdrawn, and the model sees the edit's time next to the
+  message's, so a relative date counts from the edit. Edits made while the twin was offline are still not caught up.

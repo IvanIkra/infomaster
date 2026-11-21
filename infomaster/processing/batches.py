@@ -76,7 +76,7 @@ from dataclasses import dataclass, field
 
 from .. import clock
 from ..collectors.files import Files, NotNow, image_file, pdf_file
-from ..collectors.inbox import MAILBOX, Inbox, message_link
+from ..collectors.inbox import MAILBOX, Inbox, kept_from, message_link
 from ..i18n import Phrase
 from ..library.feed import MATERIAL_KINDS, ChatMaterials, material_file
 from ..llm.budget import BudgetExceeded
@@ -809,7 +809,7 @@ class Batches:
             # A PDF may be a sheet even after a pause of the twin: it is read whatever its age (a chat's news is not).
             keep = (readable(message) or (images and image_file(message) is not None)
                     or (materials and material_file(message) is not None)) and \
-                (settings["study"] or message["at"] >= oldest or pdf_file(message) is not None)
+                (settings["study"] or kept_from(message) >= oldest or pdf_file(message) is not None)
             if keep and settings["filter"] == "important":
                 keep = important(message, people) or replies_to_important(self.inbox, chat_id, message, by_id, people)
             (chosen if keep else skipped).append(message)
@@ -1056,6 +1056,8 @@ class Batches:
         if message["sender_id"] in people:
             head.append("listed person")
         head.append(f"{dt.datetime.fromisoformat(message['at']):%a %Y-%m-%d %H:%M}")
+        if message.get("edited_at"):  # relative dates of the text count from the edit
+            head.append(f"edited {dt.datetime.fromisoformat(message['edited_at']):%a %Y-%m-%d %H:%M}")
         if message["pinned"]:
             head.append("pinned")
         first = album_first.get(message["grouped_id"])
@@ -1089,10 +1091,12 @@ class Batches:
             quote = " ".join(((replied or {}).get("text") or message["reply_quote"] or "").split())[:QUOTE_LIMIT]
             if quote:
                 lines.append(f"  > replied message: «{quote}»")
-        if message["parsed_at"] is not None:
+        if reread(message):
             earlier = ", ".join(f"n{n['id']}" for n in self.news.made_of(chat["source"], chat_id,
                                                                             message["msg_id"]))
-            lines.append("  (edited after it was read" + (f"; its earlier news: {earlier}" if earlier else "") + ")")
+            if earlier or message["parsed_at"] is not None:
+                lines.append("  (edited after it was read" + (f"; its earlier news: {earlier}" if earlier else "")
+                             + ")")
         if note:
             lines.append(f"  Your previous answer did not fit: {note}. Write it shorter.")
         return lines
@@ -1106,7 +1110,7 @@ class Batches:
         known_news = {f"n{n['id']}": n["id"] for n in context.news}
         known_deadlines = {f"d{d['id']}": d["id"] for d in context.deadlines}
         # What edited messages gave before: replaced by their new items, the rest withdrawn.
-        edited = [m["msg_id"] for m in chunk if m["parsed_at"] is not None]
+        edited = [m["msg_id"] for m in chunk if reread(m)]
         old_news = {i: [n["id"] for n in self.news.made_of(source, chat_id, i)] for i in edited}
         old_deadlines = {d["id"]: d for i in edited for d in self.deadlines.made_of(source, chat_id, i)}
         old_events = {e["id"]: e for i in edited for e in self.events.made_of(source, chat_id, i)}
@@ -1326,3 +1330,9 @@ class Batches:
                 self.events.drop(gone_events, now)
         changes.gone.extend(gone_deadlines)
         changes.events_gone.extend(e["id"] for e in events if deleted(e) and e["replaced_by"] is None)
+
+
+def reread(message: dict) -> bool:
+    """Read before: since then edited, or stored anew past its 14 days because it was edited (D74), when what it gave
+    may still be in force."""
+    return message["parsed_at"] is not None or bool(message.get("edited_at"))

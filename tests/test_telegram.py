@@ -138,8 +138,22 @@ async def test_edit_and_pin(twin):
     await twin._on_edit(older)
     assert twin.inbox.has(CHANNEL, 3)
     ancient = live(message("совсем старое", msg_id=2, date=clock.now_utc() - dt.timedelta(days=30)))
-    await twin._on_edit(ancient)
+    await twin._on_edit(ancient)  # no new edit_date: a reaction or a link preview
     assert not twin.inbox.has(CHANNEL, 2)
+    long_ago = clock.now_utc() - dt.timedelta(days=20)
+    stale = live(message("правлено давно", msg_id=2, date=long_ago - dt.timedelta(days=10), edit_date=long_ago))
+    await twin._on_edit(stale)
+    assert not twin.inbox.has(CHANNEL, 2)
+
+    just_now = clock.now_utc()
+    fresh = live(message("Дедлайн перенесён на 30.11", msg_id=2, date=just_now - dt.timedelta(days=30),
+                         edit_date=just_now))
+    await twin._on_edit(fresh)  # past its 14 days, edited just now (D74): stored, kept 14 days from the edit
+    stored = twin.inbox.message(CHANNEL, 2)
+    assert stored["text"] == "Дедлайн перенесён на 30.11" and stored["parsed_at"] is None
+    assert stored["edited_at"] == clock.local_iso(just_now)
+    twin.inbox.prune(just_now + dt.timedelta(days=13))
+    assert twin.inbox.has(CHANNEL, 2)
 
     await twin._on_pin(types.UpdatePinnedChannelMessages(channel_id=10, messages=[6], pts=1, pts_count=1,
                                                          pinned=True))

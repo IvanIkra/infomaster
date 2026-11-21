@@ -980,7 +980,7 @@ owner can read the file.
 only the selected ones. From grade sheets it gets the top of the tab (up to 15 rows above the own row, other
 students' rows included, so that the model finds the header itself, §6.7) and the own row without the owner's name.
 Tablo sent only the header and the own row (§1); it was decided that classmates' grades seen by the model do no
-harm. Raw messages and downloaded files are deleted after 14 days (D29); parsed news, deadlines, events and sheets
+harm. Raw messages and downloaded files are deleted 14 days after the message or its last edit (D29, D74); parsed news, deadlines, events and sheets
 stay.
 
 ## 11. Order of work
@@ -1075,6 +1075,8 @@ own; Claude is an optional door, not the brain (D53).
     - 17.4 own icons and a sheet from the bot (done, D73): an icon for each kind of class, a deadline and each
       kind of the library's items; a PDF sent to the bot that Haiku reads as a sheet is an own sheet with its
       caption, the rest goes to the inbox.
+    - 17.5 an old message's edit (done, D74): a post edited after its 14 days is stored again and read as an edit,
+      its 14 days counted from the edit.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

@@ -16,7 +16,7 @@ from collections.abc import Callable
 from .. import clock
 from ..store import Store
 
-RETENTION = dt.timedelta(days=14)  # D29
+RETENTION = dt.timedelta(days=14)  # D29: from the message's last edit, or from the message when never edited
 MAILBOX = 0  # chat_id of the letters
 
 # Ids of private chats and basic groups are unique across the account: their deletions come without a chat.
@@ -80,14 +80,17 @@ class Inbox:
         return self.db.execute("select 1 from messages where source = ? and chat_id = ? and msg_id = ?",
                                (source, chat_id, msg_id)).fetchone() is not None
 
-    def add(self, chat_id: int, msg_id: int, fields: dict, source: str = "tg") -> bool:
-        """Store a new message; returns False if it is already stored (the catch-up and live updates overlap)."""
+    def add(self, chat_id: int, msg_id: int, fields: dict, source: str = "tg",
+            edited_at: dt.datetime | None = None) -> bool:
+        """Store a new message; returns False if it is already stored (the catch-up and live updates overlap).
+        `edited_at`: a message older than its 14 days, stored because it was edited just now (D74)."""
         values = _encode(fields)
+        edited = clock.local_iso(edited_at) if edited_at else None
         with self.db:
             cursor = self.db.execute(
-                f"insert into messages(source, chat_id, msg_id, {', '.join(MESSAGE_FIELDS)}) "
-                f"values(?, ?, ?, {', '.join('?' * len(MESSAGE_FIELDS))}) on conflict do nothing",
-                (source, chat_id, msg_id, *(values[f] for f in MESSAGE_FIELDS)))
+                f"insert into messages(source, chat_id, msg_id, {', '.join(MESSAGE_FIELDS)}, edited_at) "
+                f"values(?, ?, ?, {', '.join('?' * len(MESSAGE_FIELDS))}, ?) on conflict do nothing",
+                (source, chat_id, msg_id, *(values[f] for f in MESSAGE_FIELDS), edited))
         if cursor.rowcount and self.wake is not None:
             self.wake(chat_id, [msg_id])
         return bool(cursor.rowcount)
@@ -230,9 +233,10 @@ class Inbox:
         return found
 
     def prune(self, now: dt.datetime) -> int:
-        """Remove raw messages older than 14 days (D29)."""
+        """Remove raw messages older than 14 days (D29), counted from their last edit (D74)."""
         with self.db:
-            cursor = self.db.execute("delete from messages where at < ?", (clock.local_iso(now - RETENTION),))
+            cursor = self.db.execute("delete from messages where coalesce(edited_at, at) < ?",
+                                     (clock.local_iso(now - RETENTION),))
         return cursor.rowcount
 
 
@@ -247,6 +251,11 @@ def same_files(stored: list[dict], files: list[dict]) -> bool:
     if stored == files:
         return True
     return stored == [LEGACY_PHOTO] and (not files or (len(files) == 1 and files[0]["kind"] == "photo"))
+
+
+def kept_from(message: dict) -> str:
+    """The moment a message's 14 days count from: its last edit, or the message itself (D29, D74)."""
+    return message.get("edited_at") or message["at"]
 
 
 def message_link(chat: dict, msg_id: int) -> str | None:

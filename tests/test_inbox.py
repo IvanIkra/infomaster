@@ -86,8 +86,12 @@ def test_pin_and_senders(inbox):
 def test_prune(inbox):
     inbox.add(-1001, 101, fields(at=NOW - dt.timedelta(days=15)))
     inbox.add(-1001, 102, fields(at=NOW - dt.timedelta(days=13)))
-    assert inbox.prune(NOW) == 1
+    inbox.add(-1001, 103, fields(at=NOW - dt.timedelta(days=30)), edited_at=NOW - dt.timedelta(days=2))
+    inbox.add(-1001, 104, fields(at=NOW - dt.timedelta(days=30)))
+    inbox.edit(-1001, 104, "Сдать ДЗ 5 до 30.10", [], NOW - dt.timedelta(days=1))
+    assert inbox.prune(NOW) == 1  # 103 and 104 count their 14 days from the edit (D74)
     assert inbox.message(-1001, 101) is None and inbox.message(-1001, 102) is not None
+    assert inbox.message(-1001, 103)["edited_at"] == "2026-10-18T12:00:00" and inbox.message(-1001, 104)
     assert clock.local_iso(NOW) == "2026-10-20T12:00:00"
 
 
