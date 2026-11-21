@@ -219,6 +219,27 @@ def test_first_read_is_a_baseline_then_changes_are_new(grades, now):
     assert grades.new() == []  # out of the window
 
 
+def test_a_zero_of_a_work_graded_for_the_group_is_real(grades, now):
+    """D72: a zero counts once half the others have points in the column; with fewer it is still a placeholder."""
+    graded = lambda key, label, share: Item(key, "T", key, label, 0, 0, 10, None, 0, share)  # noqa: E731
+    grades.record("abc123", "ДМ", [graded("k1", "DM HW 1", 0.8), graded("k2", "DM HW 2", 0.0),
+                                   graded("k3", "DM HW 3", 0.3), graded("k4", "DM HW 4", None)])
+    assert [(i["label"], i["value"]) for i in grades.items("abc123")] == [("DM HW 1", 0)]
+    now.moment += dt.timedelta(days=1)
+    grades.record("abc123", "ДМ", [graded("k1", "DM HW 1", 0.8), graded("k3", "DM HW 3", 0.6)])
+    assert [x["label"] for x in grades.new()] == ["DM HW 3"]  # graded for the group now: a new grade, a zero
+
+
+def test_graded_shares_count_the_others_not_the_header():
+    rows = [[None, "Max за обыкновенные / сложные:", 7],
+            ["Группа", "Студент", "Балл"],
+            [260, "Образцов Нагляд Примерович", 5],
+            [None, "Петров Пётр", 0],
+            [None, "сидорова анна", None],
+            [None, "Иванов Иван", 0]]
+    assert collector.graded_shares(rows, 5, 1) == {"C": round(1 / 3, 3)}  # of the three others, one has points
+
+
 def test_the_newest_event_of_a_work_is_given(grades, now):
     grades.record("abc123", None, [])
     for value in (5, 6, 7):
@@ -604,7 +625,7 @@ async def test_the_view_and_the_owners_layout(grades, llm, now):
     assert [(c["column"], c["header"], c["value"]) for c in dz["columns"]] == [
         ("D", "7 / 1а", "1"), ("E", "0 / 1б", "0.7"), ("F", "Балл", "5.9"), ("G", "Балл*", "1")]
     assert dz["works"] == [{"column": "F", "label": "HW 1A", "max": 7, "bonus_column": "G", "header": "Балл",
-                            "raw": 5.9, "value": 8.43}]
+                            "raw": 5.9, "value": 8.43, "graded": 1.0}]  # both others have points in it
     assert all("Образцов" not in str(tab) for tab in view["tabs"])  # another student's row is not kept
 
     woken = []

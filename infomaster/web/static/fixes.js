@@ -56,8 +56,11 @@ const TEXTS = {
   points: ["{raw} of {max}", "{raw} из {max}"],
   bonusN: ["bonus {n}", "бонус {n}"],
   pending: ["not graded yet", "ещё не оценено"],
-  pendingNote: ["The sheet shows 0 and nothing in its parts: the work is not graded yet, so it is in no average.",
-                "В таблице 0 и ничего по задачам: работа ещё не проверена, в среднее не идёт."],
+  checking: ["being graded", "проверяется"],
+  checkingNote: ["Some of the group have points for it and you have 0: it is being graded, or yours is not yet. In no average until most of the group is graded.",
+                 "У части группы уже есть баллы, у вас 0: работу проверяют, или вашу ещё не проверили. В среднее не идёт, пока не проверят большинство."],
+  pendingNote: ["The sheet shows 0 and no one in the group has points for it yet: not graded, so in no average.",
+                "В таблице 0, и баллов за неё пока нет ни у кого в группе: не проверена, в среднее не идёт."],
   parts: ["By problem", "По задачам"],
   asSheet: ["As the sheet has it", "Как в таблице"],
   deleteGrade: ["Delete", "Удалить"],
@@ -297,10 +300,12 @@ export function GradeRow({ w }) {
       }}>
       <span>${w.label}${w.new ? html` <span class="chip">new</span>` : ""}
         ${notes && html`<div class="mut small">${notes}</div>`}</span>
-      ${w.pending ? html`<span class="chip plain">${f("pending")}</span>` : html`<b>${mark(w.value)}</b>`}</button>
+      ${w.pending ? html`<span class="chip plain">${f(w.checking ? "checking" : "pending")}</span>`
+        : html`<b>${mark(w.value)}</b>`}</button>
     ${open && w.parts && w.parts.length > 0 && html`<div class="parts" aria-label=${f("parts")}>
       ${w.parts.map((p, i) => html`<span key=${i}><small>${p.header || "—"}</small><b>${p.value}</b></span>`)}</div>`}
-    ${open && w.pending && html`<div class="note small" style="padding:4px 0 8px">${f("pendingNote")}</div>`}
+    ${open && w.pending && html`<div class="note small" style="padding:4px 0 8px">
+      ${f(w.checking ? "checkingNote" : "pendingNote")}</div>`}
     ${open && !w.pending && html`<form class="stack" style="gap:8px;padding:8px 0" onSubmit=${save}>
       <div class="err" role="alert">${error}</div>
       ${w.own && html`<label class="lab" for=${"g-l-" + w.id}>${f("label")}</label>

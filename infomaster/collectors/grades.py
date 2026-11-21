@@ -127,6 +127,9 @@ class TabView:
     mine: dict[str, object]       # column letter -> raw value in the student's row, without the name
     name_col: str
     own_row: int                  # its number in the tab
+    # column letter -> the share of the other students with a number above zero there (17.3, D72): whether a work
+    # is graded for the group, so the student's zero in it is a real one. Only the share is kept, no one's grade.
+    graded: dict[str, float] = field(default_factory=dict)
 
     def header(self, numbers: list[int]) -> list[dict[str, str]]:
         """The rows the model named the header, in tab order."""
@@ -134,6 +137,29 @@ class TabView:
 
     def column_header(self, col: str, numbers: list[int]) -> str:
         return " / ".join(row[col] for row in self.header(numbers) if row.get(col))
+
+
+def positive(value) -> bool:
+    if isinstance(value, bool) or value is None:
+        return False
+    try:
+        return float(str(value).strip().replace(",", ".")) > 0
+    except ValueError:
+        return False
+
+
+NAME = re.compile(r"[^\W\d_][\w.\-]*(?: [^\W\d_][\w.\-]*){1,3}")  # two to four words of letters: a person
+
+
+def graded_shares(rows: list[list], own_i: int, name_j: int) -> dict[str, float]:
+    """For each column of the own row: the share of the other students (a row whose name column holds a person's
+    name, not a header's words) who have a number above zero in it."""
+    others = [row for i, row in enumerate(rows) if i != own_i and name_j < len(row) and isinstance(row[name_j], str)
+              and NAME.fullmatch(" ".join(row[name_j].split())) and not any(ch.isdigit() for ch in row[name_j])]
+    if not others:
+        return {}
+    return {column(j): round(sum(positive(row[j]) for row in others if j < len(row)) / len(others), 3)
+            for j, value in enumerate(rows[own_i]) if j != name_j and text(value)}
 
 
 def read_views(data: bytes, student: str) -> list[TabView]:
@@ -158,7 +184,8 @@ def read_views(data: bytes, student: str) -> list[TabView]:
             top = [(i + 1, cells) for i, row in enumerate(rows[:min(own_i, TOP_ROWS)])
                    if (cells := {column(j): text(c) for j, c in enumerate(row) if text(c)})]
             mine = {column(j): c for j, c in enumerate(rows[own_i]) if j != name_j and text(c)}
-            views.append(TabView(tab=ws.title, rows=top, mine=mine, name_col=column(name_j), own_row=own_i + 1))
+            views.append(TabView(tab=ws.title, rows=top, mine=mine, name_col=column(name_j), own_row=own_i + 1,
+                                 graded=graded_shares(rows, own_i, name_j)))
     finally:
         wb.close()
     return views

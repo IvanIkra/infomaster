@@ -403,6 +403,9 @@ thing to read. The code, the topic, the command, the web app screen, the `summar
 
 Unchanged from §3: tab layout by Haiku with a cache, a 0–10 scale, a snapshot on the first poll, placeholder zeros,
 a journal of new grades. New grades go to the API and the course lenses of the web app; they are not pushed (D55).
+Zeros differ from Tablo's (D72): a read keeps, for each column of the own row, the share of the other students with
+points above zero there (only the share, no one's grade); a zero counts as the student's own once half of them have
+points, is a placeholder while none do, and is «being graded» in between.
 
 **Stage 8 details:**
 
@@ -906,7 +909,8 @@ class keeps «Mark cancelled». `POST /shelf/remove {ids}` deletes several items
 open `#/docs?course=`, `#/sheets?course=`, `#/grades?course=` and `#/raw?course=` (the average opens the grades), each
 a screen with a way back and no views bar, and the shelf of all sheets is grouped by the course key. The course's
 `grades` (D71) list every work its gradebooks lay out, from the tabs' views, with `raw`, `max`, `bonus`, `parts` (the
-own row's cells between the work before it and its column) and `pending` (a zero before any grade: in no average),
+own row's cells between the work before it and its column), `pending` (a zero no grade stands behind: in no average)
+and `checking` (pending while part of the group is graded, D72),
 then the grades added by hand, and `books` with each gradebook's summary tabs; the tile and `#/grades` read it alike. A card over the
 screen closes when pulled down from its top (`app.js`), and the «Machine» dot is grey while infomaster does not answer
 (`MachineDot`).
@@ -1057,8 +1061,8 @@ own; Claude is an optional door, not the brain (D53).
       class, deleting several items of the library's inbox, a «Courses» button for the lens, a screen per lens tile,
       the sheets by course;
     - 17.3 grades (done, D71): every work of the course's gradebooks with its points, bonus and the points of its
-      parts, a zero before any grade «not graded yet» and outside the average, the summary tabs, the gradebooks'
-      state and actions on the course's grades;
+      parts, a zero real once half the group is graded (D72), «not graded yet» or «being graded» otherwise and
+      outside the average, the summary tabs, the gradebooks' state and actions on the course's grades;
     - 17.4 own icons for the kinds of items; a sheet sent to the bot read as a sheet, with its caption.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.

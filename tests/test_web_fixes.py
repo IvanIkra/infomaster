@@ -243,7 +243,7 @@ async def test_grades_with_their_parts(fixer):
          "columns": cells(("D", "5 / 1a", "1"), ("E", "1b", "0.5"), ("F", "Score", "1.5"), ("G", "Score*", "0")),
          "works": [work("F", "HW 1", 2, 1.5, "G")]},
         {"tab": "HW-2", "skip": False, "columns": cells(("F", "Score", "0"), ("G", "Score*", "0")),
-         "works": [work("F", "HW 2", 5, 0, "G")]},
+         "works": [{**work("F", "HW 2", 5, 0, "G"), "graded": 0.3}]},  # a third of the group graded: being graded
         {"tab": "Seminars", "skip": False,
          "columns": cells(("B", "Sem 1", "8"), ("C", "Sem 2", "0"), ("D", "Sem 3", "6")),
          "works": [work("B", "Sem 1", 10, 8), work("C", "Sem 2", 10, 0), work("D", "Sem 3", 10, 6)]},
@@ -259,6 +259,7 @@ async def test_grades_with_their_parts(fixer):
     assert works["DM HW 1"]["parts"] == [{"header": "5 / 1a", "value": "1"}, {"header": "1b", "value": "0.5"}]
     assert (works["DM HW 1"]["value"], works["DM HW 1"]["bonus"], works["DM HW 1"]["pending"]) == (7.5, "0", False)
     assert works["HW 2"]["pending"] and works["HW 2"]["value"] is None and works["HW 2"]["parts"] == []
+    assert works["HW 2"]["checking"] and not works["Sem 2"]["checking"]
     assert works["Sem 2"]["pending"] and works["DM Sem 3"]["parts"] == []
     assert (grades["count"], grades["pending"], grades["average"]) == (3, 2, 7.2)
     assert grades["books"][0]["summaries"] == [{"tab": "Totals", "cells": [{"header": "Midterm", "value": "4.5"}]}]

@@ -19,7 +19,7 @@ from ..i18n import Phrase, say
 from ..library import Library
 from ..library.links import Links
 from ..processing.events import OWN
-from ..processing.grades import Grades
+from ..processing.grades import GRADED_SHARE, Grades
 from ..processing.merge import DeadlineList
 from ..processing.news import News
 from ..processing.schedule import NOT_CLASSES, SEMINARS, Entry, Schedule, applies, local
@@ -408,7 +408,8 @@ class Data:
         """A course's grades, one list for the lens's tile and the grades' screen (stage 17.3, D71): every work its
         gradebooks lay out, in sheet order, with the points of its parts (the own row's cells between the work
         before it and its own column); the grades read (`grade_items`) with the owner's changes over them; a zero
-        the sheet shows before any grade is `pending` («not graded yet», §6.7) and counts in no average. Then the
+        the sheet shows that no grade stands behind is `pending` («not graded yet», §6.7; `checking` while the group's
+        work is being graded, D72) and counts in no average. Then the
         grades added by hand, and the tabs the layout skips that still have cells (a summary: «Итоги»)."""
         works, books = [], []
         for book in self._books(key, names):
@@ -443,17 +444,20 @@ class Data:
                                   "label": item["label"] if item else w.get("label") or w.get("header") or "",
                                   "value": item["value"] if item else None, "raw": w.get("raw"), "max": w.get("max"),
                                   "bonus": bonus, "parts": parts, "pending": item is None,
+                                  "checking": item is None and w.get("graded") is not None
+                                  and 0 < w["graded"] < GRADED_SHARE,
                                   "new": bool(item and item["new"]), "edited": bool(item and item["edited"]),
                                   "sheet_value": item["sheet_value"] if item else None, "own": False})
             # a grade read whose tab the view no longer lays out: still shown, as the lens showed it
-            works += [{**item, "book": sid, "tab": "", "parts": [], "pending": False, "own": False}
+            works += [{**item, "book": sid, "tab": "", "parts": [], "pending": False, "checking": False, "own": False}
                       for item_id, item in read.items() if item_id not in seen]
             books.append({"id": sid, "url": book["url"], "label": book["label"], "name": book.get("name", ""),
                           "summaries": summaries})
         if self.grades is not None:
             # the grades added by hand: their course is a title, as «+» gives it
             works += [{"id": g["id"], "book": None, "tab": "", "label": g["label"], "value": g["value"], "raw": None,
-                       "max": None, "bonus": None, "parts": [], "pending": False, "new": g["new"], "edited": False,
+                       "max": None, "bonus": None, "parts": [], "pending": False, "checking": False, "new": g["new"],
+                       "edited": False,
                        "sheet_value": None, "own": True} for g in self.grades.manual()
                       if self.key(g["course"]) == key or any(self.schedule.same_course(g["course"], n) for n in names)]
         values = [w["value"] for w in works if not w["pending"] and w["value"] is not None]

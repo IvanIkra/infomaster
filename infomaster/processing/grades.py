@@ -54,6 +54,9 @@ HEADER_GUESS = 3        # top rows that head a column for the web app when no la
 MAX_TOKENS = 4000
 TOKENS_PER_WORK = 60    # {"column", "label", "max", "bonus_column"}: a tab of dates must not cut the answer
 SETTINGS = ("grades_student", "grades_sheets", "grades_window_days")
+# A zero is the student's own (D72) once at least this share of the others have a grade above zero in the column: the
+# work is graded for the group. With none of them it is a placeholder (not graded yet), in between it is being graded.
+GRADED_SHARE = 0.5
 
 LAYOUT_SYSTEM = """You map one tab of a teacher's grade sheet to the graded works shown on a student's e-ink dashboard.
 
@@ -153,8 +156,9 @@ def columns(view: TabView, header_rows: list[int]) -> list[dict]:
             for col, value in view.mine.items()]
 
 
-def works(items: list[dict], cells: list[dict]) -> list[dict]:
-    """The works of a layout over the own row's cells: the points there and the grade on 0-10."""
+def works(items: list[dict], cells: list[dict], graded: dict[str, float] | None = None) -> list[dict]:
+    """The works of a layout over the own row's cells: the points there, the grade on 0-10, and the share of the
+    others graded in its column (None when unknown: a view kept before D72)."""
     by_column = {cell["column"]: cell for cell in cells}
     listed = []
     for it in items:
@@ -162,7 +166,8 @@ def works(items: list[dict], cells: list[dict]) -> list[dict]:
         raw, maximum = number(cell.get("value")), number(it.get("max")) or 10.0
         listed.append({"column": it.get("column"), "label": it.get("label") or "", "max": maximum,
                        "bonus_column": it.get("bonus_column"), "header": cell.get("header", ""), "raw": raw,
-                       "value": round(raw / maximum * 10, 2) if raw is not None and maximum > 0 else None})
+                       "value": round(raw / maximum * 10, 2) if raw is not None and maximum > 0 else None,
+                       "graded": (graded or {}).get(it.get("column")) if graded else None})
     return listed
 
 
@@ -172,7 +177,8 @@ def describe(view: TabView, spec: dict) -> dict:
     cells = columns(view, header_rows)
     return {"tab": view.tab, "own_row": view.own_row, "skip": bool(spec.get("skip")), "reason": spec.get("reason"),
             "by": "you" if spec.get("by") == "you" else "failed" if spec.get("failed") else "haiku",
-            "header_rows": header_rows, "columns": cells, "works": works(spec.get("items") or [], cells)}
+            "header_rows": header_rows, "columns": cells,
+            "works": works(spec.get("items") or [], cells, view.graded)}
 
 
 @dataclass(frozen=True)
@@ -186,6 +192,7 @@ class Item:
     max: float
     bonus: float | None
     position: int
+    graded: float | None = None  # the share of the others graded in its column (D72); None: not known
 
 
 def extract(sid: str, course: str, view: TabView, spec: dict, start: int = 0) -> list[Item]:
@@ -208,7 +215,7 @@ def extract(sid: str, course: str, view: TabView, spec: dict, start: int = 0) ->
         label = f"{course} {' '.join(str(it.get('label') or '').split())}".strip()
         keys.add(key)
         items.append(Item(key, view.tab, header, label, round(value, 2), raw, maximum, bonus or None,
-                          start + len(items)))
+                          start + len(items), view.graded.get(col) if view.graded else None))
     return items
 
 
@@ -290,8 +297,10 @@ class Grades:
                     moved.add(old["key"])
                     for table in ("grade_events", "own_grades"):  # its history and the owner's change go along
                         db.execute(f"update {table} set key = ? where key = ?", (item.key, old["key"]))
-                # A zero before any real grade is a placeholder for "not graded yet" (Tablo's §3.6).
-                if item.value == 0 and not item.bonus and (old is None or old["value"] == 0):
+                # A zero before any real grade is a placeholder for "not graded yet" (Tablo's §3.6), unless the work
+                # is graded for the group (D72): then the zero is the student's own.
+                if item.value == 0 and not item.bonus and (old is None or old["value"] == 0) and \
+                        (item.graded is None or item.graded < GRADED_SHARE):
                     continue
                 seen.add(item.key)
                 db.execute(

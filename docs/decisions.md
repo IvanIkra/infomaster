@@ -449,6 +449,17 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   the course's key. The app's static files now carry `Cache-Control: no-cache`: without it a browser kept an old
   module by its own guess after a deploy and ran the new page with it.
 
+- **D72. A zero is real when the group's work is graded, 21.11.2026.** Stage 17.3 of §11.1, after D71 kept Tablo's
+  rule that a zero before any grade is a placeholder: the owner saw the average ignore zeros. The real gradebooks
+  showed why no rule on the own row can tell them apart: a homework missed (others graded, the own cell 0) and a
+  homework not yet graded (every cell 0, made by the sheet's formula) look the same there, and the parts of a work
+  are empty in both. What tells them apart is the column itself, so a read keeps, for each column of the own row,
+  the share of the other students (rows whose name column holds a person's name) with points above zero; nothing
+  else of another student is kept. A zero is the student's own once at least half of them have points
+  (`GRADED_SHARE`): it is recorded, shown and counted, and a newly graded zero is a new grade like any other. With
+  none it is a placeholder, «not graded yet». In between, a large stream graded group by group, it is «being graded»
+  and counts in no average until most are graded.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.
