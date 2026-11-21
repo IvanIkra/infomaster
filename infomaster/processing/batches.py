@@ -684,13 +684,20 @@ class Batches:
         return await self.run_chats(self._ordered(due), slots=due)
 
     async def run_chats(self, chat_ids: list[int], slots: dict[int, str] | None = None) -> Changes:
-        changes = Changes()
+        changes, broken = Changes(), None
         try:
             for chat_id in chat_ids:
-                await self.parse_chat(chat_id, changes)
+                try:
+                    await self.parse_chat(chat_id, changes)
+                except (BudgetExceeded, LLMError):
+                    raise  # the same for every chat: the run stops
+                except Exception as e:  # this chat's own trouble: its slot stays due, the next chats go on
+                    log.exception("parsing chat %s failed", chat_id)
+                    broken = f"chat {chat_id}: {e!r}"
+                    continue
                 if slots:
                     self._mark_done(chat_id, slots[chat_id])
-            self.ok_at, self.error = clock.local_iso(self.now()), None
+            self.ok_at, self.error = clock.local_iso(self.now()), broken
         except BudgetExceeded as e:  # the budget tells the owner itself; the chats stay due
             log.info("batches wait for the LLM limit: %s", e)
         except LLMError as e:

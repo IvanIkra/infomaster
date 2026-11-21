@@ -271,6 +271,25 @@ async def test_failure_keeps_the_queue(batches):
         "ok_at": "2026-10-20T12:00:00", "error": None, "queue": 0}
 
 
+async def test_one_chats_failure_does_not_stop_the_others(batches, monkeypatch):
+    other = -1002
+    batches.inbox.put_chat(other, "Алгем", "supergroup", None, 0)
+    batches.chat_settings.update(other, {"enabled": True, "study": True})
+    add(batches, 1, "ДЗ 5 до 22.10")
+    add(batches, 1, "ДЗ 2 до 23.10", chat_id=other)
+    parse = batches.parse_chat
+
+    async def broken(chat_id, changes):
+        if chat_id == other:  # «Алгем» goes first, by title
+            raise KeyError("oops")
+        await parse(chat_id, changes)
+    monkeypatch.setattr(batches, "parse_chat", broken)
+    batches.llm.answers = [{"items": []}]
+    await batches.tick()
+    assert batches.inbox.pending(CHAT) == [] and len(batches.inbox.pending(other)) == 1
+    assert "oops" in batches.status()["error"] and list(batches.store.get_json("batches.done")) == [str(CHAT)]
+
+
 async def test_edit_replaces_what_the_message_gave(batches, now):
     add(batches, 1, "ДЗ 5 до 22.10, КР в пятницу")
     batches.llm.answers = [{"items": [item([1], deadlines=[deadline(), deadline(label="Calc KR", due="2026-10-23")])]}]
