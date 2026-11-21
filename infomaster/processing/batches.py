@@ -884,6 +884,11 @@ class Batches:
                           self.events.upcoming(today),
                           self.schedule.upcoming_classes(today) if settings["study"] else [],
                           self.subjects.all())
+        if not settings["study"]:  # D79: a chat that is no study one moves, cancels and replaces only its own items
+            def own(rows: list[dict]) -> list[dict]:
+                return [r for r in rows if r.get("source") == chat["source"] and r.get("chat_id") == chat["id"]]
+            context.news, context.deadlines, context.events = own(context.news), own(context.deadlines), \
+                own(context.events)
         documents = await self._scans(chunk)  # before the prompt: a scan that cannot be attached is not referred to
         try:
             answer = await self.llm.json("batch", SYSTEM, self._prompt(chat, settings, chunk, context),
@@ -1131,6 +1136,13 @@ class Batches:
         with self.db:
             for item in items:
                 ids = item["msg_ids"]
+                # D79: a letter from outside the university adds; it moves, cancels and replaces nothing known.
+                trusted = source != "mail" or all(official(by_id[i]) for i in ids)
+                if not trusted:
+                    item = {**item, "news": item["news"] and {**item["news"], "replaces": ""},
+                            "deadlines": [{**d, "moves": ""} for d in item["deadlines"]],
+                            "events": [{**e, "moves": "", "cancels": ""} for e in item["events"]
+                                       if not (e["moves"] or e["cancels"])]}
                 if news := item["news"]:
                     news_id = self.news.add({
                         "source": source, "chat_id": chat_id, "msg_ids": ids, "study": settings["study"],
@@ -1169,7 +1181,8 @@ class Batches:
                     n = 0
                     if not (event["moves"] or event["cancels"]):
                         n = ordinals[ids[0]] = ordinals.get(ids[0], -1) + 1
-                    self._save_event(chat, ids, event, n, context, old_events, settled_events, now, changes)
+                    self._save_event(chat, ids, event, n, context, old_events, settled_events, now, changes,
+                                     settings["study"] and trusted)
                 for sheet in item["sheets"]:
                     if self.sheets is not None and (sheet_id := self.sheets.add(chat_id, by_id[sheet["msg_id"]],
                                                                                 sheet, now)) is not None:
@@ -1199,7 +1212,7 @@ class Batches:
                  len(materials))
 
     def _save_event(self, chat: dict, ids: list[int], event: dict, n: int, context: Context, old_events: dict,
-                    settled: set[int], now: dt.datetime, changes: Changes) -> None:
+                    settled: set[int], now: dt.datetime, changes: Changes, joins: bool = True) -> None:
         """One event of the answer: a new version of a listed event, a correction of a listed class, or an event of
         its own. Inside the transaction of _save."""
         told = {"source": chat["source"], "chat_id": chat["id"], "msg_ids": ids}
@@ -1276,8 +1289,9 @@ class Batches:
         if self.schedule.repeats_class({**new, "class_uid": None}, self.schedule.class_entries()):
             log.info("event %r at %s of %s repeats a class: not saved", new["title"], new["start"], chat["id"])
             return
-        if (twin := self._day_twin(new)) is not None:
-            self._join(twin, new, told, settled, now, changes)
+        twin = self._day_twin(new)
+        if twin is not None and (joins or (twin["source"], twin["chat_id"]) == (chat["source"], chat["id"])):
+            self._join(twin, new, told, settled, now, changes)  # another chat's event: only a trusted study one
             return
         changes.events.append(self.events.add(new, now))
 
@@ -1338,6 +1352,20 @@ class Batches:
                 self.events.drop(gone_events, now)
         changes.gone.extend(gone_deadlines)
         changes.events_gone.extend(e["id"] for e in events if deleted(e) and e["replaced_by"] is None)
+
+
+UNIVERSITY = "hse.ru"
+ADDRESS = re.compile(r"<([^<>\s@]+@([^<>\s@]+))>$")
+
+
+def official(message: dict) -> bool:
+    """A letter of the university (its address at hse.ru or a subdomain) or the wiki's notice (stored by the service
+    itself, under a negative id IMAP never gives). A display name is anyone's to write: the address decides."""
+    if message["msg_id"] < 0:
+        return True
+    found = ADDRESS.search(message["sender_name"] or "")
+    domain = found[2].lower() if found else ""
+    return domain == UNIVERSITY or domain.endswith("." + UNIVERSITY)
 
 
 def reread(message: dict) -> bool:

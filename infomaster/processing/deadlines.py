@@ -107,10 +107,26 @@ class Deadlines:
     def rename(self, deadline_id: int, label: str, course: str | None) -> None:
         self.db.execute("update deadlines set label = ?, course = ? where id = ?", (label, course, deadline_id))
 
-    def drop(self, deadline_ids: list[int], at: dt.datetime) -> None:
-        marks = ", ".join("?" * len(deadline_ids))
-        self.db.execute(f"update deadlines set gone_at = ? where gone_at is null and id in ({marks})",
-                        (clock.local_iso(at), *deadline_ids))
+    def drop(self, deadline_ids: list[int], at: dt.datetime) -> list[int]:
+        """Withdraw deadlines; for one in force, the deadline it had moved comes back (as Events.drop does), past an
+        earlier text of the same messages and past ones withdrawn already. Returns the ids that came back."""
+        restored = []
+        for deadline_id in deadline_ids:
+            row = self.db.execute("select * from deadlines where id = ?", (deadline_id,)).fetchone()
+            if row is None or row["gone_at"] is not None:
+                continue
+            self.db.execute("update deadlines set gone_at = ? where id = ?", (clock.local_iso(at), deadline_id))
+            if row["moved_by"] is not None or row["sheet_id"] is not None:
+                continue  # a sheet's date follows its versions (§6.3): the sheets bring back what they keep
+            told = set(json.loads(row["msg_ids"] or "[]"))
+            earlier = self.db.execute("select * from deadlines where moved_by = ?", (deadline_id,)).fetchone()
+            while earlier is not None and (earlier["gone_at"] is not None or
+                                           set(json.loads(earlier["msg_ids"] or "[]")) <= told):
+                earlier = self.db.execute("select * from deadlines where moved_by = ?", (earlier["id"],)).fetchone()
+            if earlier is not None:
+                self.db.execute("update deadlines set moved_by = null where id = ?", (earlier["id"],))
+                restored.append(earlier["id"])
+        return restored
 
 
 def _decode(row) -> dict:

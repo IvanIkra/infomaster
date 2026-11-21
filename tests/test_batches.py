@@ -271,6 +271,50 @@ async def test_failure_keeps_the_queue(batches):
         "ok_at": "2026-10-20T12:00:00", "error": None, "queue": 0}
 
 
+async def test_a_withdrawn_move_brings_the_deadline_back(batches):
+    """A move whose message is deleted or edited away gives back the deadline it moved, as an event's does."""
+    add(batches, 1, "ДЗ 5 до 22.10")
+    batches.llm.answers = [{"items": [item([1], deadlines=[deadline()])]}]
+    await parse_chat(batches)
+    [told] = batches.deadlines.upcoming(clock.local_day(batches.now()))
+    add(batches, 2, "ДЗ 5 переносится на 24.10")
+    batches.llm.answers = [{"items": [item([2], deadlines=[deadline(due="2026-10-24", moves=f"d{told['id']}")])]}]
+    await parse_chat(batches)
+    assert [d["due"] for d in batches.deadlines.upcoming(clock.local_day(batches.now()))] == ["2026-10-24"]
+    batches.inbox.delete([2], CHAT, batches.now())
+    await parse_chat(batches)
+    assert [d["id"] for d in batches.deadlines.upcoming(clock.local_day(batches.now()))] == [told["id"]]
+
+
+async def test_only_trusted_sources_move_what_others_told(batches):
+    """D79: a letter from outside the university and a chat that is no study one move nothing they did not tell."""
+    from infomaster.collectors.inbox import MAILBOX
+
+    add(batches, 1, "ДЗ 5 до 22.10")
+    batches.llm.answers = [{"items": [item([1], deadlines=[deadline()])]}]
+    await parse_chat(batches)
+    [told] = batches.deadlines.upcoming(clock.local_day(batches.now()))
+
+    batches.mail = True
+    for msg_id, sender in ((7, "Course wiki <office@evil.example>"), (8, "Учебный офис <office@hse.ru>")):
+        with batches.db:
+            batches.inbox.add_letter(msg_id, {"sender_name": sender, "at": batches.now(), "text": "Перенос ДЗ 5",
+                                              "files": [], "subject": "ДЗ"})
+    batches.llm.answers = [{"items": [item([7], deadlines=[deadline(due="2026-10-30", moves=f"d{told['id']}")]),
+                                      item([8], deadlines=[deadline(due="2026-10-31", moves=f"d{told['id']}")])]}]
+    changes = await parse_chat(batches, MAILBOX)
+    [(moved, current)] = changes.moved  # the university's letter moved it; the stranger's only added its own date
+    assert moved == told["id"] and len(changes.deadlines) == 1
+
+    other = -1003
+    batches.inbox.put_chat(other, "Флуд", "supergroup", None, 0)
+    batches.chat_settings.update(other, {"enabled": True, "study": False})
+    add(batches, 9, "ДЗ 5 перенесли на 1.11", chat_id=other)
+    batches.llm.answers = [{"items": [item([9], deadlines=[deadline(due="2026-11-01", moves=f"d{current}")])]}]
+    changes = await parse_chat(batches, other)
+    assert changes.moved == [] and f"d{current}:" not in batches.llm.prompts[-1]
+
+
 async def test_one_chats_failure_does_not_stop_the_others(batches, monkeypatch):
     other = -1002
     batches.inbox.put_chat(other, "Алгем", "supergroup", None, 0)

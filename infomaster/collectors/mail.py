@@ -163,10 +163,12 @@ class Letter:
     text: str
     files: tuple[str, ...] = ()
     pdf: tuple[str, bytes] | None = None  # the first PDF attachment: (name, bytes), kept by Files (D59)
+    address: str = ""           # the From address: a display name is anyone's to choose (D79)
 
     def fields(self) -> dict:
         """The message the batches read: the text cut at MAX_BODY, the attachments by name."""
-        return {"sender_id": None, "sender_name": self.sender or "?", "at": self.date, "text": self.text[:MAX_BODY],
+        name = f"{self.sender} <{self.address}>" if self.address and self.address != self.sender else self.sender
+        return {"sender_id": None, "sender_name": name or "?", "at": self.date, "text": self.text[:MAX_BODY],
                 "files": [file_entry(name) for name in self.files], "subject": self.subject}
 
 
@@ -178,11 +180,11 @@ def file_entry(name: str) -> dict:
 
 def parse(raw: bytes, uid: int = 0, fallback_date: dt.datetime | None = None) -> Letter:
     msg = email.message_from_bytes(raw, policy=email.policy.default)
-    sender = ""
+    sender = address = ""
     try:
         addresses = msg["From"].addresses if msg["From"] else ()
         if addresses:
-            sender = addresses[0].display_name or addresses[0].addr_spec
+            sender, address = addresses[0].display_name or addresses[0].addr_spec, addresses[0].addr_spec
     except (AttributeError, IndexError, ValueError):
         sender = str(msg.get("From", ""))
     try:
@@ -201,7 +203,7 @@ def parse(raw: bytes, uid: int = 0, fallback_date: dt.datetime | None = None) ->
         data = None
     pdf = (first.get_filename(), data) if isinstance(data, bytes) and data else None
     return Letter(uid, " ".join(sender.split()), " ".join(str(msg.get("Subject", "")).split()), date,
-                  body_text(msg), files, pdf)
+                  body_text(msg), files, pdf, " ".join(address.split()))
 
 
 # --- IMAP -----------------------------------------------------------------------
