@@ -277,28 +277,6 @@ def test_a_failed_change_saves_nothing(merged, monkeypatch):
     assert merged.todo.own() == () and merged.changes == []
 
 
-def test_by_ref_follows_moves_and_finds_hidden_ones(merged):
-    first = add(merged, "DM HW 3", "2026-10-21")
-    second = add(merged, "DM HW 3", "2026-10-23")
-    with merged.db:
-        merged.deadlines.move(first, second)
-    found = merged.by_ref(f"dl:{first}")
-    assert found.ref == f"dl:{second}" and found.due == D(2026, 10, 23)
-    merged.remove(found)
-    assert merged.by_ref(f"dl:{first}") == found and merged.all() == ()
-    with merged.db:
-        merged.deadlines.drop([second], merged.now())
-    assert merged.by_ref(f"dl:{first}") is None and merged.by_ref("hseapp:nope") is None
-
-
-def test_by_ref_finds_the_copy_that_stands_for_it(merged):
-    tg = add(merged, "DM HW 3", "2026-10-22")
-    hseapp(merged, items=[("h1", "DM HW 3", "2026-10-22", None)])
-    assert merged.by_ref(f"dl:{tg}").ref == "hseapp:h1"
-    hseapp(merged, done=[("h1", "DM HW 3", "2026-10-22", None)])  # done there: nothing stands for it
-    assert merged.by_ref(f"dl:{tg}") is None
-
-
 def test_latest_survives_a_loop(merged):
     a, b = add(merged, "A", "2026-10-21"), add(merged, "A", "2026-10-22")
     with merged.db:

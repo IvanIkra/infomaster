@@ -1,13 +1,14 @@
 """The owner's actions and readings, shaped as aiohttp handlers (§8.5, §8.6, D69).
 
 They were the Mini App's API; the Mini App is gone (D69) and its handlers stay as the one place of the rules: the
-connector's tools call them (connector/tools.py, `call_action`), and so do the web app's screens, «Machine» and the
-shelves, through the tools or directly for what has no tool. A handler reads the services from the public port's
+connector's tools call them (connector/tools.py, `call_action`), and so do the web app's screens and «Machine»,
+through the tools or directly for what has no tool. An own sheet's upload, its deletion and joining are the shelves'
+(web/shelves.py) and the connector's, on SheetPublisher itself. A handler reads the services from the public port's
 app by the keys below and answers JSON, a refusal as a 400 or 404 with its text, in the app's language (D41).
 
 What they cover: the merged deadlines with the owner's own ones and the hidden ones (§5.4, §5.5), the timetable as the
-feeds have it with the owner's own events and corrections (§6.5), the grades and the sheets (§6.7, §6.3, D14), the
-library's materials (§6.8, D58), and the settings: the twin's account with its login and logout, the chats and their
+feeds have it with the owner's own events and corrections (§6.5), the grades, the sheets' fields (§6.7, §6.3), and the
+settings: the twin's account with its login and logout, the chats and their
 settings (D12), the course dictionary (D3, D33), the HSE App X login (§5.2, D7), the limits of reading a PDF, the
 gradebooks, the LLM spending and its daily limit (§7, D40), the general settings (D41, D52).
 
@@ -78,12 +79,6 @@ EVENT_FIELDS = ("title", "kind", "start", "end", "room", "required", "cancelled"
 NEW_EVENT = {"title", "kind", "start", "end", "room", "required"}  # what a new event needs; cancelled may come too
 KIND_LIMIT = 40  # the kind is the type of the feeds once processing/schedule.py's type_of has read it
 CHART_DAYS = 30
-LIBRARY_PREVIEW = 600   # characters of an item's text in a list; the item's own page has all of it
-LIBRARY_ITEMS = 1000    # items of a course's page or of the inbox
-LIBRARY_FIELD = 1000    # bytes of a text field of an upload's form
-LIBRARY_TITLE = 200     # characters of a note's or a link's title
-LIBRARY_URL = 2000      # characters of a link
-DOC_ORDER = {"book": 0, "cheatsheet": 1}  # a course's own documents before its classes'
 
 
 def language(request: web.Request) -> str:
@@ -271,7 +266,7 @@ async def add_event(request: web.Request) -> web.Response:
 
 
 async def update_event(request: web.Request) -> web.Response:
-    """{required?, hidden?} for the newest version of an event, as the forum's buttons; or some of {title, kind,
+    """{required?, hidden?} for the newest version of an event, as the web app's toggles; or some of {title, kind,
     start, end, room, required, cancelled}: the owner's change of an event of its own (not a correction)."""
     event_id = _event_id(request)
     values = await _json(request)
@@ -534,46 +529,6 @@ async def edit_sheet(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(text="expected some of course, number, due, summary")
     if await request.app[SHEETS_KEY].edit(_sheet_id(request), _sheet_fields(request, values)) is None:
         raise web.HTTPNotFound(text="no such sheet")
-    return respond(request, _sheets_state(request))
-
-
-async def add_sheet(request: web.Request) -> web.Response:
-    """A multipart form of a PDF (`file`) and course, number, due: an own sheet, posted at once."""
-    form = await request.post()
-    upload = form.get("file")
-    if not isinstance(upload, web.FileField):
-        raise bad_request(request, "choose a PDF", "выберите PDF")
-    fields = _sheet_fields(request, {name: form[name] for name in ("course", "number", "due") if name in form})
-    topic = request.app[SHEETS_KEY]
-    try:
-        file = await topic.files.keep(upload.file.read(), upload.filename or "sheet.pdf", clock.now_utc())
-    except ValueError as e:
-        raise web.HTTPBadRequest(text=reason(e, language(request))) from None
-    topic.sheets.add_own(file, fields.get("course"), fields.get("number", ""), fields.get("due"), clock.now_utc())
-    await topic.publish()
-    return respond(request, _sheets_state(request))
-
-
-async def delete_sheet(request: web.Request) -> web.Response:
-    """An own sheet deleted with its messages; the chats' sheets are not the owner's to delete."""
-    if not await request.app[SHEETS_KEY].remove(_sheet_id(request)):
-        raise web.HTTPNotFound(text="no such own sheet")
-    return respond(request, _sheets_state(request))
-
-
-async def join_sheet(request: web.Request) -> web.Response:
-    """{previous: id}: the sheet is a newer version of that one (D14); its file replaces the older one's."""
-    try:
-        sheet_id = int(request.match_info["sheet_id"])
-    except ValueError:
-        raise web.HTTPNotFound() from None
-    previous = (await _json(request)).get("previous")
-    if isinstance(previous, bool) or not isinstance(previous, int):
-        raise web.HTTPBadRequest(text="expected {previous: id}")
-    try:
-        await request.app[SHEETS_KEY].join(sheet_id, previous)
-    except ValueError as e:
-        raise web.HTTPBadRequest(text=reason(e, language(request))) from None
     return respond(request, _sheets_state(request))
 
 
@@ -980,7 +935,7 @@ def public_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
     """The public port's app with the services under their keys, for the actions here, the connector and the web app
     (which attach themselves to it); the HSE App X callback; the library's links (/library/<token>) with them; the
     feeds for one's own calendar with the calendar feed."""
-    app = web.Application(client_max_size=UPLOAD_MAX_SIZE + 2**20)  # an own sheet's PDF
+    app = web.Application(client_max_size=UPLOAD_MAX_SIZE + 2**20)  # read whole: JSON and MCP bodies; files stream
     app[ENV_KEY], app[BUDGET_KEY], app[JOURNAL_KEY] = env, budget, journal
     app[INBOX_KEY], app[CHAT_SETTINGS_KEY], app[SOURCES_KEY] = inbox, chat_settings, sources
     app[SUBJECTS_KEY], app[SCHEDULE_KEY], app[HSEAPP_KEY], app[DEADLINES_KEY] = dictionary, timetable, hse, merged

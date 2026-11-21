@@ -428,7 +428,7 @@ function EditForm({ d, busy, onSave, onCancel }) {
   </form>`;
 }
 
-export const shortDay = (iso) => capital(day(iso, { weekday: "short", day: "numeric", month: "short" }));
+const shortDay = (iso) => capital(day(iso, { weekday: "short", day: "numeric", month: "short" }));
 
 function DeadlineCard({ d, onClose }) {
   const when = [capital(day(d.due, { weekday: "short", day: "numeric", month: "long" })),

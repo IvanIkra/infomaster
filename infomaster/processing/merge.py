@@ -185,21 +185,6 @@ class DeadlineList:
         """A deadline of the final list by its uid, shown or not."""
         return next((d for d in self.all() if uid(d) == item_uid), None)
 
-    def by_ref(self, ref: str) -> Deadline | None:
-        """The deadline a ref names, as it is now: one of the chats or RUZ may have moved since (its newest
-        version then), a copy from a more reliable source may stand for it, and a hidden one is found too."""
-        row = None
-        if ref.startswith("dl:") and ref[3:].isdigit():
-            row = self.deadlines.latest(int(ref[3:]))
-            ref = f"dl:{row['id']}" if row else ref
-        listed = self.unhidden()
-        found = next((d for d in listed if d.ref == ref), None)
-        if found is None and row is not None and row["moved_by"] is None and row["gone_at"] is None:
-            told = Deadline(row["label"], dt.date.fromisoformat(row["due"]), "study", row["source"],
-                            self._abbrs()(row["course"]))
-            found = next((d for d in listed if same(d, told)), None)  # merged away: the copy kept instead
-        return found
-
     def is_hidden(self, d: Deadline) -> bool:
         return d.source != "ha" and any(hides(h, d) for h in self.todo.hidden())
 

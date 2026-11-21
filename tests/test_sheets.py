@@ -423,17 +423,10 @@ async def test_actions_screen(aiohttp_client, batches, llm, sheets, topic, budge
     state = await (await client.patch("/app/api/sheets", json={"pdf_pages": 5}, headers=owner)).json()
     assert state["limits"]["pdf_pages"] == 5
 
-    assert (await client.post("/app/api/sheets/2/join", json={"previous": "1"}, headers=owner)).status == 400
-    assert (await client.post("/app/api/sheets/9/join", json={"previous": 1}, headers=owner)).status == 400
-    state = await (await client.post("/app/api/sheets/2/join", json={"previous": 1}, headers=owner)).json()
-    assert [(s["id"], s["first"], s["versions"]) for s in state["sheets"]] == [(2, 1, 2)]
 
-
-async def test_owner_changes_and_adds_sheets(aiohttp_client, batches, llm, sheets, topic, budget, journal,
+async def test_owner_changes_a_sheet(aiohttp_client, batches, llm, sheets, topic, budget, journal,
                                             store, schedule, merged):
-    """The owner changes a sheet; an own sheet is published at once and can be deleted (D44)."""
-    from aiohttp import FormData
-
+    """The owner changes a sheet's fields; adding, deleting and joining are the shelves' (test_web_shelves)."""
     await found(batches, llm, 1, SHEET3)
     await topic.publish()
     hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
@@ -450,26 +443,6 @@ async def test_owner_changes_and_adds_sheets(aiohttp_client, batches, llm, sheet
     for bad in ({}, {"number": 5}, {"due": "2.11"}, {"oops": 1}, {"summary": "x" * 601}):
         assert (await client.patch("/app/api/sheets/1", json=bad, headers=owner)).status == 400
     assert (await client.patch("/app/api/sheets/99", json={"number": "1"}, headers=owner)).status == 404
-
-    form = FormData()
-    form.add_field("file", SHEET3_FIXED, filename="mine.pdf", content_type="application/pdf")
-    form.add_field("course", "Calculus")
-    form.add_field("number", "7")
-    state = await (await client.post("/app/api/sheets", data=form, headers=owner)).json()
-    [mine] = [s for s in state["sheets"] if s["own"]]
-    assert (mine["name"], mine["number"], mine["status"], mine["chat"], mine["due"]) == (
-        "mine.pdf", "7", "posted", None, None)
-
-    assert (await client.delete("/app/api/sheets/1", headers=owner)).status == 404  # a chat's: not the owner's
-    state = await (await client.delete(f"/app/api/sheets/{mine['id']}", headers=owner)).json()
-    assert [s["id"] for s in state["sheets"]] == [1] and sheets.get(mine["id"]) is None
-
-    form = FormData()
-    form.add_field("file", b"hello", filename="no.pdf", content_type="application/pdf")
-    assert (await client.post("/app/api/sheets", data=form, headers=owner)).status == 400
-    form = FormData()
-    form.add_field("course", "Calculus")
-    assert (await client.post("/app/api/sheets", data=form, headers=owner)).status == 400
 
 
 # --- the assumed due date (§6.3) ---------------------------------------------------------------------

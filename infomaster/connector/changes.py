@@ -30,7 +30,6 @@ create table if not exists connector_changes (  -- every write through the MCP c
     via text not null default 'claude'  -- claude: through the connector; web: the owner in the web app (§8.6)
 );
 """
-VIAS = ("claude", "web")
 KEEP = 200  # changes listed and kept
 ARGUMENTS_CHARS = 4000
 
