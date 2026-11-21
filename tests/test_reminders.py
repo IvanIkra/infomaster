@@ -79,3 +79,28 @@ async def test_hidden_deadlines_are_not_reminded(reminders, now):
     at(now, 20, 20)
     await reminders.tick()
     assert reminders.told == [("eve", ["Calc KR"])]
+
+
+async def test_a_failure_does_not_end_the_loop(reminders, monkeypatch):
+    import asyncio
+
+    from infomaster.outputs import reminders as module
+
+    ticks, waits = [], []
+
+    async def broken():
+        ticks.append(1)
+        raise ValueError("a broken time")
+
+    async def wait_for(awaitable, timeout):
+        waits.append(timeout)
+        awaitable.close()
+        if len(waits) == 2:
+            raise asyncio.CancelledError
+        raise TimeoutError
+
+    monkeypatch.setattr(reminders, "tick", broken)
+    monkeypatch.setattr(module.asyncio, "wait_for", wait_for)
+    with pytest.raises(asyncio.CancelledError):
+        await reminders.run()
+    assert ticks == [1, 1] and waits == [module.RETRY_AFTER] * 2

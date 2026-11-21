@@ -935,7 +935,7 @@ def public_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
     """The public port's app with the services under their keys, for the actions here, the connector and the web app
     (which attach themselves to it); the HSE App X callback; the library's links (/library/<token>) with them; the
     feeds for one's own calendar with the calendar feed."""
-    app = web.Application(client_max_size=UPLOAD_MAX_SIZE + 2**20)  # read whole: JSON and MCP bodies; files stream
+    app = web.Application(client_max_size=UPLOAD_MAX_SIZE + 2**20)  # MCP bodies: a source up to 2M chars inline
     app[ENV_KEY], app[BUDGET_KEY], app[JOURNAL_KEY] = env, budget, journal
     app[INBOX_KEY], app[CHAT_SETTINGS_KEY], app[SOURCES_KEY] = inbox, chat_settings, sources
     app[SUBJECTS_KEY], app[SCHEDULE_KEY], app[HSEAPP_KEY], app[DEADLINES_KEY] = dictionary, timetable, hse, merged

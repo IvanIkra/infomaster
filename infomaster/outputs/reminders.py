@@ -25,6 +25,7 @@ log = logging.getLogger(__name__)
 DONE_KEY = "deadlines.reminded"  # slot name -> the Moscow day of the last reminder sent
 SLOTS = (("day", "reminder_day", 0), ("eve", "reminder_eve", 1))  # name, its time setting, days ahead
 SLOT_DELAY = 5  # seconds past the slot's minute
+RETRY_AFTER = 600  # seconds to the next look after a failure
 
 
 class DeadlineReminders:
@@ -53,10 +54,12 @@ class DeadlineReminders:
             self._woken.clear()
             try:
                 await self.tick()
-            except Exception:  # a broken setting or store: the loop lives on to the next slot
+                wait = self._seconds_to_next()
+            except Exception:  # a broken setting or store: the loop lives on and looks again later
                 log.exception("the deadline reminders failed")
+                wait = RETRY_AFTER
             try:
-                await asyncio.wait_for(self._woken.wait(), self._seconds_to_next())
+                await asyncio.wait_for(self._woken.wait(), wait)
             except TimeoutError:
                 pass
 
