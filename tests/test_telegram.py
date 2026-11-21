@@ -145,6 +145,11 @@ async def test_edit_and_pin(twin):
     await twin._on_edit(stale)
     assert not twin.inbox.has(CHANNEL, 2)
 
+    missed = clock.now_utc() - dt.timedelta(days=3)  # edited while the twin was offline, a reaction now
+    await twin._on_edit(live(message("правлено без твинка", msg_id=1, date=missed - dt.timedelta(days=40),
+                                     edit_date=missed)))
+    assert twin.inbox.message(CHANNEL, 1)["edited_at"] == clock.local_iso(missed)
+
     just_now = clock.now_utc()
     fresh = live(message("Дедлайн перенесён на 30.11", msg_id=2, date=just_now - dt.timedelta(days=30),
                          edit_date=just_now))

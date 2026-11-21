@@ -32,7 +32,6 @@ from .inbox import RETENTION, Inbox
 
 log = logging.getLogger(__name__)
 
-FRESH_EDIT = dt.timedelta(hours=1)  # an old message's edit is news while its edit_date is this recent (D74)
 QUOTE_LIMIT = 500  # characters of a replied message that is not stored itself
 LOGIN_HINT = "docker compose run --rm infomaster python -m infomaster login"
 
@@ -290,12 +289,13 @@ class Twin:
         if self.inbox.edit(event.chat_id, message.id, message_text(message), message_files(message), at) \
                 or self.inbox.has(event.chat_id, message.id):
             return
-        # A message not stored, maybe one past its 14 days (D74): its new text is news. Telegram also sends an edit
-        # for a reaction or a link preview, without a new edit_date: an old message is taken only when just edited.
+        # A message not stored, whatever its age (D74): kept while its last edit is within the 14 days, which count
+        # from the edit. Telegram also sends an edit for a reaction or a link preview, with the old edit_date: it
+        # brings back a message whose real edit the twin missed (offline), never one edited before its 14 days.
         now = clock.now_utc()
         if message.date >= now - RETENTION:
             await self._store(message, event.chat_id)
-        elif message.edit_date is not None and message.edit_date >= now - FRESH_EDIT:
+        elif message.edit_date is not None and message.edit_date >= now - RETENTION:
             await self._store(message, event.chat_id, edited_at=message.edit_date)
 
     async def _on_delete(self, event: events.MessageDeleted.Event) -> None:
