@@ -6,6 +6,7 @@ import { ApiError, ICONS, api, changed, go, html, icon, toast } from "./common.j
 import { day, getLang, t } from "./i18n.js";
 import { getDecimal, useAct, useLoad } from "./screens.js";
 import { GradeRow } from "./fixes.js";
+import { fresh, m } from "./machine.js";
 
 const TEXTS = {
   shelves: ["Shelves", "Полки"],
@@ -33,6 +34,10 @@ const TEXTS = {
   editSheet: ["Edit", "Изменить"],
   course: ["Course", "Курс"],
   noCourse: ["No course", "Без курса"],
+  pendingN: ["{n} not graded yet", "ещё не оценено: {n}"],
+  bookSettings: ["Layout", "Разметка"],
+  byHand: ["Added by hand", "Добавлены вручную"],
+  bookAdded: ["Gradebook added: it is read in a minute", "Таблица добавлена: прочитается через минуту"],
   number: ["Number", "Номер"],
   dueDate: ["Due date", "Срок"],
   summaryField: ["Summary", "Описание"],
@@ -68,6 +73,10 @@ const TEXTS = {
   markNew: ["Mark new", "Отметить новым"],
   remove: ["Delete", "Удалить"],
   noCourse: ["No course", "Без курса"],
+  pendingN: ["{n} not graded yet", "ещё не оценено: {n}"],
+  bookSettings: ["Layout", "Разметка"],
+  byHand: ["Added by hand", "Добавлены вручную"],
+  bookAdded: ["Gradebook added: it is read in a minute", "Таблица добавлена: прочитается через минуту"],
   noDocs: ["Nothing in the knowledge base yet.", "В базе знаний пока ничего нет."],
   removeN: ["Delete {n}", "Удалить: {n}"],
   removed: ["Deleted", "Удалено"],
@@ -248,18 +257,84 @@ export function DocsList({ course, onOut }) {
   <//>`;
 }
 
+// A course's grades in full, in place of its gradebooks (stage 17.3): the average over the graded works, then each
+// gradebook with its state and actions, its works tab by tab (points, bonus, the points of every problem on a tap,
+// a zero before any grade «not graded yet»), and what its summary tabs show; the grades added by hand; a gradebook
+// added for the course. The tile in the lens reads the same list, so the numbers agree.
 export function GradesList({ course, onOut }) {
   const { data, error } = useLoad("/course?key=" + encodeURIComponent(course || ""), onOut);
+  const status = useLoad("/machine/grades", onOut).data;
+  const act = useAct();
   const g = data && data.grades;
+  const read = (sid) => act.run(async () => {
+    await api("POST", `/machine/grades/${encodeURIComponent(sid)}/read`, {});
+    toast(m("reading"));
+    setTimeout(changed, 5000);
+  });
+  const state = (sid) => (status ? status.sheets.find((b) => b.id === sid) : null);
   return html`<${Screen} title=${(data && data.title) || course} sub=${t("grades")} back=${lensBack(course)}
-      error=${error}>
-    ${g && html`<div class="stat dark" style="align-self:stretch">
+      error=${error || act.error}>
+    ${g && html`<div class="stat dark grade-hero">
         <span class="lab">${t("byCourse")}</span>
         <big>${g.average === null ? "—" : String(g.average).replace(".", getDecimal())}<small> / 10</small></big>
-        ${g.count > 0 && html`<small>${t("worksN", { n: g.count })}</small>`}</div>
-      <div class="box">${g.works.length ? g.works.map((w) => html`<${GradeRow} key=${w.id} w=${w} />`)
-        : html`<div class="note">${t("noGrades")}</div>`}</div>`}
+        <small>${[g.count > 0 && t("worksN", { n: g.count }), g.pending > 0 && s("pendingN", { n: g.pending })]
+          .filter(Boolean).join(" · ") || t("noGrades")}</small></div>
+      ${g.books.map((b) => {
+        const st = state(b.id), works = g.works.filter((w) => w.book === b.id);
+        const tabs = [...new Set(works.map((w) => w.tab))];
+        const back = encodeURIComponent(location.hash);
+        return html`<section key=${b.id} class="stack" style="gap:8px">
+          <h2>${b.name || (st && st.title) || b.label}</h2>
+          <div class=${st && st.error ? "err small" : "mut small"}>${st && st.error ? st.error
+            : st && st.ok_at ? `${m("read")} ${fresh(st.ok_at)}` : m("notYet")}</div>
+          <div class="acts">
+            <button class="sec" disabled=${act.busy} onClick=${() => read(b.id)}>${m("readNow")}</button>
+            <a class="sec" href=${`#/machine/gradebook?id=${encodeURIComponent(b.id)}&back=${back}`}>
+              ${icon(ICONS.edit, 16)}${s("bookSettings")}</a>
+            <a class="sec" href=${b.url} target="_blank" rel="noopener">${icon(ICONS.link, 16)}${m("open")}</a>
+          </div>
+          ${tabs.map((tab) => html`<div key=${tab} class="box">
+            ${tab && html`<div class="lab" style="padding-top:10px">${tab}</div>`}
+            ${works.filter((w) => w.tab === tab).map((w) => html`<${GradeRow} key=${w.id} w=${w} />`)}</div>`)}
+          ${b.summaries.map((sum) => html`<div key=${sum.tab} class="box">
+            <div class="lab" style="padding-top:10px">${sum.tab}</div>
+            <dl class="pairs">${sum.cells.map((c, i) => html`<dt key=${"t" + i}>${c.header || "—"}</dt>
+              <dd key=${"d" + i}>${c.value}</dd>`)}</dl></div>`)}
+        </section>`;
+      })}
+      ${g.works.some((w) => w.own) && html`<section class="stack" style="gap:8px"><h2>${s("byHand")}</h2>
+        <div class="box">${g.works.filter((w) => w.own).map((w) => html`<${GradeRow} key=${w.id} w=${w} />`)}</div>
+      </section>`}
+      ${!g.works.length && !g.books.length && html`<div class="box"><div class="note">${t("noGrades")}</div></div>`}
+      <${AddBook} course=${course} labelChars=${status ? status.label_chars : 10} />`}
   <//>`;
+}
+
+function AddBook({ course, labelChars }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState("");
+  const [label, setLabel] = useState((course || "").slice(0, labelChars));
+  const act = useAct();
+  const add = (event) => {
+    event.preventDefault();
+    act.run(async () => {
+      const answer = await api("POST", "/machine/grades", { url: url.trim(), label: label.trim() });
+      setUrl(""); setOpen(false);
+      done(answer, s("bookAdded"));
+    });
+  };
+  if (!open) return html`<button class="sec" onClick=${() => setOpen(true)}>${icon(ICONS.plus, 18)}${m("addBook")}</button>`;
+  return html`<form class="box stack" style="gap:8px;padding:12px" onSubmit=${add}>
+    <div class="err" role="alert">${act.error}</div>
+    <input class="field" placeholder=${m("bookUrl")} value=${url} autocomplete="off" spellcheck="false" required
+      onInput=${(e) => setUrl(e.target.value)} />
+    <input class="field" placeholder=${m("bookLabel")} value=${label} maxlength=${labelChars}
+      onInput=${(e) => setLabel(e.target.value)} />
+    <div class="acts">
+      <button class="btn" type="submit" disabled=${act.busy || !url.trim()}>${m("addBook")}</button>
+      <button class="sec" type="button" onClick=${() => setOpen(false)}>${t("cancel")}</button>
+    </div>
+  </form>`;
 }
 
 function SheetEdit({ sheet, courses, onDone }) {

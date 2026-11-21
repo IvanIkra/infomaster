@@ -904,7 +904,10 @@ deleted, a source's one is hidden (`not-mine`; `/fix/options {hidden}`), and «M
 class keeps «Mark cancelled». `POST /shelf/remove {ids}` deletes several items of the inbox as one change
 (`remove_material` with `ids`). The lens is «All» and a «Courses» button that lists the courses in a card; its tiles
 open `#/docs?course=`, `#/sheets?course=`, `#/grades?course=` and `#/raw?course=` (the average opens the grades), each
-a screen with a way back and no views bar, and the shelf of all sheets is grouped by the course key. A card over the
+a screen with a way back and no views bar, and the shelf of all sheets is grouped by the course key. The course's
+`grades` (D71) list every work its gradebooks lay out, from the tabs' views, with `raw`, `max`, `bonus`, `parts` (the
+own row's cells between the work before it and its column) and `pending` (a zero before any grade: in no average),
+then the grades added by hand, and `books` with each gradebook's summary tabs; the tile and `#/grades` read it alike. A card over the
 screen closes when pulled down from its top (`app.js`), and the «Machine» dot is grey while infomaster does not answer
 (`MachineDot`).
 
@@ -1053,8 +1056,9 @@ own; Claude is an optional door, not the brain (D53).
     - 17.2 deleting and finding (done): one «Delete» on a deadline's and an event's card, «Mark cancelled» for a
       class, deleting several items of the library's inbox, a «Courses» button for the lens, a screen per lens tile,
       the sheets by course;
-    - 17.3 grades: a real zero told from a placeholder, every work with its points, the course's gradebooks on its
-      page;
+    - 17.3 grades (done, D71): every work of the course's gradebooks with its points, bonus and the points of its
+      parts, a zero before any grade «not graded yet» and outside the average, the summary tabs, the gradebooks'
+      state and actions on the course's grades;
     - 17.4 own icons for the kinds of items; a sheet sent to the bot read as a sheet, with its caption.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.

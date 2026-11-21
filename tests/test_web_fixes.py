@@ -12,7 +12,7 @@ from test_web_actions import Seconds
 from infomaster.collectors.hseapp import CALLBACK_PATH, HseApp
 from infomaster.collectors.ruz import parse
 from infomaster.connector import Connector
-from infomaster.processing.grades import Grades
+from infomaster.processing.grades import VIEW, Grades, Item
 from infomaster.processing.news import News
 from infomaster.processing.todo import uid
 from infomaster.settings import ChatSettings
@@ -228,3 +228,42 @@ async def test_grades_corrected(fixer, now):
     assert (await ask(fixer, "POST", "/fix/grade", {"id": "k1"}, status=400))["error"]
     assert (await ask(fixer, "POST", "/fix/grade", {"id": "nope", "value": 5}, status=400))["error"]
 
+
+
+async def test_grades_with_their_parts(fixer):
+    """The lens's tile and the grades' screen read one list: every work laid out, its parts, a zero before any grade
+    pending and outside the average, and the tabs the layout skips as summaries."""
+    fixer.settings.set("grades_sheets", [{"url": URL, "label": "DM"}])
+    cells = lambda *pairs: [{"column": c, "header": h, "value": v} for c, h, v in pairs]  # noqa: E731
+    work = lambda col, label, top, raw, bonus=None: {  # noqa: E731
+        "column": col, "label": label, "max": top, "bonus_column": bonus, "header": "Score" if bonus else label,
+        "raw": raw, "value": round(raw / top * 10, 2)}
+    fixer.grades.store.put_json(VIEW + "abc123", {"course": "DM", "tabs": [
+        {"tab": "HW-1", "skip": False,
+         "columns": cells(("D", "5 / 1a", "1"), ("E", "1b", "0.5"), ("F", "Score", "1.5"), ("G", "Score*", "0")),
+         "works": [work("F", "HW 1", 2, 1.5, "G")]},
+        {"tab": "HW-2", "skip": False, "columns": cells(("F", "Score", "0"), ("G", "Score*", "0")),
+         "works": [work("F", "HW 2", 5, 0, "G")]},
+        {"tab": "Seminars", "skip": False,
+         "columns": cells(("B", "Sem 1", "8"), ("C", "Sem 2", "0"), ("D", "Sem 3", "6")),
+         "works": [work("B", "Sem 1", 10, 8), work("C", "Sem 2", 10, 0), work("D", "Sem 3", 10, 6)]},
+        {"tab": "Totals", "skip": True, "columns": cells(("D", "Midterm", "4.5"))},
+        {"tab": "Empty", "skip": True, "columns": []}]})
+    fixer.grades.record("abc123", "DM", [
+        Item("abc123|HW-1|F|Score", "HW-1", "Score", "DM HW 1", 7.5, 1.5, 2, None, 0),
+        Item("abc123|Seminars|B|Sem 1", "Seminars", "Sem 1", "DM Sem 1", 8, 8, 10, None, 1),
+        Item("abc123|Seminars|D|Sem 3", "Seminars", "Sem 3", "DM Sem 3", 6, 6, 10, None, 2)])
+    grades = (await ask(fixer, "GET", "/course?key=DM"))["grades"]
+    works = {w["label"]: w for w in grades["works"]}
+    assert list(works) == ["DM HW 1", "HW 2", "DM Sem 1", "Sem 2", "DM Sem 3"]
+    assert works["DM HW 1"]["parts"] == [{"header": "5 / 1a", "value": "1"}, {"header": "1b", "value": "0.5"}]
+    assert (works["DM HW 1"]["value"], works["DM HW 1"]["bonus"], works["DM HW 1"]["pending"]) == (7.5, "0", False)
+    assert works["HW 2"]["pending"] and works["HW 2"]["value"] is None and works["HW 2"]["parts"] == []
+    assert works["Sem 2"]["pending"] and works["DM Sem 3"]["parts"] == []
+    assert (grades["count"], grades["pending"], grades["average"]) == (3, 2, 7.2)
+    assert grades["books"][0]["summaries"] == [{"tab": "Totals", "cells": [{"header": "Midterm", "value": "4.5"}]}]
+    # an owner's change shows over the sheet's grade, and the average follows it
+    await ask(fixer, "POST", "/fix/grade", {"id": "abc123|Seminars|D|Sem 3", "value": 9})
+    grades = (await ask(fixer, "GET", "/course?key=DM"))["grades"]
+    assert next(w for w in grades["works"] if w["id"] == "abc123|Seminars|D|Sem 3")["edited"]
+    assert grades["average"] == 8.2

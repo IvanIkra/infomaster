@@ -829,7 +829,9 @@ function tabFacts(tab) {
   return m("works", { n: tab.works.length });
 }
 
-export function Gradebook({ id, onOut }) {
+// `back`: where the way back leads (a course's grades open it), «Machine → Gradebooks» by default.
+export function Gradebook({ id, back, onOut }) {
+  const home = back && back.startsWith("#/") ? back : "#/machine/grades";
   const { data, error, busy, run } = useMachine(`/machine/grades/${encodeURIComponent(id)}`, onOut);
   const path = `/machine/grades/${encodeURIComponent(id)}`;
   const change = (values) => run(() => api("PATCH", path, values));
@@ -843,12 +845,12 @@ export function Gradebook({ id, onOut }) {
     if (!confirm(m("removeBookAsk", { name: bookName(data) }))) return;
     run(async () => {
       const answer = await api("DELETE", path);
-      go("/machine/grades");
+      location.hash = home;
       return { change: answer.change };
     });
   };
-  if (!data) return html`<${Screen} title=${m("grades")} back="#/machine/grades" error=${error} />`;
-  return html`<${Screen} title=${bookName(data)} back="#/machine/grades" error=${error}>
+  if (!data) return html`<${Screen} title=${m("grades")} back=${home} error=${error} />`;
+  return html`<${Screen} title=${bookName(data)} back=${home} error=${error}>
     ${data.error && html`<div class="hint">${data.error}</div>`}
     <${Section}>
       <div class="stack" style="padding:10px 0;gap:6px"><span class="lab">${m("title")}</span>

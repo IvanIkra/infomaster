@@ -435,6 +435,20 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   base and the grades are new ones), and the shelf of all sheets is grouped by course, by the course key each sheet
   is matched with, so two names of one course make one group.
 
+- **D71. A course's grades in full, in place of its gradebooks, 21.11.2026.** Stage 17.3 of §11.1. The lens showed one
+  number per work, read from `grade_items`, and the owner wanted the gradebooks themselves no longer needed. The view
+  every read keeps of a tab (D44: the own row's cells under their headers, the works laid out in them) already holds
+  the rest, so the course's grades are built from it, one list for the lens's tile and the grades' screen, so their
+  averages agree: every work in sheet order, tab by tab, with its points out of its maximum and its bonus; the points
+  of its parts, the own row's cells between the work before it and its own column (a homework's problems, a test's
+  tasks, a penalty), shown on a tap; the grades read, with the owner's changes over them, as before. A zero the sheet
+  shows before any grade is still a placeholder (§6.7, Tablo's §3.6): it is listed «not graded yet» and counts in no
+  average, and has no edit, since no grade stands behind it. A tab the layout skips that has cells (a summary,
+  «Итоги») is shown as its headers and values. Each gradebook shows how its last read went, «Read now», its layout
+  (Machine's screen, with the way back to the course) and the sheet; a gradebook is added from the course, its label
+  the course's key. The app's static files now carry `Cache-Control: no-cache`: without it a browser kept an old
+  module by its own guess after a deploy and ran the new page with it.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

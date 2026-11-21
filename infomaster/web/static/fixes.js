@@ -53,6 +53,12 @@ const TEXTS = {
   grade: ["Grade, 0 to 10", "Оценка, от 0 до 10"],
   label: ["Work", "Работа"],
   sheetHas: ["The sheet has {value}", "В таблице — {value}"],
+  points: ["{raw} of {max}", "{raw} из {max}"],
+  bonusN: ["bonus {n}", "бонус {n}"],
+  pending: ["not graded yet", "ещё не оценено"],
+  pendingNote: ["The sheet shows 0 and nothing in its parts: the work is not graded yet, so it is in no average.",
+                "В таблице 0 и ничего по задачам: работа ещё не проверена, в среднее не идёт."],
+  parts: ["By problem", "По задачам"],
   asSheet: ["As the sheet has it", "Как в таблице"],
   deleteGrade: ["Delete", "Удалить"],
   gradeSaved: ["Grade saved", "Оценка сохранена"],
@@ -71,6 +77,7 @@ const hm = (iso) => iso.slice(11, 16);
 const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const shortWhen = (start, end) => capital(day(start, { weekday: "short", day: "numeric", month: "short" })) +
   (start.length > 10 ? `, ${hm(start)}${end ? "–" + hm(end) : ""}` : "");
+const round = (value) => Math.round(value * 100) / 100;
 const mark = (value) => (value === null || value === undefined ? "—"
   : String(value).replace(".", getLang() === "ru" ? "," : "."));
 
@@ -279,16 +286,22 @@ export function GradeRow({ w }) {
     await fixIt("/grade/reset", { id: w.id }, f(w.own ? "gradeDeleted" : "gradeReset"));
     setOpen(false);
   });
-  const notes = [w.own && f("yours"), w.edited && f("edited")].filter(Boolean).join(" · ");
-  return html`<div>
+  const bonus = Number(String(w.bonus || "").replace(",", "."));
+  const notes = [w.raw !== null && w.raw !== undefined && w.max && w.max !== 10 && f("points",
+    { raw: mark(round(w.raw)), max: mark(w.max) }), bonus > 0 && f("bonusN", { n: mark(bonus) }),
+    w.own && f("yours"), w.edited && f("edited")].filter(Boolean).join(" · ");
+  return html`<div class=${"grade" + (w.pending ? " pending" : "")}>
     <button class="doc plain" style="width:100%;text-align:left" aria-expanded=${open} onClick=${() => {
         if (!open) { setValue(w.value === null ? "" : String(w.value)); setLabel(w.label); }  // as it is now
         setOpen(!open);
       }}>
       <span>${w.label}${w.new ? html` <span class="chip">new</span>` : ""}
         ${notes && html`<div class="mut small">${notes}</div>`}</span>
-      <b>${mark(w.value)}</b></button>
-    ${open && html`<form class="stack" style="gap:8px;padding:8px 0" onSubmit=${save}>
+      ${w.pending ? html`<span class="chip plain">${f("pending")}</span>` : html`<b>${mark(w.value)}</b>`}</button>
+    ${open && w.parts && w.parts.length > 0 && html`<div class="parts" aria-label=${f("parts")}>
+      ${w.parts.map((p, i) => html`<span key=${i}><small>${p.header || "—"}</small><b>${p.value}</b></span>`)}</div>`}
+    ${open && w.pending && html`<div class="note small" style="padding:4px 0 8px">${f("pendingNote")}</div>`}
+    ${open && !w.pending && html`<form class="stack" style="gap:8px;padding:8px 0" onSubmit=${save}>
       <div class="err" role="alert">${error}</div>
       ${w.own && html`<label class="lab" for=${"g-l-" + w.id}>${f("label")}</label>
         <input id=${"g-l-" + w.id} class="field" value=${label} maxlength="40"

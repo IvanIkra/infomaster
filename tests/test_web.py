@@ -161,7 +161,8 @@ async def test_files(client):
     assert json.loads(await manifest.text())["scope"] == "/web/"
     for path in ("app.js", "app.css", "fonts.css", "vendor/preact.module.js", "icons/icon-512.png",
                  "fonts/Lora-normal-cyrillic.woff2"):
-        assert (await client.get("/web/static/" + path)).status == 200, path
+        response = await client.get("/web/static/" + path)
+        assert response.status == 200 and response.headers["Cache-Control"] == "no-cache", path
 
 
 async def test_everything_static_is_referenced_files_exist(client):
@@ -439,6 +440,6 @@ async def test_course(reader, merged):
     lens = await read(reader, "/course?key=DM")
     assert lens["title"] == "Discrete Mathematics" and lens["next"]["start"] == "2026-10-22T16:40:00"
     assert lens["next"]["due"][0]["title"] == "Sheet 5"
-    assert lens["grades"] == {"count": 0, "new": 0, "average": None, "works": []}
+    assert lens["grades"] == {"count": 0, "pending": 0, "new": 0, "average": None, "works": [], "books": []}
     assert lens["documents"] == [] and lens["sheets"] == {"count": 0}
     assert (await call(reader, "GET", "/course?key=Nope", token=reader.token)).status == 404

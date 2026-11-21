@@ -392,24 +392,73 @@ class Data:
                 "documents": self._documents(names), "materials": self._materials(names),
                 "sheets": self._sheets(key)}
 
-    def _grades(self, key: str, names: list[str]) -> dict:
-        works = []
+    def _books(self, key: str, names: list[str]) -> list[dict]:
+        """The gradebooks of a course: by the course their view names, their label, or a name of the course."""
+        books = []
         if self.grades is not None:
             for sheet in self.grades.settings.get("grades_sheets"):
                 sid = sheet_id(sheet["url"])
                 course = self.grades.view(sid)["course"] or sheet["label"]
                 if self.key(course) == key or any(self.schedule.same_course(course, n) for n in names) or \
                         clean(sheet["label"]).casefold() == key.casefold():
-                    works += [{"id": i["id"], "label": i["label"], "value": i["value"], "new": i["new"],
-                               "edited": i["edited"], "sheet_value": i["sheet_value"], "own": False}
-                              for i in self.grades.items(sid)]
+                    books.append({**sheet, "id": sid})
+        return books
+
+    def _grades(self, key: str, names: list[str]) -> dict:
+        """A course's grades, one list for the lens's tile and the grades' screen (stage 17.3, D71): every work its
+        gradebooks lay out, in sheet order, with the points of its parts (the own row's cells between the work
+        before it and its own column); the grades read (`grade_items`) with the owner's changes over them; a zero
+        the sheet shows before any grade is `pending` («not graded yet», §6.7) and counts in no average. Then the
+        grades added by hand, and the tabs the layout skips that still have cells (a summary: «Итоги»)."""
+        works, books = [], []
+        for book in self._books(key, names):
+            sid = book["id"]
+            read = {item["id"]: item for item in self.grades.items(sid)}
+            summaries, seen = [], set()
+            for tab in self.grades.view(sid)["tabs"]:
+                cells = tab.get("columns") or []
+                if tab.get("skip"):
+                    if cells:
+                        summaries.append({"tab": tab["tab"], "cells": [{"header": c["header"], "value": c["value"]}
+                                                                       for c in cells]})
+                    continue
+                laid = [w for w in tab.get("works") or [] if w.get("column")]
+                own = {w["column"] for w in laid} | {w["bonus_column"] for w in laid if w.get("bonus_column")}
+                order = [c["column"] for c in cells]
+                before = None
+                for w in sorted(laid, key=lambda w: order.index(w["column"]) if w["column"] in order else len(order)):
+                    at = order.index(w["column"]) if w["column"] in order else None
+                    parts = [{"header": c["header"], "value": c["value"]}
+                             for c in cells[(before + 1 if before is not None else 0):at or 0]
+                             if c["column"] not in own] if at is not None else []
+                    if at is not None:
+                        before = at
+                    work_key = f"{sid}|{tab['tab']}|{w['column']}|{w.get('header', '')}"
+                    item = read.get(work_key)
+                    bonus = next((c["value"] for c in cells if c["column"] == w.get("bonus_column")), None)
+                    if item is None and w.get("raw") is None:
+                        continue  # no number in the own row: nothing to show
+                    seen.add(work_key)
+                    works.append({"id": work_key, "book": sid, "tab": tab["tab"],
+                                  "label": item["label"] if item else w.get("label") or w.get("header") or "",
+                                  "value": item["value"] if item else None, "raw": w.get("raw"), "max": w.get("max"),
+                                  "bonus": bonus, "parts": parts, "pending": item is None,
+                                  "new": bool(item and item["new"]), "edited": bool(item and item["edited"]),
+                                  "sheet_value": item["sheet_value"] if item else None, "own": False})
+            # a grade read whose tab the view no longer lays out: still shown, as the lens showed it
+            works += [{**item, "book": sid, "tab": "", "parts": [], "pending": False, "own": False}
+                      for item_id, item in read.items() if item_id not in seen]
+            books.append({"id": sid, "url": book["url"], "label": book["label"], "name": book.get("name", ""),
+                          "summaries": summaries})
+        if self.grades is not None:
             # the grades added by hand: their course is a title, as «+» gives it
-            works += [{"id": g["id"], "label": g["label"], "value": g["value"], "new": g["new"], "edited": False,
+            works += [{"id": g["id"], "book": None, "tab": "", "label": g["label"], "value": g["value"], "raw": None,
+                       "max": None, "bonus": None, "parts": [], "pending": False, "new": g["new"], "edited": False,
                        "sheet_value": None, "own": True} for g in self.grades.manual()
                       if self.key(g["course"]) == key or any(self.schedule.same_course(g["course"], n) for n in names)]
-        values = [w["value"] for w in works if w["value"] is not None]
-        return {"count": len(works), "new": sum(w["new"] for w in works),
-                "average": round(sum(values) / len(values), 1) if values else None, "works": works}
+        values = [w["value"] for w in works if not w["pending"] and w["value"] is not None]
+        return {"count": len(values), "pending": sum(w["pending"] for w in works), "new": sum(w["new"] for w in works),
+                "average": round(sum(values) / len(values), 1) if values else None, "works": works, "books": books}
 
     def _documents(self, names: list[str]) -> list[dict]:
         if self.library is None or not names:

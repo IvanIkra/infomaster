@@ -210,7 +210,8 @@ function machineScreen(at, out, load) {
     case "/machine/courses": return html`<${Courses} onOut=${out} />`;
     case "/machine/llm": return html`<${Llm} onOut=${out} />`;
     case "/machine/grades": return html`<${Gradebooks} onOut=${out} />`;
-    case "/machine/gradebook": return html`<${Gradebook} key=${p.get("id")} id=${p.get("id")} onOut=${out} />`;
+    case "/machine/gradebook": return html`<${Gradebook} key=${p.get("id")} id=${p.get("id")} back=${p.get("back")}
+      onOut=${out} />`;
     case "/machine/tab": return html`<${Tab} key=${p.get("id") + "|" + p.get("tab")} id=${p.get("id")}
       name=${p.get("tab")} onOut=${out} />`;
     case "/machine/connector": return html`<${ConnectorScreen} onOut=${out} />`;

@@ -89,6 +89,7 @@ class WebApp:
         app.router.add_get("/web/sw.js", service_worker)
         app.router.add_get("/web/manifest.webmanifest", manifest)
         app.router.add_static("/web/static", STATIC)
+        app.on_response_prepare.append(revalidate_static)
         app.router.add_post("/web/share", shared)
         api = [("GET", "/me", me),
                ("POST", "/login/code", send_code),
@@ -204,6 +205,13 @@ def _id(request: web.Request, name: str) -> int:
 
 async def to_index(request: web.Request) -> web.Response:
     raise web.HTTPFound("/web/")
+
+
+async def revalidate_static(request: web.Request, response: web.StreamResponse) -> None:
+    """The app's modules are asked for again on every load (a 304 while unchanged): without it a browser keeps an old
+    module by its own guess after a deploy, and the new page runs with it."""
+    if request.path.startswith("/web/static/") and "Cache-Control" not in response.headers:
+        response.headers["Cache-Control"] = "no-cache"
 
 
 async def index(request: web.Request) -> web.FileResponse:
