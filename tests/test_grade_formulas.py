@@ -204,3 +204,17 @@ async def test_the_formulas_are_explained_once_while_they_stay(store, now):
     view["tabs"][0]["formulas"]["F"] = "=SUM(C4:D4)"
     await grades.explain("abc123", view)
     assert llm.calls == 2
+
+
+def test_a_teachers_formula_cannot_exhaust_the_service():
+    """D79: a huge range, a deep nesting, a long formula are not counted; odd arithmetic is an error of the cell."""
+    for formula in ("=SUM(A1:ZZZ1000000)", "=SUM(A1:A2000000)", "=" + "(" * 200 + "1" + ")" * 200,
+                    "=" + "-" * 200 + "1", "=1" + "+1" * 3000):
+        with pytest.raises(fx.Unsupported):
+            fx.parse(formula)
+    assert fx.parse("=" + "+".join(f"A{n}" for n in range(1, 400)))  # a long sum is fine
+    for formula in ("=(-8)^0.5", "=10^400", '=ROUND(1;"nan")', "=1/0"):
+        with pytest.raises(fx.CellError):
+            value(formula)
+    assert value("=ROUND(1;-400)") == 0.0 and value("=ROUND(2.5;400)") == 2.5
+

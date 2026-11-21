@@ -211,8 +211,8 @@ class Book:
     def value(self, tab: str, col: str, given: dict | None = None) -> fx.Value:
         try:
             return self.compute(tab, col, given)
-        except (fx.CellError, fx.Unsupported, KeyError, OverflowError):
-            return None
+        except (fx.CellError, fx.Unsupported, KeyError, ArithmeticError, ValueError, TypeError, RecursionError):
+            return None  # a teacher's formula the evaluator cannot count leaves the cell unknown, not the page broken
 
     # --- the calculator -------------------------------------------------------------------------
 

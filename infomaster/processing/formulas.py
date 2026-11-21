@@ -74,6 +74,12 @@ def tokens(formula: str) -> list[tuple[str, str]]:
     return found
 
 
+MAX_ROW = 1_048_576   # a sheet's last row
+RANGE_CELLS = 20_000  # cells of one range: a gradebook's column is a few hundred
+FORMULA_CHARS = 4000
+DEPTH_MAX = 64        # nested parentheses and signs
+
+
 def reference(text: str) -> Node:
     tab = None
     if "!" in text:
@@ -85,6 +91,8 @@ def reference(text: str) -> Node:
         return ("ref", tab, c1, r1)
     c2, r2 = rest[0]
     (c1, c2), (r1, r2) = sorted((c1, c2), key=col_index), sorted((r1, r2))
+    if r2 > MAX_ROW or (col_index(c2) - col_index(c1) + 1) * (r2 - r1 + 1) > RANGE_CELLS:
+        raise Unsupported("a range too big to count")  # D79: it is expanded cell by cell
     return ("range", tab, c1, r1, c2, r2)
 
 
@@ -99,7 +107,16 @@ def parse(formula: str) -> Node:
     """`=...` into a tree. Unsupported for anything else, or a function this module does not compute."""
     if not formula.startswith("="):
         raise Unsupported("not a formula")
+    if len(formula) > FORMULA_CHARS:
+        raise Unsupported("a formula too long")
     toks = tokens(formula[1:])
+    depth = deepest = signs = 0
+    for kind, text in toks:  # the parser recurses per parenthesis and per sign in a row: Python's stack is short
+        depth += (text == "(") - (text == ")") if kind == "op" else 0
+        signs = signs + 1 if kind == "op" and text in "+-" else 0
+        deepest = max(deepest, depth, signs)
+    if deepest > DEPTH_MAX:
+        raise Unsupported("a formula nested too deep")
     at = 0
 
     def peek() -> tuple[str, str] | None:
@@ -209,9 +226,12 @@ def to_number(v: Value) -> float:
     if isinstance(v, int | float):
         return float(v)
     try:
-        return float(v.strip().replace(",", ".")) if v.strip() else 0.0
+        x = float(v.strip().replace(",", ".")) if v.strip() else 0.0
     except ValueError:
         raise CellError("#VALUE!") from None
+    if not math.isfinite(x):  # "nan", "inf" are no numbers of a sheet
+        raise CellError("#VALUE!")
+    return x
 
 
 def to_bool(v: Value) -> bool:
@@ -224,6 +244,7 @@ def to_bool(v: Value) -> bool:
 
 def round_half_up(x: float, digits: int) -> float:
     """Excel's ROUND: half away from zero (Python's round is half to even)."""
+    digits = max(-15, min(15, digits))
     q = 10.0 ** digits
     return math.copysign(math.floor(abs(x) * q + 0.5 + 1e-9) / q, x)
 
@@ -313,7 +334,13 @@ def evaluate(node: Node, lookup: Lookup) -> Value:
             if y == 0:
                 raise CellError("#DIV/0!")
             return x / y
-        return x ** y
+        try:
+            result = x ** y
+        except (OverflowError, ZeroDivisionError):
+            raise CellError("#NUM!") from None
+        if isinstance(result, complex):  # a negative base to a fraction
+            raise CellError("#NUM!")
+        return result
     return call(node[1], node[2], lookup)
 
 
@@ -366,7 +393,7 @@ def call(name: str, args: list[Node], lookup: Lookup) -> Value:
         found = numbers(args, lookup)
         return (min if name == "MIN" else max)(found) if found else 0.0
     if name in ("ROUND", "ROUNDUP", "ROUNDDOWN"):
-        x, digits = to_number(arg(0)), int(to_number(arg(1, 0.0)))
+        x, digits = to_number(arg(0)), max(-15, min(15, int(to_number(arg(1, 0.0)))))
         if name == "ROUND":
             return round_half_up(x, digits)
         q = 10.0 ** digits
