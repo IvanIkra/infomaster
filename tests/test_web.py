@@ -314,6 +314,7 @@ async def test_passkey(client, sent, seconds):
     phone = Authenticator()
     devices = await add_passkey(client, token, phone)
     assert [(p["id"], p["device"], p["used_at"]) for p in devices["passkeys"]] == [(1, "iPhone · Safari", None)]
+    assert "ключ доступа на устройстве iPhone · Safari" in sent[-1]  # D79: the owner hears of a new key
 
     options = await (await call(client, "POST", "/passkeys/options", {}, token)).json()
     assert options["excludeCredentials"][0]["id"] == b64(phone.credential_id)
@@ -409,6 +410,18 @@ async def read(client, path):
     response = await call(client, "GET", path, token=client.token)
     assert response.status == 200, await response.text()
     return await response.json()
+
+
+async def test_a_session_has_an_end_however_used(client, sent, seconds):
+    """D79: used every day, a session still ends SESSION_MAX after its login."""
+    from infomaster.web.auth import SESSION_MAX
+
+    token = await log_in(client, sent, seconds)
+    for _ in range(SESSION_MAX // SESSION_IDLE):
+        seconds.value += SESSION_IDLE - 10
+        assert (await call(client, "GET", "/me", token=token)).status == 200
+    seconds.value += SESSION_MAX % SESSION_IDLE + 100
+    assert (await call(client, "GET", "/me", token=token)).status == 401
 
 
 async def test_screens_need_a_session(aiohttp_client, screens):

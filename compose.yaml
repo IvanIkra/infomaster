@@ -14,6 +14,7 @@ services:
     env_file: .env
     environment:
       TZ: Europe/Moscow
+      TS_AUTHKEY: ""  # the sidecar's key to the tailnet: not this service's to hold
     volumes:
       - ./data:/app/data
     networks: [uni]

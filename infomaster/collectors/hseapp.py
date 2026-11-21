@@ -28,6 +28,7 @@ import datetime as dt
 import hashlib
 import json
 import logging
+import re
 import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -160,7 +161,8 @@ class Auth:
         code, state = _first(query, "code"), _first(query, "state")
         if not code:
             if error := _first(query, "error"):
-                why = _first(query, "error_description") or error
+                # D79: the callback is anyone's link: only a short OAuth error code is shown, never their text.
+                why = error if re.fullmatch(r"[a-z_]{1,40}", error) else "an error"
                 raise ValueError(Phrase(f"HSE did not let you in: {why}", f"ВШЭ не пустила: {why}"))
             raise ValueError(Phrase("the address has no code: copy the whole address from the address bar",
                                     "в адресе нет кода: скопируйте адрес из адресной строки целиком"))

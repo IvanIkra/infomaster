@@ -38,6 +38,7 @@ import base64
 import datetime as dt
 import hashlib
 import json
+import logging
 import math
 import re
 import time
@@ -62,6 +63,8 @@ from .push import Push, PushError
 from .quick import Quick, QuickError
 from .shelves import SHELVES_KEY, Shelves
 from .views import Data
+
+log = logging.getLogger(__name__)
 
 STATIC = Path(__file__).parent / "static"
 NO_CACHE = {"Cache-Control": "no-cache"}
@@ -317,7 +320,17 @@ async def passkey_options(request: web.Request) -> web.Response:
 async def add_passkey(request: web.Request) -> web.Response:
     data = await body(request)
     credential = data.get("credential")
-    request.app[WEB_KEY].auth.add_passkey(request[SESSION_KEY], credential if isinstance(credential, dict) else {})
+    app = request.app[WEB_KEY]
+    app.auth.add_passkey(request[SESSION_KEY], credential if isinstance(credential, dict) else {})
+    if app.auth.send_code is not None:  # D79: a new key to the app is told where the owner sees it
+        device = request[SESSION_KEY]["device"]
+        try:
+            await app.auth.send_code(_say(request, f"A passkey for the infomaster app was added on {device}. If it was "
+                                                   "not you, remove it in Login and devices.",
+                                          f"В приложении infomaster добавлен ключ доступа на устройстве {device}. "
+                                          "Если это были не вы, удалите его в «Вход и устройства»."))
+        except Exception:
+            log.warning("the bot could not tell of a new passkey")
     return web.json_response(_devices(request))
 
 

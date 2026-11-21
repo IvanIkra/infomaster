@@ -265,7 +265,7 @@ async def test_pkce_login(fake, store, now):
         await src.login(f"{CALLBACK}?state=forged&code=code-1")
     with pytest.raises(ValueError, match="has no code"):
         await src.login("https://example.org/somewhere")
-    with pytest.raises(ValueError, match="HSE did not let you in: Login was cancelled"):
+    with pytest.raises(ValueError, match="HSE did not let you in: access_denied$"):  # D79: no text of the link
         await src.login(f"{CALLBACK}?error=access_denied&error_description=Login+was+cancelled&state={q['state']}")
     await src.login(f"  {CALLBACK}?state={q['state']}&session_state=s&code=code-1 ")
     assert src.auth.logged_in and fake["redirects"] == [CALLBACK]
@@ -545,7 +545,7 @@ async def test_callback_needs_no_session(client, fake):
     assert "Вход не удался" in await forged.text() and "Эта ссылка входа устарела" in await forged.text()
     denied = await client.get(f"/hseapp/callback?error=access_denied&error_description=%3Cscript%3Ex%3C/script%3E"
                               f"&state={query(url)['state']}")
-    assert denied.status == 400 and "<script>" not in await denied.text() and "&lt;script&gt;" in await denied.text()
+    assert denied.status == 400 and "script" not in await denied.text() and "access_denied" in await denied.text()
     assert not client.src.auth.logged_in
 
     ok = await client.get(f"/hseapp/callback?state={query(url)['state']}&session_state=s&code=code-1")

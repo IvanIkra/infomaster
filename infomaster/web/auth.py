@@ -51,6 +51,7 @@ create table if not exists web_passkeys (   -- the owner's WebAuthn credentials 
 COOKIE = "im_session"
 COOKIE_PATH = "/web"
 SESSION_IDLE = 90 * 86400   # a session unused this long is gone
+SESSION_MAX = 365 * 86400   # and any session this old: a stolen cookie does not live for ever (D79)
 TOUCH_EVERY = 3600          # used_at is written at most this often
 CODE_TTL = 600              # the code from the bot
 ATTEMPTS = 3                # wrong codes before a new one is needed
@@ -185,7 +186,8 @@ class Auth:
             return None
         now = int(self.now())
         with self.db:
-            self.db.execute("delete from web_sessions where used_at < ?", (now - SESSION_IDLE,))
+            self.db.execute("delete from web_sessions where used_at < ? or created_at < ?",
+                            (now - SESSION_IDLE, now - SESSION_MAX))
         row = self.db.execute("select * from web_sessions where token_hash = ?", (digest(token),)).fetchone()
         if row is None:
             return None
