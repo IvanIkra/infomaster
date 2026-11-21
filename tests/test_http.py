@@ -49,7 +49,7 @@ async def test_actions_llm(aiohttp_client, budget, journal, store, schedule, mer
     spend(journal, 0.05, now(), task="subjects")                # no chat
     spend(journal, 0.30, now() - dt.timedelta(days=3), task="image", chat_id=-1001)
     client = await aiohttp_client(actions_app.app(env(), budget, journal, inbox, ChatSettings(store), TWIN,
-                                                     schedule.subjects, schedule, None, merged, settings))
+                                                     schedule.subjects, schedule, None, merged, settings=settings))
     body = await (await client.get("/app/api/llm", headers=owner())).json()
     today, month = body["periods"]["today"], body["periods"]["month"]
     assert today["cost_usd"] == 0.3 and today["runs"] == 3 and month["cost_usd"] == 0.6
@@ -104,7 +104,7 @@ async def test_actions_twin_login(aiohttp_client, budget, journal, store, schedu
 async def test_actions_general(aiohttp_client, budget, journal, store, schedule, merged):
     settings = budget.settings
     client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN,
-                                                     schedule.subjects, schedule, None, merged, settings))
+                                                     schedule.subjects, schedule, None, merged, settings=settings))
     body = await (await client.get("/app/api/general", headers=owner())).json()
     assert body["batch_hours"] == 3 and body["news_ttl_hours"] == 24 and 24 in body["batch_choices"]
     prices = body["llm_prices"]
@@ -422,7 +422,7 @@ async def test_actions_has_no_summaries(aiohttp_client, budget, journal, store, 
     inbox.put_chat(-1001, "Матан", "supergroup", None, 0)
     hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
     client = await aiohttp_client(actions_app.app(env(), budget, journal, inbox, chat_settings, TWIN,
-                                                     schedule.subjects, schedule, hse, merged, settings))
+                                                     schedule.subjects, schedule, hse, merged, settings=settings))
     assert (await client.get("/app/api/summaries", headers=owner())).status == 404
     response = await client.patch("/app/api/chats/-1001", json={"summary": True}, headers=owner())
     assert response.status == 400
@@ -435,7 +435,7 @@ async def test_actions_reminders(aiohttp_client, budget, journal, store, schedul
     reminders = DeadlineReminders(store, merged, settings, now=now)
     hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
     client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store),
-                                                     TWIN, schedule.subjects, schedule, hse, merged, settings,
+                                                     TWIN, schedule.subjects, schedule, hse, merged, settings=settings,
                                                      deadline_reminders=reminders))
     response = await client.get("/app/api/reminders", headers=owner())
     assert await response.json() == {"enabled": True, "eve": "20:00", "day": "09:00"}

@@ -92,7 +92,8 @@ async def machine(aiohttp_client, store, budget, journal, schedule, merged, now)
         "grades": lambda: {"configured": True, "sheets": {}},
     }
     app = actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), statuses, schedule.subjects,
-                             schedule, hse, merged, settings, None, grades, twin, None, reminders)
+                             schedule, hse, merged, settings=settings, grade_list=grades, twin=twin,
+                             deadline_reminders=reminders)
     connector = Connector(env(), store, News(store), now=now, seconds=seconds)
     connector.attach(app)
     webapp = WebApp(env(), store, send_code=send_code, lang=lambda: "en", now=seconds,

@@ -43,7 +43,7 @@ async def reader(aiohttp_client, store, budget, journal, schedule, merged, now):
                           "text": "The test moves to Thursday, 13:00"})
     hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
     app = actions_app.app(env(), budget, journal, inbox, ChatSettings(store), TWIN, schedule.subjects, schedule,
-                             hse, merged, budget.settings)
+                             hse, merged, settings=budget.settings)
     connector = Connector(env(), store, news, now=now, seconds=seconds)
     connector.attach(app)
     webapp = WebApp(env(), store, send_code=send_code, lang=lambda: "en", now=seconds,

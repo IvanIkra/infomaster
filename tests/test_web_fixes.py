@@ -36,7 +36,7 @@ async def fixer(aiohttp_client, store, budget, journal, schedule, merged, now):
     grades = Grades(store, settings, None, now=now)
     hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
     app = actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
-                             schedule, hse, merged, settings, None, grades)
+                             schedule, hse, merged, settings=settings, grade_list=grades)
     connector = Connector(env(), store, News(store), now=now, seconds=seconds)
     connector.attach(app)
     webapp = WebApp(env(), store, send_code=send_code, lang=lambda: "en", now=seconds,

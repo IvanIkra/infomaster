@@ -320,7 +320,8 @@ async def test_actions_daily_number(aiohttp_client, budget, journal, store, sche
     hse = HseApp(store, settings, env().public_url + CALLBACK_PATH)
     sources = {"telegram": lambda: {"ok_at": None, "error": None, "login_needed": False}, "images": images.status}
     client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store),
-                                                     sources, schedule.subjects, schedule, hse, merged, settings))
+                                                     sources, schedule.subjects, schedule, hse, merged,
+                                                     settings=settings))
     owner = {}
     state = await (await client.get("/app/api/chats", headers=owner)).json()
     assert state["images"] == {"ok_at": None, "error": None, "daily": 30, "today": 0}

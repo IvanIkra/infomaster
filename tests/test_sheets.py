@@ -407,7 +407,7 @@ async def test_actions_screen(aiohttp_client, batches, llm, sheets, topic, budge
     await topic.publish()
     hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
     app = actions_app.app(env(), budget, journal, sheets.inbox, sheets.chat_settings, {"sheets": sheets.status},
-                             schedule.subjects, schedule, hse, merged, sheets.settings, topic)
+                             schedule.subjects, schedule, hse, merged, settings=sheets.settings, sheets=topic)
     client = await aiohttp_client(app)
     owner = {}
 
@@ -432,7 +432,7 @@ async def test_owner_changes_a_sheet(aiohttp_client, batches, llm, sheets, topic
     hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
     client = await aiohttp_client(actions_app.app(env(), budget, journal, sheets.inbox, sheets.chat_settings,
                                                      {"sheets": sheets.status}, schedule.subjects, schedule, hse,
-                                                     merged, sheets.settings, topic))
+                                                     merged, settings=sheets.settings, sheets=topic))
     owner = {}
 
     change = {"course": "Линейная алгебра", "number": " 3b ", "due": "2026-11-02", "summary": "Series, 6 tasks."}
@@ -587,7 +587,7 @@ async def test_the_owner_clears_the_mark(aiohttp_client, batches, llm, sheets, t
     hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
     client = await aiohttp_client(actions_app.app(env(), budget, journal, sheets.inbox, sheets.chat_settings,
                                                      {"sheets": sheets.status}, timetable.subjects, timetable, hse,
-                                                     merged, sheets.settings, topic))
+                                                     merged, settings=sheets.settings, sheets=topic))
     owner = {}
     listed = {s["id"]: s for s in (await (await client.get("/app/api/sheets", headers=owner)).json())["sheets"]}
     assert (listed[1]["due_assumed"], listed[1]["due_at"]) == (True, "2026-10-22T09:30:00")

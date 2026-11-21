@@ -560,7 +560,7 @@ async def test_api_and_miniapp(aiohttp_client, grades, settings, budget, journal
     assert (await client.get("/api/grades")).status == 401
 
     client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, None, sources,
-                                                     schedule.subjects, schedule, None, merged, settings,
+                                                     schedule.subjects, schedule, None, merged, settings=settings,
                                                      grade_list=grades))
     headers = owner()
     body = await (await client.get("/app/api/grades", headers=headers)).json()
@@ -692,7 +692,7 @@ async def test_actions_gradebook(aiohttp_client, grades, settings, budget, journ
                                     "items": 2}}, "llm": True}
     client = await aiohttp_client(actions_app.app(env(), budget, journal, schedule.inbox, None,
                                                      {**TWIN, "grades": lambda: status}, schedule.subjects, schedule,
-                                                     None, merged, settings, grade_list=grades))
+                                                     None, merged, settings=settings, grade_list=grades))
     headers, woken = owner(), []
     grades.wake = lambda: woken.append(1)
     path = "/app/api/grades/sheets/abc123"

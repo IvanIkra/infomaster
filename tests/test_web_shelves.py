@@ -49,7 +49,8 @@ async def build(aiohttp_client, store, budget, journal, schedule, merged, now, t
 
     hse = HseApp(store, sheets.settings, env().public_url + CALLBACK_PATH)
     app = actions_app.app(env(), budget, journal, schedule.inbox, sheets.chat_settings, {"sheets": sheets.status},
-                             schedule.subjects, schedule, hse, merged, sheets.settings, topic, library_links=links)
+                             schedule.subjects, schedule, hse, merged, settings=sheets.settings, sheets=topic,
+                             library_links=links)
     connector = Connector(env(), store, News(store), now=now, seconds=seconds)
     connector.attach(app)
     webapp = WebApp(env(), store, send_code=send_code, lang=lambda: "en", now=seconds,

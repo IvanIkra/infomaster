@@ -239,9 +239,10 @@ class Service:
         try:
             for app, port in ((actions.public_app(self.env, self.budget, self.journal, self.inbox, self.chat_settings,
                                                   self.sources, self.subjects, self.schedule, self.hseapp,
-                                                  self.merged, self.settings, self.sheet_publisher,
-                                                  self.grades, self.twin, self.calendar, self.reminders,
-                                                  self.library_links),  # the links' routes come with it
+                                                  self.merged, settings=self.settings, sheets=self.sheet_publisher,
+                                                  grade_list=self.grades, twin=self.twin,
+                                                  calendar_feed=self.calendar, deadline_reminders=self.reminders,
+                                                  library_links=self.library_links),  # the links' routes come with it
                                self.env.public_port),
                               (api.create_app(self.env, self.budget, self.sources, self.calendar, self.merged,
                                               self.grades, self.news, self.settings),

@@ -67,7 +67,7 @@ async def adder(aiohttp_client, store, budget, journal, schedule, merged, now, t
 
     hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
     app = actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
-                             schedule, hse, merged, budget.settings)
+                             schedule, hse, merged, settings=budget.settings)
     library_links.add_routes(app, library_links.Links(store, library, env().public_url))
     connector = Connector(env(), store, News(store), now=now, seconds=seconds)
     connector.attach(app)

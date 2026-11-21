@@ -45,7 +45,5 @@ def mounted(app: web.Application) -> web.Application:
 
 
 def app(*args, **kwargs) -> web.Application:
-    """actions.public_app(...) with the actions mounted; the old keyword `sheet_topic` is `sheets`."""
-    if "sheet_topic" in kwargs:
-        kwargs["sheets"] = kwargs.pop("sheet_topic")
+    """actions.public_app(...) with the actions mounted."""
     return mounted(actions.public_app(*args, **kwargs))

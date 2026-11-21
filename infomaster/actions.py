@@ -927,7 +927,7 @@ def page(lang: str, title: str, text: str, hint: str, status: int = 200) -> web.
 
 def public_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_settings: ChatSettings,
                sources: Sources, dictionary: Subjects, timetable: Schedule, hse: HseApp,
-               merged: DeadlineList, settings: Settings | None = None,
+               merged: DeadlineList, *, settings: Settings | None = None,
                sheets: SheetPublisher | None = None, grade_list: Grades | None = None, twin: Twin | None = None,
                calendar_feed: ical_feed.CalendarFeed | None = None,
                deadline_reminders: DeadlineReminders | None = None,

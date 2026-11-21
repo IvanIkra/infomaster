@@ -36,7 +36,7 @@ def library(store, tmp_path, now):
 def app_of(store, budget, journal, schedule, merged):
     hse = HseApp(store, Settings(store), env().public_url + CALLBACK_PATH)
     return actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), TWIN, schedule.subjects,
-                              schedule, hse, merged, budget.settings)
+                              schedule, hse, merged, settings=budget.settings)
 
 
 @pytest.fixture

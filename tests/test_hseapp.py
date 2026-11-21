@@ -495,7 +495,7 @@ async def client(aiohttp_client, fake, store, now, budget, journal, schedule, me
     sources = {"hseapp": lambda: {**src.status(), **lists.status()}}
     settings = Settings(store)
     app = actions_app.app(env(), budget, journal, schedule.inbox, ChatSettings(store), sources, schedule.subjects,
-                             schedule, src, merged, settings)
+                             schedule, src, merged, settings=settings)
     test_client = await aiohttp_client(app)
     test_client.src, test_client.settings = src, settings
     return test_client
