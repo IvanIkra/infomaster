@@ -2,7 +2,7 @@
 // the message it came from and «Hide» (journaled, with its undo).
 import { ICONS, api, changed, go, html, icon, toast } from "./common.js";
 import { day, t } from "./i18n.js";
-import { Bar, Quote, useAct, useLoad } from "./screens.js";
+import { Bar, MachineDot, Quote, useAct, useLoad } from "./screens.js";
 
 const hm = (iso) => iso.slice(11, 16);
 const posted = (iso, todayIso) => (iso.slice(0, 10) === todayIso ? hm(iso)
@@ -27,7 +27,7 @@ export function NewsList({ onOut }) {
   return html`<main class="screen">
     <header class="top">
       <div><div class="kicker">${data ? t("newsLive", { n: data.ttl_hours }) : ""}</div><h1>${t("newsTitle")}</h1></div>
-      <a class="rb" href="#/machine" aria-label=${t("machineOk")}><span class="dot"></span></a>
+      <${MachineDot} data=${data} error=${error} />
     </header>
     <div class="err" role="alert">${error}</div>
     ${data && html`<div class="feed">

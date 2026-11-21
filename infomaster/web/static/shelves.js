@@ -4,7 +4,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { ApiError, ICONS, api, changed, go, html, icon, toast } from "./common.js";
 import { day, getLang, t } from "./i18n.js";
-import { Bar, useAct, useLoad } from "./screens.js";
+import { useAct, useLoad } from "./screens.js";
 
 const TEXTS = {
   shelves: ["Shelves", "Полки"],
@@ -101,7 +101,8 @@ const done = (answer, text) => {
   toast(text, answer.change && answer.change.undo ? answer.change.id : null);
 };
 
-function Screen({ title, sub, back, error, children, view }) {
+// A screen under the shelves: a way back, and no views bar (List, Week, News belong to the top screens).
+function Screen({ title, sub, back, error, children }) {
   return html`<main class="screen">
     <header class="top">
       <a class="rb" href=${back} aria-label=${t("back")}>${icon(ICONS.back)}</a>
@@ -109,7 +110,6 @@ function Screen({ title, sub, back, error, children, view }) {
     </header>
     <div class="err" role="alert">${error}</div>
     <div class="feed">${children}</div>
-    <${Bar} view=${view || "list"} />
   </main>`;
 }
 

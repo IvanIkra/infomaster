@@ -281,6 +281,43 @@ function App() {
     <${Toast} />`;
 }
 
+// A card over the screen (.sheet after its .scrim) closes when pulled down from its top, as its scrim's tap does.
+// Pulled up, or when it is scrolled, it scrolls as usual; the screen behind never scrolls (app.css).
+function pullToClose() {
+  let pull = null;
+  document.addEventListener("touchstart", (e) => {
+    const sheet = e.target.closest(".sheet");
+    pull = sheet && sheet.scrollTop <= 0 && !e.target.closest("input, textarea, select")
+      ? { sheet, y: e.touches[0].clientY, at: Date.now(), dy: 0 } : null;
+  }, { passive: true });
+  document.addEventListener("touchmove", (e) => {
+    if (!pull) return;
+    const dy = e.touches[0].clientY - pull.y;
+    if (dy <= 0 && pull.dy === 0) { pull = null; return; }  // up: the sheet's own scroll
+    pull.dy = Math.max(0, dy);
+    pull.sheet.style.transition = "none";
+    pull.sheet.style.transform = `translateY(${pull.dy}px)`;
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  const end = () => {
+    if (!pull) return;
+    const { sheet, dy, at } = pull;
+    pull = null;
+    const scrim = sheet.previousElementSibling;
+    const away = dy > 110 || (dy > 40 && dy / (Date.now() - at) > 0.6);
+    sheet.style.transition = "transform 0.2s ease";
+    if (away && scrim && scrim.classList.contains("scrim")) {
+      sheet.style.transform = "translateY(100%)";
+      setTimeout(() => scrim.click(), 180);
+    } else {
+      sheet.style.transform = "";
+    }
+  };
+  document.addEventListener("touchend", end);
+  document.addEventListener("touchcancel", end);
+}
+pullToClose();
+
 let saved = null;
 try { saved = localStorage.getItem(LANG_KEY); } catch { /* no storage: the browser's language decides */ }
 setLang(saved || (navigator.language.startsWith("ru") ? "ru" : "en"));

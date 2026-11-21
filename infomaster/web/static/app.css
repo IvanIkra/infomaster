@@ -34,7 +34,8 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 
 .screen {
   max-width: 560px; margin: 0 auto; min-height: 100dvh; display: flex; flex-direction: column;
-  padding: calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 24px);
+  /* iOS blurs a band under the status bar: the header starts below it */
+  padding: calc(env(safe-area-inset-top) + 40px) 18px calc(env(safe-area-inset-bottom) + 24px);
 }
 .top { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
 .top > div { flex: 1; min-width: 0; }
@@ -165,10 +166,12 @@ img.logo { display: block; background: none; box-shadow: 0 0 0 1px var(--line); 
 .views button[aria-selected="true"] { background: var(--chip-bg); color: var(--chip-fg); }
 
 /* a card over the screen */
-.scrim { position: fixed; inset: 0; background: rgba(28, 25, 23, 0.45); z-index: 10; }
+.scrim { position: fixed; inset: 0; background: rgba(28, 25, 23, 0.45); z-index: 10; touch-action: none; }
+html:has(.sheet), html:has(.sheet) body { overflow: hidden; }  /* the screen behind a card stays */
 @media (prefers-color-scheme: dark) { .scrim { background: rgba(0, 0, 0, 0.6); } }
 .sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 11; max-height: 88dvh; overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--card); border-radius: 28px 28px 0 0; box-shadow: 0 -10px 30px rgba(28, 25, 23, 0.16);
   padding: 10px 20px calc(env(safe-area-inset-bottom) + 28px);
 }
@@ -280,6 +283,7 @@ form.acts .btn { flex: 0 0 auto; padding: 0 20px; }
 .choice { border: 1px solid var(--line); border-radius: 16px; padding: 12px; display: flex; flex-direction: column;
           gap: 4px; background: var(--bg); min-width: 0; }
 .choice.kept { border-color: var(--fg); }
+button.choice { font: inherit; color: inherit; background: var(--bg); text-align: left; cursor: pointer; }
 .choice b { font: 600 17px/1.25 var(--fh); overflow-wrap: anywhere; }
 .choice small { font-size: 12px; color: var(--mut); }
 .choice .when { font-size: 13px; margin: 0; }
@@ -307,6 +311,7 @@ select.field { appearance: none; -webkit-appearance: none; }
 
 /* «Machine» (16.6) */
 .dot.bad { background: var(--bad); }
+.dot.off { background: transparent; box-shadow: inset 0 0 0 2px var(--cls); }
 .mach { padding-bottom: 24px; }
 .mach h2 { font-size: 16px; }
 .list { padding-top: 0; padding-bottom: 0; }

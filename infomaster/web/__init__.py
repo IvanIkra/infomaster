@@ -341,7 +341,9 @@ async def course(request: web.Request) -> web.Response:
 
 async def news(request: web.Request) -> web.Response:
     """The live news in rank order."""
-    return web.json_response(_data(request).news_list())
+    answer = _data(request).news_list()
+    answer["problems"] = len(request.app[WEB_KEY].machine.attention(request.app))  # the status dot
+    return web.json_response(answer)
 
 
 async def news_card(request: web.Request) -> web.Response:
