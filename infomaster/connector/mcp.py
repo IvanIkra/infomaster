@@ -39,6 +39,7 @@ INSTRUCTIONS = (
     "transcripts of recordings, write the LaTeX, build the PDF locally, then start, upload and publish a document "
     "version. Files move by signed links with curl, never inside a call.")
 ALLOWED_ORIGINS = ("https://claude.ai", "https://claude.com")
+BODY_MAX = 32 * 2**20  # bytes of one call: a document's source of 2M characters inline, escaped
 
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS = -32700, -32600, -32601, -32602
 HEADER_MISMATCH, UNSUPPORTED_VERSION = -32020, -32022
@@ -80,8 +81,13 @@ class Endpoint:
         origin = request.headers.get("Origin")
         if origin is not None and origin not in (*ALLOWED_ORIGINS, self.services.public_origin):
             return answer(None, error=Refused(403, INVALID_REQUEST, "this Origin is not allowed"))
+        data = bytearray()
+        async for chunk in request.content.iter_chunked(1 << 16):  # the token is checked: the owner's own client
+            data += chunk
+            if len(data) > BODY_MAX:
+                return answer(None, error=Refused(413, INVALID_REQUEST, f"the body is over {BODY_MAX >> 20} MB"))
         try:
-            message = json.loads(await request.read())
+            message = json.loads(data)
         except ValueError:
             return answer(None, error=Refused(400, PARSE_ERROR, "the body is not JSON"))
         if not isinstance(message, dict) or message.get("jsonrpc") != "2.0":

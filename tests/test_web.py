@@ -16,7 +16,16 @@ from test_http import add_row, env
 
 from infomaster.collectors.ruz import parse
 from infomaster.web import WebApp
-from infomaster.web.auth import ATTEMPTS, CODE_TTL, CODES_PER_HOUR, RESEND_AFTER, SESSION_IDLE, USER_ID, device_name
+from infomaster.web.auth import (
+    ATTEMPTS,
+    CODE_TTL,
+    CODES_PER_DAY,
+    CODES_PER_HOUR,
+    RESEND_AFTER,
+    SESSION_IDLE,
+    USER_ID,
+    device_name,
+)
 from infomaster.web.views import Data
 
 ORIGIN = "https://infomaster.example.ts.net"
@@ -222,9 +231,23 @@ async def test_code_limits(client, sent, seconds):
         assert (await call(client, "POST", "/login/code", {})).status == 200
     seconds.value += RESEND_AFTER
     too_many = await call(client, "POST", "/login/code", {})
-    assert too_many.status == 429 and "за час" in (await too_many.json())["error"]
+    assert too_many.status == 429 and "Слишком много кодов" in (await too_many.json())["error"]
     seconds.value += 3600
     assert (await call(client, "POST", "/login/code", {})).status == 200
+    for _ in range(CODES_PER_DAY - CODES_PER_HOUR - 1):  # the day's limit holds across the hours
+        seconds.value += 600
+        assert (await call(client, "POST", "/login/code", {})).status == 200
+    seconds.value += 3600
+    assert (await call(client, "POST", "/login/code", {})).status == 429
+    seconds.value += 86400
+    assert (await call(client, "POST", "/login/code", {})).status == 200
+
+
+async def test_codes_asked_at_once_pass_the_limits_once(client, sent):
+    import asyncio
+
+    answers = await asyncio.gather(*(call(client, "POST", "/login/code", {}) for _ in range(20)))
+    assert sorted(a.status for a in answers) == [200] + [429] * 19 and len(sent) == 1
 
 
 async def test_code_attempts_and_age(client, sent, seconds):

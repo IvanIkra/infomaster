@@ -53,10 +53,12 @@ COOKIE_PATH = "/web"
 SESSION_IDLE = 90 * 86400   # a session unused this long is gone
 TOUCH_EVERY = 3600          # used_at is written at most this often
 CODE_TTL = 600              # the code from the bot
-ATTEMPTS = 5                # wrong codes before a new one is needed
+ATTEMPTS = 3                # wrong codes before a new one is needed
 RESEND_AFTER = 30           # seconds between two codes
-CODES_PER_HOUR = 10
+CODES_PER_HOUR = 6
+CODES_PER_DAY = 12          # with ATTEMPTS: 36 guesses a day of a million, and each code is a message to the owner
 CHALLENGE_TTL = 300         # a WebAuthn ceremony
+CHALLENGES_MAX = 20         # open ceremonies kept: the login's options are public, memory is not theirs
 USER_ID = b"infomaster-owner"  # the one user, the same on every device: an authenticator keeps one passkey for it
 
 
@@ -127,12 +129,15 @@ class Auth:
         if now - self.code_sent < RESEND_AFTER:
             raise self._error(429, "A code was sent a moment ago: check the chat with the bot.",
                               "Код только что отправлен: посмотрите чат с ботом.")
-        self.sent = [at for at in self.sent if now - at < 3600]
-        if len(self.sent) >= CODES_PER_HOUR:
-            raise self._error(429, "Too many codes this hour: try again later.",
-                              "Слишком много кодов за час: попробуйте позже.")
+        self.sent = [at for at in self.sent if now - at < 86400]
+        if len([at for at in self.sent if now - at < 3600]) >= CODES_PER_HOUR or len(self.sent) >= CODES_PER_DAY:
+            raise self._error(429, "Too many codes for now: try again later, or log in with a passkey.",
+                              "Слишком много кодов: попробуйте позже или войдите по ключу доступа.")
         if self.send_code is None:
             raise self._error(503, "The bot is not running.", "Бот не запущен.")
+        # Counted before the bot is awaited: requests at the same moment cannot all pass the limits.
+        self.code_hash, self.code_sent = None, now
+        self.sent.append(now)
         code = f"{secrets.randbelow(10**6):06d}"
         text = tr(self.lang(), f"{code} is the code to log in to the infomaster app. If you did not ask for it, "
                                "ignore this message.",
@@ -146,8 +151,7 @@ class Auth:
                                    "try again.",
                               "Бот не смог вам написать: откройте чат с ботом, нажмите «Старт» и попробуйте "
                               "снова.") from None
-        self.code_hash, self.code_sent, self.attempts = digest(code), now, 0
-        self.sent.append(now)
+        self.code_hash, self.attempts = digest(code), 0
 
     def check_code(self, code, device: str) -> str:
         """A new session's token for the right code; AuthError else. A code works once."""
@@ -212,6 +216,8 @@ class Auth:
         now = self.now()
         self.challenges = {c: v for c, v in self.challenges.items() if v[2] > now}
         self.challenges[b64url(challenge)] = (kind, session_id, now + CHALLENGE_TTL)
+        while len(self.challenges) > CHALLENGES_MAX:  # the oldest go first
+            del self.challenges[next(iter(self.challenges))]
 
     def _take(self, credential, kind: str, session_id: int | None) -> bytes:
         """The challenge a credential answers, once, if this service gave it for this ceremony."""

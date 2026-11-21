@@ -28,7 +28,6 @@ from functools import partial
 from aiohttp import web
 
 from . import clock
-from .collectors.files import UPLOAD_MAX_SIZE
 from .collectors.grades import sheet_id, short_course
 from .collectors.hseapp import CALLBACK_PATH, HseApp
 from .collectors.inbox import MAILBOX, Inbox, message_link
@@ -79,6 +78,7 @@ EVENT_FIELDS = ("title", "kind", "start", "end", "room", "required", "cancelled"
 NEW_EVENT = {"title", "kind", "start", "end", "room", "required"}  # what a new event needs; cancelled may come too
 KIND_LIMIT = 40  # the kind is the type of the feeds once processing/schedule.py's type_of has read it
 CHART_DAYS = 30
+BODY_MAX = 2 * 2**20  # bytes of a body the public port reads whole before anyone is known (a JSON request, a form)
 
 
 def language(request: web.Request) -> str:
@@ -935,7 +935,8 @@ def public_app(env: Env, budget: Budget, journal: Journal, inbox: Inbox, chat_se
     """The public port's app with the services under their keys, for the actions here, the connector and the web app
     (which attach themselves to it); the HSE App X callback; the library's links (/library/<token>) with them; the
     feeds for one's own calendar with the calendar feed."""
-    app = web.Application(client_max_size=UPLOAD_MAX_SIZE + 2**20)  # MCP bodies: a source up to 2M chars inline
+    # A body read whole (JSON, a form) is small; files stream past this limit, and /mcp reads its own after the token.
+    app = web.Application(client_max_size=BODY_MAX)
     app[ENV_KEY], app[BUDGET_KEY], app[JOURNAL_KEY] = env, budget, journal
     app[INBOX_KEY], app[CHAT_SETTINGS_KEY], app[SOURCES_KEY] = inbox, chat_settings, sources
     app[SUBJECTS_KEY], app[SCHEDULE_KEY], app[HSEAPP_KEY], app[DEADLINES_KEY] = dictionary, timetable, hse, merged

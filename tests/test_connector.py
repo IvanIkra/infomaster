@@ -154,7 +154,8 @@ async def test_metadata_and_no_token(client):
 
 
 async def test_registration(client):
-    for redirect in ("https://evil.example/cb", "http://claude.ai/api/mcp/auth_callback", "javascript:alert(1)"):
+    for redirect in ("https://evil.example/cb", "http://claude.ai/api/mcp/auth_callback", "javascript:alert(1)",
+                     "https://claude.ai/chat/x", "https://claude.com/api/mcp/auth_callback/../x"):
         response = await client.post("/oauth/register", json={"redirect_uris": [redirect]})
         assert response.status == 400 and (await response.json())["error"] == "invalid_redirect_uri"
     assert (await client.post("/oauth/register", data="not json")).status == 400

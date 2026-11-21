@@ -65,15 +65,17 @@ REFRESH_TTL = 30 * 86400        # a refresh token unused this long is gone
 REFRESH_GRACE = 120             # a rotated refresh token still works this long: two refreshes in flight
 CODE_TTL = 300                  # an authorization code
 PAGE_TTL = 600                  # an authorize page and the code the bot sent for it
-ATTEMPTS = 5                    # wrong codes on one page
+ATTEMPTS = 3                    # wrong codes on one page
 RESEND_AFTER = 30               # seconds between codes of one page
-CODES_PER_HOUR = 10             # codes the bot sends an hour, all pages together
+CODES_PER_HOUR = 6              # codes the bot sends an hour, all pages together
+CODES_PER_DAY = 12              # and a day: 36 guesses of a million, each code a message to the owner
 CLIENTS_MAX = 50
 PAGES_MAX = 20                  # open authorize pages kept, the oldest go first
 NAME_CHARS = 80
 # Where the browser may be sent back with a code: claude.ai's callback (the web, desktop and phone apps) and a
 # loopback address on any port (Claude Code).
 TRUSTED_HOSTS = ("claude.ai", "claude.com")
+CALLBACK_PATH = "/api/mcp/auth_callback"  # the one path of those hosts: no other page of theirs gets a code
 LOOPBACK = ("localhost", "127.0.0.1", "::1")
 
 
@@ -107,7 +109,7 @@ def redirect_allowed(uri: str) -> bool:
     if parts.fragment or parts.username or parts.password:
         return False
     if parts.scheme == "https" and parts.hostname in TRUSTED_HOSTS and port is None:
-        return True
+        return parts.path == CALLBACK_PATH
     return parts.scheme == "http" and parts.hostname in LOOPBACK
 
 
@@ -280,12 +282,14 @@ class OAuth:
         if now - page.sent_at < RESEND_AFTER:
             return tr(lang, "A code was sent a moment ago: check the chat with the bot.",
                       "Код только что отправлен: посмотрите чат с ботом.")
-        self.sent = [at for at in self.sent if now - at < 3600]
-        if len(self.sent) >= CODES_PER_HOUR:
-            return tr(lang, "Too many codes this hour: try again later.",
-                      "Слишком много кодов за час: попробуйте позже.")
+        self.sent = [at for at in self.sent if now - at < 86400]
+        if len([at for at in self.sent if now - at < 3600]) >= CODES_PER_HOUR or len(self.sent) >= CODES_PER_DAY:
+            return tr(lang, "Too many codes for now: try again later.", "Слишком много кодов: попробуйте позже.")
         if self.send_code is None:
             return tr(lang, "The bot is not running.", "Бот не запущен.")
+        # Counted before the bot is awaited: requests at the same moment cannot all pass the limits.
+        page.code_hash, page.sent_at = None, now
+        self.sent.append(now)
         code = f"{secrets.randbelow(10**6):06d}"
         text = tr(lang, f"{code} is the code to connect «{page.client_name}» to infomaster. It reads and changes "
                         "your deadlines, timetable, grades, chats and settings. If you did not ask for it, ignore "
@@ -298,8 +302,7 @@ class OAuth:
             log.warning("the bot could not send the connector's code: %s", e)
             return tr(lang, "The bot could not write to you: open the chat with the bot, press Start and try again.",
                       "Бот не смог вам написать: откройте чат с ботом, нажмите «Старт» и попробуйте снова.")
-        page.code_hash, page.sent_at, page.attempts = digest(code), now, 0
-        self.sent.append(now)
+        page.code_hash, page.attempts = digest(code), 0
         return None
 
     def allow(self, page_id: str, code: str) -> str:

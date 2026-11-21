@@ -252,6 +252,17 @@ async def test_an_own_sheet_is_added_with_an_undo_and_deleted_without(shelves, b
     await upload_sheet(shelves, data=b"not a pdf", status=400)
 
 
+async def test_a_big_pdf_streams_past_the_body_limit_a_big_json_does_not(shelves):
+    """D79: the public port reads at most BODY_MAX whole before anyone is known; an upload streams past it."""
+    from infomaster.actions import BODY_MAX
+
+    big = SHEET3_FIXED + b"\n%" + b"0" * (BODY_MAX + 2**20)  # bytes after %%EOF: still the same PDF
+    await upload_sheet(shelves, data=big, course="Alg")
+    huge = await shelves.post("/oauth/register", data=b"{" + b" " * (BODY_MAX + 1) + b"}",
+                              headers={"Content-Type": "application/json"})
+    assert huge.status == 413
+
+
 # --- raw material and the inbox -----------------------------------------------------------------------------------
 
 async def test_sorting_the_inbox_and_the_raw_shelf(shelves):
