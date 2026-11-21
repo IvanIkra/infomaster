@@ -2,7 +2,7 @@
 // to the screens (screens.js).
 import { render } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { ApiError, CHANGED, ICONS, TOAST, api, backTo, go, html, icon, route } from "./common.js";
+import { ApiError, CHANGED, ICONS, TOAST, api, backTo, closeTo, go, html, icon, route } from "./common.js";
 import { getLang, setLang, t, when } from "./i18n.js";
 import * as passkey from "./passkey.js";
 import { Card, CheckQueue, Feed, Week } from "./screens.js";
@@ -145,18 +145,24 @@ function Devices({ onOut }) {
       <div>${state.sessions.map((s) => html`<div class="row" key=${s.id}>
         <div><b>${s.device}</b>${s.id === state.current && html`<span class="tag">${t("thisDevice")}</span>`}
           <div class="mut small">${t("lastUsed")} ${when(s.used_at)}</div></div>
-        <button class="sec" disabled=${busy} onClick=${() => end(s.id)}>${t("endSession")}</button>
+        ${s.id === state.current
+          ? html`<button class="sec" disabled=${busy} onClick=${() => confirm(t("logOutAsk")) && logout()}>
+              ${t("logOut")}</button>`
+          : html`<button class="sec" disabled=${busy} onClick=${() => confirm(t("endSessionAsk")) && end(s.id)}>
+              ${t("endSession")}</button>`}
       </div>`)}</div>
       <h2>${t("passkeys")}</h2>
       <div>${state.passkeys.length === 0 ? html`<div class="note">${t("noPasskeys")}</div>`
         : state.passkeys.map((p) => html`<div class="row" key=${p.id}>
           <div><b>${p.device}</b><div class="mut small">${t("added")} ${when(p.created_at)}${p.used_at
             ? html` · ${t("lastUsed")} ${when(p.used_at)}` : ""}</div></div>
-          <button class="sec danger" disabled=${busy} onClick=${() => remove(p.id)}>${t("remove")}</button>
+          <button class="sec danger" disabled=${busy} onClick=${() => confirm(t(state.passkeys.length === 1 ? "removeLastKeyAsk" : "removeKeyAsk")) && remove(p.id)}>
+            ${t("remove")}</button>
         </div>`)}</div>
       ${passkey.supported() && html`<button class="sec wide" disabled=${busy} onClick=${add}>
         ${icon(ICONS.key, 18)}${t("addPasskey")}</button>`}
-      <button class="sec wide danger" disabled=${busy} onClick=${logout}>${t("logOut")}</button>
+      <button class="sec wide danger" disabled=${busy} onClick=${() => confirm(t("logOutAsk")) && logout()}>
+        ${t("logOut")}</button>
     </div>`}
   </main>`;
 }
@@ -281,14 +287,17 @@ function App() {
   const check = at.path === "/check";
   const adding = at.path === "/add";
   if (!card && !newsCard && !shelfCard && !check && !adding) base = at;
-  const close = () => go(base.path, Object.fromEntries(base.params));
+  const close = () => {
+    const query = base.params.toString();
+    closeTo("#" + base.path + (query ? "?" + query : ""));
+  };
   const shelf = base.path === "/shelf" ? html`<${ShelfHome} onOut=${out} />`
     : base.path === "/sheets" ? html`<${SheetList} course=${base.params.get("course")} onOut=${out} />`
     : base.path === "/raw" ? html`<${RawList} course=${base.params.get("course")} onOut=${out} />`
     : base.path === "/docs" ? html`<${DocsList} course=${base.params.get("course")} onOut=${out} />`
     : base.path === "/grades" ? html`<${GradesList} course=${base.params.get("course")} onOut=${out} />`
     : base.path === "/inbox" ? html`<${Inbox} onOut=${out} />` : null;
-  const screen = shelf ? shelf : base.path === "/news" ? html`<${NewsList} onOut=${out} />` : base.path === "/week"
+  const screen = shelf ? shelf : base.path === "/news" ? html`<${NewsList} course=${base.params.get("course")} onOut=${out} />` : base.path === "/week"
     ? html`<${Week} start=${base.params.get("start")} course=${base.params.get("course")} onOut=${out} />`
     : html`<${Feed} course=${base.path === "/course" ? base.params.get("key") : null} push=${me.push} onOut=${out} />`;
   return html`${screen}${card && html`<${Card} key=${at.params.get("uid")} kind=${at.path.slice(1)}
@@ -301,7 +310,7 @@ function App() {
       onOut=${out} />`}
     ${check && html`<${CheckQueue} start=${at.params.get("id")} course=${at.params.get("course")} onClose=${close}
       onOut=${out} />`}
-    ${adding && html`<${AddSheet} shared=${at.params.get("shared")} onClose=${close} onOut=${out} />`}
+    ${adding && html`<${AddSheet} shared=${at.params.get("shared")} course=${at.params.get("course")} onClose=${close} onOut=${out} />`}
     <${Toast} />`;
 }
 

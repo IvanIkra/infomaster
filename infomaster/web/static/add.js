@@ -61,9 +61,12 @@ function Place({ data, place, setPlace }) {
             day: "numeric", month: "short" })) + ", " + hm(chosen.start)}</span>
           <div><b>${classLabel(chosen)}</b></div>
           <div class="mut small">${t("attachHere")}</div>`
+        : place.course ? html`<span class="lab">${t("courseLabel")}</span>
+          <div><b>${(data.courses.find((c) => c.key === place.course) || {}).title || place.course}</b></div>
+          <div class="mut small">${t("toCourse")}</div>`
         : html`<span class="lab">${t("noClassNow")}</span><div class="mut small">${t("toInbox")}</div>`}
       </div>
-      <button class="sec" onClick=${() => setPicking(!picking)}>${chosen ? t("another") : t("pickClass")}</button>
+      <button class="sec" onClick=${() => setPicking(!picking)}>${chosen || place.course ? t("another") : t("pickClass")}</button>
     </div>
     ${picking && html`<div class="stack" style="gap:0">
       ${data.classes.map((c) => html`<button key=${c.uid} class="it" onClick=${() => {
@@ -130,12 +133,14 @@ function EventForm({ start, busy, onSave }) {
              onInput=${(e) => setTo(e.target.value)} />
     </div>
     <input class="field" placeholder=${t("room")} value=${room} maxlength="200" onInput=${(e) => setRoom(e.target.value)} />
-    <button class="btn" type="submit" disabled=${busy || !title.trim() || !date}>${t("saveEvent")}</button>
+    ${to && (!from || to <= from) && html`<div class="err small">${t("endAfterStart")}</div>`}
+    <button class="btn" type="submit" disabled=${busy || !title.trim() || !date || (to && (!from || to <= from))}>
+      ${t("saveEvent")}</button>
   </form>`;
 }
 
-function GradeForm({ courses, busy, onSave }) {
-  const [course, setCourse] = useState(null);
+function GradeForm({ courses, course: preset, busy, onSave }) {
+  const [course, setCourse] = useState(preset || null);
   const [label, setLabel] = useState("");
   const [value, setValue] = useState("");
   const number = Number(value.replace(",", "."));
@@ -176,7 +181,7 @@ function Understood({ p, busy, onSave, onNote, onEdit }) {
   </div>`;
 }
 
-export function AddSheet({ shared, onClose, onOut }) {
+export function AddSheet({ shared, course, onClose, onOut }) {
   const { data, error: loadError } = useLoad("/add", onOut);
   const [place, setPlace] = useState(null);           // {class_uid} or {} (the inbox); null until loaded
   const [mode, setMode] = useState(null);             // note, deadline, event, grade
@@ -190,7 +195,12 @@ export function AddSheet({ shared, onClose, onOut }) {
   const inputs = { photo: useRef(null), audio: useRef(null), file: useRef(null) };
 
   useEffect(() => {
-    if (data && place === null) setPlace(data.current ? { class_uid: data.current.uid } : {});
+    if (data && place === null) {
+      // The class going on, when it is of the course «+» was opened in (or of any, from the feed); else the course
+      const own = course && data.courses.some((c) => c.key === course) ? course : null;
+      const current = data.current && (!own || data.current.course === own) ? data.current : null;
+      setPlace(current ? { class_uid: current.uid } : own ? { course: own } : {});
+    }
   }, [data]);
   useEffect(() => {
     if (shared !== "1") return;
@@ -210,10 +220,14 @@ export function AddSheet({ shared, onClose, onOut }) {
     setProgress(t("uploadingN", { n: files.length }));
     try {
       const answer = await upload(files, place || {});
-      if (answer.error) throw new ApiError(400, answer.error);
+      if (answer.error && !(answer.added && answer.added.length)) throw new ApiError(400, answer.error);
       const notePending = fromShare && mode === "note" && note.trim();
       if (fromShare) setIncoming({ files: [], text: "" });
       if (!notePending) await forgetShared();
+      if (answer.error) {  // some went in, some did not: say both, and stay open
+        done(answer, t("addedN", { n: answer.added.length }), true);
+        throw new ApiError(400, answer.error);
+      }
       done(answer, t("addedN", { n: answer.added.length }), notePending);  // a shared link waits to be saved
     } finally { setProgress(""); }
   });
@@ -235,7 +249,10 @@ export function AddSheet({ shared, onClose, onOut }) {
     else saveNote(p.line);
   };
 
-  return html`<div class="scrim" onClick=${onClose}></div>
+  // Typed text is not lost to a stray tap above the sheet
+  const typed = line.trim() || (mode === "note" && note.trim()) || proposal;
+  const leave = () => { if (!typed || confirm(t("dropTyped"))) onClose(); };
+  return html`<div class="scrim" onClick=${leave}></div>
     <section class="sheet" role="dialog" aria-label=${t("add")}><div>
       <div class="grab" aria-hidden="true"></div>
       <h1>${t("add")}</h1>
@@ -281,17 +298,17 @@ export function AddSheet({ shared, onClose, onOut }) {
         <span class="lab">${t("byHand")}</span>
         <div class="acts">
           ${["deadline", "event", ...(data.grades ? ["grade"] : [])].map((what) => html`<button key=${what}
-            class="sec" aria-pressed=${mode === what} onClick=${() => { setForm({}); setMode(mode === what ? null : what); }}>
+            class="sec" aria-pressed=${mode === what} onClick=${() => { setForm(place && place.course ? { course: place.course } : {}); setMode(mode === what ? null : what); }}>
             ${t({ deadline: "deadline", event: "eventWord", grade: "gradeWord" }[what])}</button>`)}
         </div>
         ${mode === "deadline" && html`<${DeadlineForm} key=${JSON.stringify(form)} courses=${data.courses}
           start=${form} busy=${busy} onSave=${(v) => byHand("deadline", v)} />`}
         ${mode === "event" && html`<${EventForm} key=${JSON.stringify(form)} start=${form} busy=${busy}
           onSave=${(v) => byHand("event", v)} />`}
-        ${mode === "grade" && html`<${GradeForm} courses=${data.courses} busy=${busy}
+        ${mode === "grade" && html`<${GradeForm} courses=${data.courses} course=${place && place.course} busy=${busy}
           onSave=${(v) => byHand("grade", v)} />`}`}
       <div class="err" role="alert">${error}</div>
-      <button class="sec wide" onClick=${onClose}>${t("close")}</button>
+      <button class="sec wide" onClick=${leave}>${t("close")}</button>
     </div></section>`;
 }
 

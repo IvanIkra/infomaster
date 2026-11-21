@@ -22,7 +22,7 @@ function NewsRow({ item }) {
   </button>`;
 }
 
-export function NewsList({ onOut }) {
+export function NewsList({ course, onOut }) {
   const { data, error } = useLoad("/news", onOut);
   return html`<main class="screen">
     <header class="top">
@@ -35,7 +35,7 @@ export function NewsList({ onOut }) {
       ${data.items.length === 0 ? html`<div class="empty">${t("noNews")}</div>`
         : html`<div>${data.items.map((item) => html`<${NewsRow} key=${item.id} item=${item} />`)}</div>`}
     </div>`}
-    <${Bar} view="news" />
+    <${Bar} view="news" course=${course} />
   </main>`;
 }
 
@@ -61,8 +61,8 @@ export function NewsCard({ id, onClose, onOut }) {
         </div>
         ${!data.live && html`<div class="hint">${t("newsGone")}</div>`}
         <${Quote} quote=${data.quote} link=${data.link} from=${fromName(data.from)} />
-        <div class="acts"><button class="sec" disabled=${act.busy} onClick=${hide}>
-          ${icon(ICONS.cross, 18)}${t("hideNews")}</button></div>`}
+        ${data.live && html`<div class="acts"><button class="sec" disabled=${act.busy} onClick=${hide}>
+          ${icon(ICONS.cross, 18)}${t("hideNews")}</button></div>`}`}
       <button class="sec wide" onClick=${onClose}>${t("close")}</button>
     </div></section>`;
 }

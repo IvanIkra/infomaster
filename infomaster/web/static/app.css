@@ -229,7 +229,7 @@ blockquote {
 .wk-head .today b { background: var(--acc); color: var(--on-acc); }
 .wk-due { display: grid; grid-template-columns: 34px repeat(7, 1fr); gap: 0; margin: 8px 0 6px; align-items: center; }
 .wk-due > span { font: 800 9px var(--fb); color: var(--mut); letter-spacing: 0.06em; }
-.wk-due button { margin: 0 3px; height: 22px; border-radius: 11px; border: 1px solid var(--duek); background: var(--rev-bg);
+.wk-due button { margin: 0 3px; height: 30px; border-radius: 15px; border: 1px solid var(--duek); background: var(--rev-bg);
                  color: var(--due); font: 800 11px var(--fb); display: flex; align-items: center; justify-content: center;
                  gap: 4px; cursor: pointer; padding: 0; }
 .wk-due button.past { opacity: 0.45; }
@@ -261,12 +261,12 @@ blockquote {
   color: var(--fg); font: 600 16px var(--fb); padding: 0 12px;
 }
 .field:focus { border-color: var(--acc); outline: none; }
-/* Safari draws an empty date input narrow and lets it overflow: give it the field's shape, with its name beside it */
+/* Safari draws an empty date input narrow and lets it overflow: give it the field's shape; a form's labels go above */
 input[type="date"].field { -webkit-appearance: none; appearance: none; display: block; min-width: 0; line-height: 46px; }
 input[type="date"].field::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
-.datef { display: flex; align-items: center; gap: 10px; }
-.datef > span { flex: 0 0 auto; color: var(--mut); font-weight: 600; }
-.datef .field { flex: 1 1 auto; width: auto; }
+.datef { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.datef > span { color: var(--mut); font: 800 11px var(--fb); letter-spacing: 0.06em; text-transform: uppercase; }
+.datef .field { width: 100%; min-width: 0; }
 form.acts .field { flex: 1 1 160px; width: auto; }
 form.acts .btn { flex: 0 0 auto; padding: 0 20px; }
 .views button[aria-checked="true"] { background: var(--chip-bg); color: var(--chip-fg); }
@@ -348,7 +348,7 @@ select.field { appearance: none; -webkit-appearance: none; }
 .how { font-size: 14px; line-height: 1.4; display: flex; flex-direction: column; gap: 2px; }
 .how code { font: 500 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--mut); overflow-wrap: anywhere; }
 .gacts { display: flex; justify-content: flex-end; }
-.sec.sm { min-height: 34px; padding: 0 12px; font-size: 13px; }
+.sec.sm { min-height: 38px; padding: 0 12px; font-size: 13px; }
 .sec.acc { background: var(--acc); color: var(--on-acc); border-color: var(--acc); }
 .gedit { display: flex; flex-direction: column; gap: 8px; }
 .gedit .row-in { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -413,3 +413,10 @@ select.field.narrow { width: 150px; }
 /* the corrections (16.9): a grade of the lens opens its form */
 button.doc.plain { border: 0; border-bottom: 1px dashed var(--line); background: none; padding: 0; color: inherit;
   font: inherit; cursor: pointer; }
+
+/* a text button that reads as a link: «To this week» in the week's kicker */
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--acc); cursor: pointer;
+           text-transform: inherit; letter-spacing: inherit; min-height: 32px; }
+/* a lens tile with nothing to open */
+div.stat { cursor: default; }
+.picks .lens { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

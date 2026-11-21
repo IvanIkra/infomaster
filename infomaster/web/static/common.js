@@ -81,15 +81,27 @@ export function route() {
 const TOP = new Set(["/", "/week", "/news", "/course"]);
 const OVER = new Set(["/d", "/c", "/n", "/s", "/i", "/check", "/add"]);
 let trail = [];
-const step = () => {
+let over = false;  // the card on screen was opened over the screen under it, one history entry ago
+const step = (event) => {
   const at = location.hash.slice(1) || "/", path = at.split("?")[0] || "/";
-  if (OVER.has(path)) return;
+  if (OVER.has(path)) {
+    const from = event && event.oldURL ? (new URL(event.oldURL).hash.slice(1) || "/") : null;
+    over = from !== null && from === trail[trail.length - 1];
+    return;
+  }
+  over = false;
   if (TOP.has(path)) trail = [at];
   else if (trail.length > 1 && trail[trail.length - 2] === at) trail.pop();
   else if (trail[trail.length - 1] !== at) trail.push(at);
 };
 step();
 window.addEventListener("hashchange", step);
+// A card closes to the screen under it: back in the history when it was opened from there (so the phone's Back
+// does not open it again), else in place of the card's entry.
+export const closeTo = (hash) => {
+  if (over) history.back();
+  else location.replace(hash);
+};
 export const backTo = (parent) => (trail.length > 1 ? "#" + trail[trail.length - 2] : parent);
 
 export function go(path, params = {}) {

@@ -50,6 +50,9 @@ const TEXTS = {
   undoneNote: ["Undone", "Отменено"],
   cannotUndo: ["cannot be undone", "не отменить"],
   saved: ["Saved", "Сохранено"],
+  notFound: ["Not found: it may have been removed.", "Не найдено: возможно, уже удалено."],
+  loading: ["Loading…", "Загрузка…"],
+  retry: ["Try again", "Повторить"],
   processing: ["Batches and news", "Пачки и новости"],
   courses: ["Course dictionary", "Словарь курсов"],
   connector: ["Claude connector", "Коннектор Claude"],
@@ -169,10 +172,12 @@ const TEXTS = {
   abbr: ["Abbreviation", "Сокращение"],
   addEntry: ["Add an entry", "Добавить запись"],
   removeEntry: ["Delete", "Удалить"],
+  removeEntryAsk: ["Delete your entry «{name}»?", "Удалить вашу запись «{name}»?"],
   // the LLM
   todaySpent: ["Today", "Сегодня"],
   limit: ["Daily limit, $", "Лимит в день, $"],
   raiseToday: ["One more limit until midnight", "Ещё один лимит до полуночи"],
+  raiseAsk: ["Add {usd} to today's limit until midnight?", "Добавить {usd} к сегодняшнему лимиту до полуночи?"],
   week: ["Week", "Неделя"],
   month: ["Month", "Месяц"],
   forecast: ["Month forecast", "Прогноз на месяц"],
@@ -224,6 +229,7 @@ const TEXTS = {
   connections: ["Connections", "Подключения"],
   noConnections: ["No connections.", "Подключений нет."],
   revoke: ["Revoke", "Отозвать"],
+  revokeAsk: ["Revoke «{name}»? Claude loses access through it.", "Отозвать «{name}»? Claude потеряет доступ через него."],
   connected: ["connected", "подключён"],
   used: ["used", "использован"],
   tools: ["Tools: {read} to read, {write} to change.", "Инструментов: {read} для чтения, {write} для изменений."],
@@ -326,9 +332,29 @@ const size = (bytes) => {
 
 const State = ({ state }) => html`<span class=${"st st-" + state}>${m(state)}</span>`;
 
-// The field that saves on leaving it (change), not on every key.
+// The field that saves on leaving it (change), not on every key. `onSave` gets the value and the input: a save it
+// skips puts the old value back with `keep`, so the screen never shows what was not saved.
 function Field({ value, onSave, ...rest }) {
-  return html`<input class="field" value=${value ?? ""} onChange=${(e) => onSave(e.target.value)} ...${rest} />`;
+  return html`<input class="field" value=${value ?? ""} onChange=${(e) => onSave(e.target.value, e.target)} ...${rest} />`;
+}
+const keep = (input, old) => { input.value = old ?? ""; };
+
+// After a gradebook is read now or added: the screens read again every 5 s, a minute at most, until what `path`
+// gives shows a reading done (its `ok_at` or `error` changed). `job` is the request that starts the reading.
+const gradeMark = (d) => JSON.stringify((d.sheets || [d]).map((b) => [b.id, b.ok_at || null, b.error || null]));
+export async function readSoon(path, job) {
+  let before = null;
+  try { before = gradeMark(await api("GET", path)); } catch { /* then a minute of reloads */ }
+  const answer = await job();
+  const start = Date.now();
+  const tick = async () => {
+    changed();
+    let now = before;
+    try { now = gradeMark(await api("GET", path)); } catch { /* try again on the next tick */ }
+    if (now === before && Date.now() - start < 60000) setTimeout(tick, 5000);
+  };
+  setTimeout(tick, 5000);
+  return answer;
 }
 
 // --- the overview ----------------------------------------------------------------------------------------------
@@ -509,7 +535,8 @@ export function Chat({ id, onOut }) {
     setData((old) => ({ ...old, chats: old.chats.map((c) => c.id === chat.id ? { ...c, settings: answer.settings } : c) }));
     return { change: answer.change };
   });
-  if (!chat) return html`<${Screen} title=${m("twin")} back="#/machine/chats" error=${error} />`;
+  if (!chat) return html`<${Screen} title=${m("twin")} back="#/machine/chats" error=${error}>
+    ${data && html`<div class="empty">${m("notFound")}</div>`}<//>`;
   const s = chat.settings;
   return html`<${Screen} title=${chat.title} back="#/machine/chats" error=${error}
       sub=${[kindOf(chat.kind), chat.username && "@" + chat.username].filter(Boolean).join(" · ")}>
@@ -617,7 +644,8 @@ export function HseApp({ onOut }) {
           <button class="btn" disabled=${busy || !pasted.trim()} onClick=${save}>${m("hseSave")}</button>
           <div class="note small">${m("hseFallback", { url: data.callback })}</div>
         </div>`}`}`}
-    ${!s && !error && html`<button class="sec wide" onClick=${reload}>…</button>`}
+    ${!s && !error && html`<div class="note">${m("loading")}</div>`}
+    ${!s && error && html`<button class="sec wide" onClick=${reload}>${m("retry")}</button>`}
   <//>`;
 }
 
@@ -680,10 +708,10 @@ export function Processing({ at, onOut }) {
       ${data.reminders.enabled && html`
         <div class="row"><div><b>${m("eve")}</b></div>
           <${Field} class="field narrow" type="time" value=${data.reminders.eve} disabled=${busy}
-            onSave=${(v) => v && set("reminders", { eve: v })} /></div>
+            onSave=${(v, input) => (v ? set("reminders", { eve: v }) : keep(input, data.reminders.eve))} /></div>
         <div class="row"><div><b>${m("morning")}</b></div>
           <${Field} class="field narrow" type="time" value=${data.reminders.day} disabled=${busy}
-            onSave=${(v) => v && set("reminders", { day: v })} /></div>`}
+            onSave=${(v, input) => (v ? set("reminders", { day: v }) : keep(input, data.reminders.day))} /></div>`}
     <//>`}
     ${data.pdf && html`<${Section} title=${m("wholePdf")} foot=${m("pdfHint")}>
       <div class="row"><div><b>${m("pdfPages")}</b></div>
@@ -732,7 +760,7 @@ export function Courses({ onOut }) {
     setOpen(null);
     return answer;
   });
-  const remove = (name) => run(async () => {
+  const remove = (name) => confirm(m("removeEntryAsk", { name })) && run(async () => {
     const answer = await api("POST", "/machine/courses/remove", { name });
     setOpen(null);
     return answer;
@@ -774,9 +802,14 @@ export function Llm({ onOut }) {
       <div class="row"><div><b>${m("limit")}</b></div>
         <${Field} class="field narrow" type="number" min="0.01" step="0.01" inputmode="decimal"
           value=${data.daily_limit_usd} disabled=${busy}
-          onSave=${(v) => run(() => api("PATCH", "/machine/llm", { daily_limit_usd: Number(v) }))} /></div>
+          onSave=${(v) => run(async () => {
+            const answer = await api("PATCH", "/machine/llm", { daily_limit_usd: Number(v) });
+            toast(m("saved"));
+            return answer;
+          })} /></div>
       <div class="row"><button class="sec wide" disabled=${busy}
-        onClick=${() => run(() => api("POST", "/machine/llm/raise", {}))}>${m("raiseToday")}</button></div>
+        onClick=${() => confirm(m("raiseAsk", { usd: usd(data.daily_limit_usd) }))
+          && run(() => api("POST", "/machine/llm/raise", {}))}>${m("raiseToday")}</button></div>
     <//>
     <${Section} title=${m("days30")}>
       <div class="bars" role="img" aria-label=${m("days30")}>
@@ -801,19 +834,24 @@ const bookName = (b) => b.name || b.title || b.label || b.id;
 
 export function Gradebooks({ onOut }) {
   const { data, error, busy, run } = useMachine("/machine/grades", onOut);
+  const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState("");
   const [label, setLabel] = useState("");
   const set = (values) => run(() => api("PATCH", "/machine/settings/grades", values));
   const add = (event) => {
     event.preventDefault();
     run(async () => {
-      const answer = await api("POST", "/machine/grades", { url: url.trim(), label: label.trim() });
-      setUrl(""); setLabel("");
+      const answer = await readSoon("/machine/grades",
+        () => api("POST", "/machine/grades", { url: url.trim(), label: label.trim() }));
+      setUrl(""); setLabel(""); setAdding(false);
       return answer;
     });
   };
-  const student = (value) => {
-    if (data.student && data.sheets.length && value.trim() !== data.student && !confirm(m("studentAsk"))) return;
+  const student = (value, input) => {
+    if (data.student && data.sheets.length && value.trim() !== data.student && !confirm(m("studentAsk"))) {
+      keep(input, data.student);
+      return;
+    }
     set({ student: value.trim() });
   };
   if (!data) return html`<${Screen} title=${m("grades")} error=${error} />`;
@@ -831,15 +869,18 @@ export function Gradebooks({ onOut }) {
           || [b.label, b.ok_at ? `${m("read")} ${fresh(b.ok_at)}` : m("notYet")].filter(Boolean).join(" · ")}</div></div>
         ${icon(ICONS.next, 16)}</a>`)}
     <//>`}
-    <${Section} title=${m("addBook")}>
+    ${adding ? html`<${Section} title=${m("addBook")}>
       <form class="stack" style="padding:10px 0" onSubmit=${add}>
         <input class="field" placeholder=${m("bookUrl")} value=${url} autocomplete="off" spellcheck="false" required
           onInput=${(e) => setUrl(e.target.value)} />
         <input class="field" placeholder=${m("bookLabel")} value=${label} maxlength=${data.label_chars}
           onInput=${(e) => setLabel(e.target.value)} />
-        <button class="btn" type="submit" disabled=${busy || !url.trim()}>${m("addBook")}</button>
+        <div class="acts">
+          <button class="btn" type="submit" disabled=${busy || !url.trim()}>${m("addBook")}</button>
+          <button class="sec" type="button" onClick=${() => setAdding(false)}>${m("cancel")}</button>
+        </div>
       </form>
-    <//>
+    <//>` : html`<button class="sec wide" onClick=${() => setAdding(true)}>${icon(ICONS.plus, 18)}${m("addBook")}</button>`}
   <//>`;
 }
 
@@ -856,9 +897,8 @@ export function Gradebook({ id, back, onOut }) {
   const path = `/machine/grades/${encodeURIComponent(id)}`;
   const change = (values) => run(() => api("PATCH", path, values));
   const read = () => run(async () => {
-    const answer = await api("POST", path + "/read", {});
+    const answer = await readSoon(path, () => api("POST", path + "/read", {}));
     toast(m("reading"));
-    setTimeout(changed, 5000);
     return answer;
   });
   const remove = () => {
@@ -942,7 +982,8 @@ export function Tab({ id, name, onOut }) {
   const [open, setOpen] = useState(null);  // a work's column, "+" for a new one
   const tab = data && data.tabs.find((x) => x.tab === name);
   const back = `#/machine/gradebook?id=${encodeURIComponent(id)}`;
-  if (!tab) return html`<${Screen} title=${name} back=${back} error=${error} />`;
+  if (!tab) return html`<${Screen} title=${name} back=${back} error=${error}>
+    ${data && html`<div class="empty">${m("notFound")}</div>`}<//>`;
   const tabPath = `${path}/tabs/${encodeURIComponent(name)}`;
   const save = (works, skip = tab.skip) => run(async () => {
     const answer = await api("PUT", tabPath, { skip, works: works.map(plain) });
@@ -1000,7 +1041,8 @@ export function ConnectorScreen({ onOut }) {
             <div><b>${c.name}</b>${c.redirect ? html` <span class="mut">${c.redirect}</span>` : ""}
               <div class="mut small">${m("connected")} ${fresh(c.created_at)}${c.used_at ? ` · ${m("used")} ${fresh(c.used_at)}` : ""}</div></div>
             <button class="sec danger" disabled=${busy}
-              onClick=${() => run(() => api("DELETE", `/machine/connector/${c.id}`))}>${m("revoke")}</button>
+              onClick=${() => confirm(m("revokeAsk", { name: c.name }))
+                && run(() => api("DELETE", `/machine/connector/${c.id}`))}>${m("revoke")}</button>
           </div>`)}
       <//>
       <a class="link" href="#/machine/journal">${m("journal")}<span>${icon(ICONS.next, 16)}</span></a>`}
@@ -1030,10 +1072,10 @@ export function NotificationPrefs({ onOut }) {
           onChange=${(v) => set({ quiet: v ? `${from}-${to}` : "" })} /></div>
       ${n.quiet && html`<div class="row"><div><b>${m("from")}</b></div>
           <${Field} class="field narrow" type="time" value=${from} disabled=${busy}
-            onSave=${(v) => v && set({ quiet: `${v}-${to}` })} /></div>
+            onSave=${(v, input) => (v ? set({ quiet: `${v}-${to}` }) : keep(input, from))} /></div>
         <div class="row"><div><b>${m("to")}</b></div>
           <${Field} class="field narrow" type="time" value=${to} disabled=${busy}
-            onSave=${(v) => v && set({ quiet: `${from}-${v}` })} /></div>`}
+            onSave=${(v, input) => (v ? set({ quiet: `${from}-${v}` }) : keep(input, to))} /></div>`}
     <//>
     ${error && html`<div class="err">${error}</div>`}`;
 }

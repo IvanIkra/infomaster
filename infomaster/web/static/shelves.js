@@ -2,11 +2,11 @@
 // and the sorting of its inbox. A sheet and an item have a card over the screen, as news have. Every change is the
 // connector's tool behind the API: the toast offers the undo, but for a sheet joined or deleted, which has none.
 import { useEffect, useState } from "preact/hooks";
-import { ApiError, ICONS, api, backTo, changed, go, html, icon, mark, toast } from "./common.js";
+import { ApiError, CHANGED, ICONS, api, backTo, changed, go, html, icon, mark, toast } from "./common.js";
 import { day, getLang, t } from "./i18n.js";
 import { getDecimal, useAct, useLoad } from "./screens.js";
 import { GradeRow } from "./fixes.js";
-import { fresh, m } from "./machine.js";
+import { fresh, m, readSoon } from "./machine.js";
 
 const TEXTS = {
   shelves: ["Shelves", "Полки"],
@@ -20,7 +20,10 @@ const TEXTS = {
   rawCourses: ["Raw material by course", "Сырьё по курсам"],
   itemsN: ["{n} items", "записей: {n}"],
   newN: ["{n} new", "новых: {n}"],
-  noItems: ["Nothing here yet. New material goes in with «+».", "Здесь пока пусто. Новое добавляется кнопкой «+»."],
+  noItems: ["Nothing here yet.", "Здесь пока пусто."],
+  addHere: ["Add", "Добавить"],
+  removeAsk: ["Deletes the chosen items.", "Удалит выбранные записи."],
+  removeOneAsk: ["Deletes the item.", "Удалит запись."],
   libraryOff: ["The library is off.", "Библиотека выключена."],
   versionsN: ["{n} versions", "версий: {n}"],
   yours: ["yours", "ваш"],
@@ -40,6 +43,7 @@ const TEXTS = {
   byHand: ["Added by hand", "Добавлены вручную"],
   bookAdded: ["Gradebook added: it is read in a minute", "Таблица добавлена: прочитается через минуту"],
   number: ["Number or title", "Номер или название"],
+  numberHint: ["3, or «Typical problems»", "3 или «Типовые задачи»"],
   dueDate: ["Due date", "Срок"],
   summaryField: ["Summary", "Описание"],
   save: ["Save", "Сохранить"],
@@ -164,7 +168,8 @@ export function ShelfHome({ onOut }) {
           sub=${s("sheetsN", { n: data.sheets })} />`}
       </div>
       ${data.library && html`<h2>${s("rawCourses")}</h2>
-        <div class="box list">${data.courses.length ? data.courses.map((c) => html`<${Row} key=${c.key}
+        <div class="box list">${data.courses.some((c) => c.items > 0) ? data.courses.filter((c) => c.items > 0)
+          .map((c) => html`<${Row} key=${c.key}
           href=${"#/raw?course=" + encodeURIComponent(c.key)} title=${c.title}
           sub=${[s("itemsN", { n: c.items }), c.new && s("newN", { n: c.new })].filter(Boolean).join(" · ")} />`)
           : html`<div class="note">${s("noItems")}</div>`}</div>`}
@@ -216,7 +221,8 @@ function AddSheet({ courses, course, onDone }) {
     <label class="datef"><span>${s("dueDate")}</span>
       <input class="field" type="date" value=${form.due}
              onInput=${(e) => setForm({ ...form, due: e.target.value })} /></label>
-    <button class="btn" type="submit" disabled=${act.busy || !file}>${s("upload")}</button>
+    <div class="acts"><button class="btn" type="submit" disabled=${act.busy || !file}>${s("upload")}</button>
+      <button class="sec" type="button" onClick=${onDone}>${t("cancel")}</button></div>
   </form>`;
 }
 
@@ -229,7 +235,7 @@ export function SheetList({ course, onOut }) {
       ${adding ? html`<${AddSheet} courses=${data.courses} course=${course} onDone=${() => setAdding(false)} />`
         : html`<button class="sec" onClick=${() => setAdding(true)}>${icon(ICONS.plus, 18)}${s("addSheet")}</button>`}
       ${!data.sheets.length ? html`<div class="box"><div class="note">${s("noSheets")}</div></div>`
-        : course ? html`<${SheetRows} sheets=${data.sheets} />`
+        : course ? html`<${SheetRows} sheets=${data.sheets} oneCourse=${true} />`
         : byCourse(data.sheets, data.courses).map(([key, title, rows]) => html`<section key=${key || "-"}
             class="stack" style="gap:6px"><h2>${title}</h2><${SheetRows} sheets=${rows} /></section>`)}`}
   <//>`;
@@ -248,8 +254,10 @@ function byCourse(sheets, courses) {
   return [...groups.values()].sort((a, b) => rank(a[0]) - rank(b[0]));
 }
 
-const SheetRows = ({ sheets }) => html`<div class="box list">${sheets.map((e) => html`<${Row} key=${e.first}
-  onClick=${() => go("/s", { id: e.id })} lead=${mark("sheet")} title=${sheetName(e)}
+// `oneCourse`: the list is one course's, so a row shows only the sheet's number or title, not the course again.
+const SheetRows = ({ sheets, oneCourse }) => html`<div class="box list">${sheets.map((e) => html`<${Row} key=${e.first}
+  onClick=${() => go("/s", { id: e.id })} lead=${mark("sheet")}
+  title=${oneCourse ? (e.number && sheetTitle(e.number)) || e.name : sheetName(e)}
   sub=${[dueText(e), e.versions > 1 && s("versionsN", { n: e.versions }), e.own ? s("yours") : e.chat]
     .filter(Boolean).join(" · ")}
   aside=${e.status !== "posted" && html`<span class="chip plain">${e.status === "failed" ? s("notRead")
@@ -266,9 +274,10 @@ export function DocsList({ course, onOut }) {
     ${data && html`<div class="box">${data.documents.length ? data.documents.map((d) => html`
       <div class="doc" key=${d.id}><span><b>${d.title}</b><div class="mut small">${d.kind === "book" ? t("book")
         : d.kind === "cheatsheet" ? t("cheatsheet") : d.day ? day(d.day, { day: "numeric", month: "long" }) : ""}
-        </div>${d.versions.length > 1 && html`<div class="mut small">${t("versions")}: ${d.versions.slice(1)
-          .map((v) => v.url ? html`<a key=${v.version} href=${v.url} target="_blank" rel="noopener">v${v.version}</a> `
-            : html`<span key=${v.version}>v${v.version} </span>`)}</div>`}
+        </div>${d.versions.length > 1 && html`<div class="acts" style="margin-top:6px;align-items:center">
+          <span class="mut small">${t("versions")}:</span>${d.versions.slice(1)
+          .map((v) => v.url ? html`<a class="sec sm" key=${v.version} href=${v.url} target="_blank" rel="noopener">v${v.version}</a>`
+            : html`<span class="mut small" key=${v.version}>v${v.version}</span>`)}</div>`}
         </span>${d.url && html`<a class="sec" href=${d.url} target="_blank" rel="noopener">${d.kind === "cheatsheet"
           ? "MD" : "PDF"} v${d.versions[0].version}</a>`}</div>`)
       : html`<div class="note">${s("noDocs")}</div>`}</div>`}
@@ -285,9 +294,9 @@ export function GradesList({ course, onOut }) {
   const act = useAct();
   const g = data && data.grades;
   const read = (sid) => act.run(async () => {
-    await api("POST", `/machine/grades/${encodeURIComponent(sid)}/read`, {});
+    const path = `/machine/grades/${encodeURIComponent(sid)}`;
+    await readSoon(path, () => api("POST", path + "/read", {}));
     toast(m("reading"));
-    setTimeout(changed, 5000);
   });
   const state = (sid) => (status ? status.sheets.find((b) => b.id === sid) : null);
   return html`<${Screen} title=${(data && data.title) || course} sub=${t("grades")} back=${lensBack(course)}
@@ -344,6 +353,12 @@ function Calculator({ course, book }) {
   const [need, setNeed] = useState({ cell: "", goal: "" });
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+  const [round, setRound] = useState(0);  // a change elsewhere (a gradebook read again): count anew
+  useEffect(() => {
+    const again = () => setRound((n) => n + 1);
+    window.addEventListener(CHANGED, again);
+    return () => window.removeEventListener(CHANGED, again);
+  }, []);
   const goal = Number(String(need.goal).replace(",", "."));
   const solve = need.cell && need.goal !== "" && Number.isFinite(goal) ? { cell: need.cell, goal } : null;
   useEffect(() => {
@@ -363,7 +378,7 @@ function Calculator({ course, book }) {
       }
     }, 250);
     return () => { alive = false; clearTimeout(timer); };
-  }, [open, target, JSON.stringify(values), need.cell, need.goal]);
+  }, [open, target, JSON.stringify(values), need.cell, need.goal, round]);
   if (!open) return html`<button class="sec" onClick=${() => setOpen(true)}>${icon(ICONS.calc, 18)}${s("calc")}</button>`;
   const put = (cell, text) => {
     setTexts({ ...texts, [cell]: text });
@@ -423,7 +438,8 @@ function AddBook({ course, labelChars }) {
   const add = (event) => {
     event.preventDefault();
     act.run(async () => {
-      const answer = await api("POST", "/machine/grades", { url: url.trim(), label: label.trim() });
+      const answer = await readSoon("/machine/grades",
+        () => api("POST", "/machine/grades", { url: url.trim(), label: label.trim() }));
       setUrl(""); setOpen(false);
       done(answer, s("bookAdded"));
     });
@@ -448,23 +464,32 @@ function SheetEdit({ sheet, courses, onDone }) {
   const act = useAct();
   const save = (e) => {
     e.preventDefault();
+    const values = { course: form.course || "", number: form.number.trim(), due: form.due || null,
+                     summary: form.summary.trim() };
+    if (values.course === (sheet.course || "") && values.number === (sheet.number || "").trim()
+        && values.due === (sheet.due || null) && values.summary === (sheet.summary || "").trim()) {
+      onDone();  // nothing changed: no call, no empty entry in the journal
+      return;
+    }
     act.run(async () => {
-      const answer = await api("PATCH", `/shelf/sheets/${sheet.id}`, {
-        course: form.course || "", number: form.number.trim(), due: form.due || null, summary: form.summary.trim() });
+      const answer = await api("PATCH", `/shelf/sheets/${sheet.id}`, values);
       onDone();
       done(answer, s("sheetSaved"));
     });
   };
   return html`<form class="stack" style="gap:10px" onSubmit=${save}>
     <div class="err" role="alert">${act.error}</div>
-    <${CourseSelect} courses=${courses} value=${form.course} onChange=${(v) => setForm({ ...form, course: v })} />
-    <input class="field" placeholder=${s("number")} maxlength="60" value=${form.number}
-           onInput=${(e) => setForm({ ...form, number: e.target.value })} />
+    <label class="datef"><span>${s("course")}</span>
+      <${CourseSelect} courses=${courses} value=${form.course} onChange=${(v) => setForm({ ...form, course: v })} /></label>
+    <label class="datef"><span>${s("number")}</span>
+      <input class="field" placeholder=${s("numberHint")} maxlength="60" value=${form.number}
+             onInput=${(e) => setForm({ ...form, number: e.target.value })} /></label>
     <label class="datef"><span>${s("dueDate")}</span>
       <input class="field" type="date" value=${form.due}
              onInput=${(e) => setForm({ ...form, due: e.target.value })} /></label>
-    <textarea class="field" style="min-height:90px;padding:10px 12px" maxlength="600" placeholder=${s("summaryField")}
-              value=${form.summary} onInput=${(e) => setForm({ ...form, summary: e.target.value })}></textarea>
+    <label class="datef"><span>${s("summaryField")}</span>
+      <textarea class="field" style="min-height:90px;padding:10px 12px" maxlength="600"
+                value=${form.summary} onInput=${(e) => setForm({ ...form, summary: e.target.value })}></textarea></label>
     <div class="acts"><button class="btn" type="submit" disabled=${act.busy}>${s("save")}</button>
       <button class="sec" type="button" onClick=${onDone}>${t("cancel")}</button></div>
   </form>`;
@@ -486,7 +511,7 @@ export function SheetCard({ id, onClose, onOut }) {
       <div class="err" role="alert">${error || act.error}</div>
       ${data && html`
         <div><div class="kicker">${[dueText(data), data.own ? s("yours") : data.chat].filter(Boolean).join(" · ")}</div>
-          <h1 style="font-size:24px">${sheetName(data)}</h1></div>
+          <h1 style="font-size:24px;overflow-wrap:anywhere">${sheetName(data)}</h1></div>
         ${data.status === "failed" && html`<div class="err">${s("notRead")}${data.error ? ": " + data.error : ""}</div>`}
         ${data.summary && html`<div class="stack" style="gap:4px"><span class="lab">${s("summary")}</span>
           <div>${data.summary}</div></div>`}
@@ -494,7 +519,7 @@ export function SheetCard({ id, onClose, onOut }) {
           <div style="white-space:pre-line">${data.caption}</div></div>`}
         <div class="stack" style="gap:0"><span class="lab">${s("versions")}</span>
           ${data.versions_list.map((v) => html`<div class="doc" key=${v.id}>
-            <span><b>${v.name}</b><div class="mut small">${[v.version > 1 && "v" + v.version,
+            <span style="min-width:0;overflow-wrap:anywhere"><b>${v.name}</b><div class="mut small">${[v.version > 1 && "v" + v.version,
               dayOf(v.created_at)].filter(Boolean).join(" · ")}</div>
               ${v.changes && html`<div class="small">${v.changes}</div>`}</span>
             ${v.file_url ? html`<a class="sec" href=${v.file_url} target="_blank" rel="noopener">PDF</a>`
@@ -544,7 +569,8 @@ export function RawList({ course, onOut }) {
       ${data.items.length > 0 && html`<section class="stack" style="gap:6px"><h2>${s("looseItems")}</h2>
         <div class="box list">${data.items.map((item) => html`<${ItemRow} key=${item.id} item=${item} />`)}</div>
       </section>`}
-      ${!sections.length && !data.items.length && html`<div class="empty">${s("noItems")}</div>`}`}
+      ${!sections.length && !data.items.length && html`<div class="empty">${s("noItems")}</div>`}
+      <a class="sec" href=${"#/add?course=" + encodeURIComponent(course || "")}>${icon(ICONS.plus, 18)}${s("addHere")}</a>`}
   <//>`;
 }
 
@@ -583,7 +609,15 @@ function Place({ courses, inbox, onPick, label, busy }) {
 export function Inbox({ onOut }) {
   const { data, error } = useLoad("/shelf/inbox", onOut);
   const [chosen, setChosen] = useState([]);
+  const [sure, setSure] = useState(false);  // the second step of «Delete»
   const act = useAct();
+  // After the inbox is read again, only what is still in it stays chosen.
+  useEffect(() => {
+    if (!data) return;
+    const ids = new Set(data.items.map((item) => item.id));
+    setChosen((old) => old.filter((id) => ids.has(id)));
+  }, [data]);
+  useEffect(() => { if (!chosen.length) setSure(false); }, [chosen.length]);
   const toggle = (id) => setChosen((old) => (old.includes(id) ? old.filter((i) => i !== id) : [...old, id]));
   const sort = (place) => act.run(async () => {
     const answer = await api("POST", "/shelf/sort", { ids: chosen, ...place });
@@ -592,7 +626,7 @@ export function Inbox({ onOut }) {
   });
   const remove = () => act.run(async () => {
     const answer = await api("POST", "/shelf/remove", { ids: chosen });
-    setChosen([]);
+    setChosen([]); setSure(false);
     done(answer, s("removed"));
   });
   return html`<${Screen} title=${s("inboxRow")} back="#/shelf" error=${error || act.error}>
@@ -609,14 +643,18 @@ export function Inbox({ onOut }) {
         : html`<div class="note">${s("inboxEmpty")}</div>`}</div>
       ${chosen.length > 0 && html`<div class="box"><${Place} courses=${data.courses} inbox=${true} busy=${act.busy}
         label=${s("sortN", { n: chosen.length })} onPick=${sort} />
-        <button class="sec danger wide" style="margin-top:8px" disabled=${act.busy} onClick=${remove}>
-          ${icon(ICONS.cross, 18)}${s("removeN", { n: chosen.length })}</button></div>`}`}
+        ${sure ? html`<div class="stack" style="gap:8px;margin-top:8px"><div class="note">${s("removeAsk")}</div>
+            <div class="acts"><button class="btn" disabled=${act.busy} onClick=${remove}>
+              ${s("sure")} · ${s("removeN", { n: chosen.length })}</button>
+              <button class="sec" onClick=${() => setSure(false)}>${t("cancel")}</button></div></div>`
+          : html`<button class="sec danger wide" style="margin-top:8px" disabled=${act.busy} onClick=${() => setSure(true)}>
+            ${icon(ICONS.cross, 18)}${s("removeN", { n: chosen.length })}</button>`}</div>`}`}
   <//>`;
 }
 
 export function ItemCard({ id, onClose, onOut }) {
   const { data, error } = useLoad(`/shelf/items/${encodeURIComponent(id)}`, onOut);
-  const [mode, setMode] = useState(null);  // null, "move" or "edit"
+  const [mode, setMode] = useState(null);  // null, "move", "edit" or "delete"
   const [form, setForm] = useState(null);
   const act = useAct();
   const run = (job, text, closes) => act.run(async () => {
@@ -653,9 +691,13 @@ export function ItemCard({ id, onClose, onOut }) {
           <button class="sec" disabled=${act.busy} onClick=${() => run(() => api("PATCH", `/shelf/items/${data.id}`,
             { status: data.status === "new" ? "processed" : "new" }), s("itemSaved"))}>
             ${data.status === "new" ? s("markProcessed") : s("markNew")}</button>
-          <button class="sec danger" disabled=${act.busy} onClick=${() => run(
-            () => api("DELETE", `/shelf/items/${data.id}`), s("itemRemoved"), true)}>
+          <button class="sec danger" disabled=${act.busy} onClick=${() => setMode("delete")}>
             ${icon(ICONS.cross, 18)}${s("remove")}</button></div>`}
+        ${mode === "delete" && html`<div class="stack" style="gap:8px">
+          <div class="note">${s("removeOneAsk")}</div>
+          <div class="acts"><button class="btn" disabled=${act.busy} onClick=${() => run(
+            () => api("DELETE", `/shelf/items/${data.id}`), s("itemRemoved"), true)}>${s("sure")}</button>
+            <button class="sec" onClick=${() => setMode(null)}>${t("cancel")}</button></div></div>`}
         ${mode === "move" && html`<div class="stack" style="gap:8px">
           <${Place} courses=${data.courses} inbox=${!data.course} busy=${act.busy} label=${s("moveTo")}
             onPick=${(place) => run(() => api("POST", "/shelf/sort", { ids: [data.id], ...place }), s("sorted"))} />
@@ -667,8 +709,8 @@ export function ItemCard({ id, onClose, onOut }) {
         }}>
           <input class="field" placeholder=${s("titleField")} maxlength="200" value=${form.title}
                  onInput=${(e) => setForm({ ...form, title: e.target.value })} />
-          <input class="field" placeholder=${s("noteField")} maxlength="500" value=${form.note}
-                 onInput=${(e) => setForm({ ...form, note: e.target.value })} />
+          <textarea class="field" style="min-height:90px;padding:10px 12px" placeholder=${s("noteField")} maxlength="500"
+                    value=${form.note} onInput=${(e) => setForm({ ...form, note: e.target.value })}></textarea>
           <div class="acts"><button class="btn" type="submit" disabled=${act.busy}>${s("save")}</button>
             <button class="sec" type="button" onClick=${() => setMode(null)}>${t("cancel")}</button></div></form>`}`}
       <button class="sec wide" onClick=${onClose}>${t("close")}</button>

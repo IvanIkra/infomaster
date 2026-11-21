@@ -575,3 +575,25 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   and «Back» returns to the one before, the parent only for a link opened straight. The feed's search button, which
   never did anything, is gone; the news have the shelves' button as the feed has. An error of the wiki's own (its
   database down, `internal_api_error_*`) reads «the wiki's server failed», not as a Python exception.
+
+- **D78. A pass over every screen's flows, 21.11.2026.** Stage 17.9 of §11.1. Every screen and card was traced in the
+  code and walked on a local stand with made-up data at a phone's size. What changed:
+  - Cards close without leaving themselves in the history: back to the screen under them when they were opened from
+    it, else in place of their entry, so the phone's Back never opens a card again, a deleted thing's included.
+  - A course carries through: the News view and «+» opened in a course keep it (the List returns to the course;
+    «+» puts files on the course's shelf and fills the course in the deadline and grade forms).
+  - The week never strands the owner: header and views bar while it loads or fails, «To this week» after paging,
+    the day's deadline list reads again after a change. A class's correction keeps its card open and reads it again;
+    an event's edit or removal still closes it (its copy has another uid).
+  - One button per meaning: an own deadline has «Done» only (both deleted it); a dead «Next class» tile is no button;
+    «Hide» only for live news; the feed's shelf button opens the inbox when it has something.
+  - Confirmations where there is no undo or the loss is real: ending a session, logging out, removing a passkey (the
+    last one says a code will be needed), revoking a connector, raising today's LLM limit, deleting an own grade,
+    a dictionary entry, several inbox items or an item; «+» asks before dropping typed text.
+  - Forms: labels above the fields of a sheet's edit, an end before the start not accepted, saving an unchanged sheet
+    writes nothing; a field whose save was skipped shows the stored value again.
+  - Smaller: course titles (not keys) in «Check», «Cancel» for «Other date», a Close while the queue loads, the class
+    card's materials open its course's raw shelf, «Read now» follows the read up to a minute, the calculator recounts
+    after a change, larger tap targets in the week and the grade edit, long file names wrap.
+  Left as they are: overlapping classes in the week's grid, a «Hidden» link outside «Machine», days counted by the
+  phone's clock in a card.

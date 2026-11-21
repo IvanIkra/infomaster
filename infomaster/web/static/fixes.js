@@ -70,6 +70,7 @@ const TEXTS = {
   gradeSaved: ["Grade saved", "Оценка сохранена"],
   gradeReset: ["The sheet's grade is back", "Оценка — как в таблице"],
   gradeDeleted: ["Grade deleted", "Оценка удалена"],
+  deleteGradeAsk: ["Delete this grade?", "Удалить эту оценку?"],
   yours: ["yours", "ваша"],
   edited: ["corrected", "исправлена"],
 };
@@ -144,7 +145,8 @@ function TimeForm({ fields, withTitle, busy, onSave, onCancel }) {
     <label class="lab" for="x-room">${f("room")}</label>
     <input id="x-room" class="field" value=${room} maxlength="200" onInput=${(e) => setRoom(e.target.value)} />
     <div class="acts">
-      <button class="btn" type="submit" disabled=${busy || !date || (withTitle && !title.trim())}>${f("save")}</button>
+      <button class="btn" type="submit" disabled=${busy || !date || (withTitle && !title.trim())
+        || (!allDay && to <= from)}>${f("save")}</button>
       <button class="sec" type="button" onClick=${onCancel}>${f("cancel")}</button>
     </div>
   </form>`;
@@ -162,9 +164,12 @@ function ClassFix({ c, onClose }) {
   const fix = c.fix;
   const [editing, setEditing] = useState(false);
   const { busy, error, run } = useRun();
-  const correct = (changes, text) => run(() => fixIt("/class", { uid: c.uid, ...fix.fields, ...changes }, text,
-                                                     onClose));
-  const option = (id, flags, text) => run(() => fixIt("/options", { id, ...flags }, text, onClose));
+  // A class keeps its uid through every correction: the card stays open and reads it again.
+  const correct = (changes, text) => run(async () => {
+    await fixIt("/class", { uid: c.uid, ...fix.fields, ...changes }, text);
+    setEditing(false);
+  });
+  const option = (id, flags, text) => run(() => fixIt("/options", { id, ...flags }, text));
   const ruz = fix.ruz;
   const movedFromRuz = ruz.start !== fix.fields.start || ruz.room !== fix.fields.room;
   return html`<div class="stack" style="gap:10px">
@@ -185,7 +190,7 @@ function ClassFix({ c, onClose }) {
           f(fix.fields.cancelled ? "classBack" : "classCancelled"))}>
           ${fix.fields.cancelled ? f("notCancelled") : f("cancelClass")}</button>
         ${fix.own && html`<button class="sec" disabled=${busy} title=${f("asItWasHint")}
-          onClick=${() => run(() => fixIt("/remove", { id: fix.own }, f("asItWas"), onClose))}>${f("asItWas")}</button>`}
+          onClick=${() => run(() => fixIt("/remove", { id: fix.own }, f("asItWas")))}>${f("asItWas")}</button>`}
       </div>`}
     ${!editing && !fix.fields.cancelled && html`<div class="note small">${f("cancelHint")}</div>`}
     <${Optional} on=${!fix.fields.required} busy=${busy}
@@ -198,7 +203,10 @@ function EventFix({ c, onClose }) {
   const [editing, setEditing] = useState(false);
   const { busy, error, run } = useRun();
   const edit = (fields, text) => run(() => fixIt("/event", { uid: c.uid, ...fields }, text, onClose));
-  const option = (flags, text) => run(() => fixIt("/options", { id: fix.id, ...flags }, text, onClose));
+  // An edit of a chat's event makes an own copy with another uid, and a removed one is gone: those close the card;
+  // the calendar switch keeps it.
+  const option = (flags, text, close = true) => run(() => fixIt("/options", { id: fix.id, ...flags }, text,
+                                                                 close ? onClose : undefined));
   const remove = (text) => run(() => fixIt("/remove", { id: fix.id }, text, onClose));
   return html`<div class="stack" style="gap:10px">
     <div class="err" role="alert">${error}</div>
@@ -215,7 +223,7 @@ function EventFix({ c, onClose }) {
           ${f("asItWas")}</button>`}
       </div>`}
     <${Optional} on=${!fix.required} busy=${busy}
-      onChange=${(on) => option({ required: !on }, f(on ? "calendarOptional" : "calendarMain"))} />
+      onChange=${(on) => option({ required: !on }, f(on ? "calendarOptional" : "calendarMain"), false)} />
     ${!editing && html`<button class="sec danger wide" disabled=${busy} onClick=${() => (fix.own && !fix.copy
       ? remove(f("deleted")) : option({ hidden: true }, f("deletedHidden")))}>${icon(ICONS.cross, 18)}
       ${f("deleteEvent")}</button>`}
@@ -329,10 +337,11 @@ export function GradeRow({ w }) {
           <input class="field narrow" aria-label=${f("grade")} inputmode="decimal" value=${value}
                  onInput=${(e) => setValue(e.target.value)} />
           <button class="sec sm acc" type="submit" disabled=${busy || !valid}>${f("save")}</button>
-          ${(w.edited || w.own) && html`<button class="sec sm" type="button" disabled=${busy} onClick=${reset}>
-            ${w.own ? f("deleteGrade") : f("asSheet")}</button>`}
           <button class="sec sm" type="button" onClick=${() => setEditing(false)}>${f("cancel")}</button>
         </div>
+        ${(w.edited || w.own) && html`<button class=${"sec wide" + (w.own ? " danger" : "")} type="button"
+          disabled=${busy} onClick=${() => (!w.own || confirm(f("deleteGradeAsk"))) && reset()}>
+          ${w.own ? f("deleteGrade") : f("asSheet")}</button>`}
         ${w.edited && html`<div class="note small">${f("sheetHas", { value: mark(w.sheet_value) })}</div>`}
       </form>`}
     </div>`}

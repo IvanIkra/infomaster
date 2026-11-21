@@ -150,10 +150,10 @@ export function Bar({ view, course }) {
         ${t("list")}</button>
       <button role="tab" aria-selected=${view === "week"} onClick=${() => go("/week", { course })}>
         ${t("weekView")}</button>
-      <button role="tab" aria-selected=${view === "news"} onClick=${() => go("/news")}>
+      <button role="tab" aria-selected=${view === "news"} onClick=${() => go("/news", { course })}>
         ${t("newsView")}${newsMark > 0 && view !== "news" && html`<span class="count">${newsMark}</span>`}</button>
     </div>
-    <a class="plus" href="#/add" aria-label=${t("add")}>${icon(ICONS.plus, 26)}</a>
+    <a class="plus" href=${course ? "#/add?course=" + encodeURIComponent(course) : "#/add"} aria-label=${t("add")}>${icon(ICONS.plus, 26)}</a>
   </div></div>`;
 }
 
@@ -190,7 +190,7 @@ export function Feed({ course, push, onOut }) {
   return html`<main class="screen">
     <header class="top">
       ${header}
-      <a class="rb" href="#/shelf" aria-label=${t("shelves")}>${icon(ICONS.shelf)}
+      <a class="rb" href=${data && data.inbox > 0 ? "#/inbox" : "#/shelf"} aria-label=${t("shelves")}>${icon(ICONS.shelf)}
         ${data && data.inbox > 0 && html`<span class="count">${data.inbox}</span>`}</a>
       <${MachineDot} data=${data} error=${error} />
     </header>
@@ -230,12 +230,13 @@ function CourseHead({ info, todayIso }) {
         <small>${g.count ? t("worksN", { n: g.count }) + (g.new ? " · " + t("newN", { n: g.new }) : "")
           : t("noGrades")}</small>
       </button>
-      <button class="stat" onClick=${() => n && openItem(n)}>
+      ${n ? html`<button class="stat" onClick=${() => openItem(n)}>
         <span class="lab">${t("nextClass")}</span>
-        ${n ? html`<em>${capital(day(n.start, { weekday: "short", day: "numeric" }))}, ${hm(n.start)}</em>
+        <em>${capital(day(n.start, { weekday: "short", day: "numeric" }))}, ${hm(n.start)}</em>
           <small>${[kind(n.type), placeOf(n), n.due.length && `${t("handIn")}: ${n.due.map((d) => d.title)
-            .join(", ")}`].filter(Boolean).join(" · ")}</small>` : html`<small>${t("noNext")}</small>`}
-      </button>
+            .join(", ")}`].filter(Boolean).join(" · ")}</small>
+      </button>` : html`<div class="stat"><span class="lab">${t("nextClass")}</span>
+        <small>${t("noNext")}</small></div>`}
     </div>
     <h2>${t("shelves")}</h2>
     <div class="shelves">
@@ -256,13 +257,21 @@ const PPM = 0.62;  // pixels a minute in the week's grid
 export function Week({ start, course, onOut }) {
   const query = new URLSearchParams(Object.entries({ start, course }).filter(([, v]) => v)).toString();
   const { data, error } = useLoad("/week" + (query ? "?" + query : ""), onOut);
-  const [opened, setOpened] = useState(null);  // a day whose deadlines are listed
+  const [opened, setOpened] = useState(null);  // the date of a day whose deadlines are listed
   const shift = (n) => {
     const monday = new Date(data.start + "T12:00:00");
     monday.setDate(monday.getDate() + 7 * n);
     go("/week", { start: monday.toISOString().slice(0, 10), course });
   };
-  if (!data) return html`<main class="screen"><div class="err">${error}</div></main>`;
+  if (!data) {  // loading, or failed: the views bar stays, so the owner is never stuck here
+    return html`<main class="screen">
+      <header class="top"><div><div class="kicker">${t("weekView")}</div><h1>…</h1></div></header>
+      <div class="err" role="alert">${error}</div>
+      <${Bar} view="week" course=${course} />
+    </main>`;
+  }
+  const openedDay = opened && data.days.find((d) => d.date === opened);
+  const thisWeek = data.days.some((d) => d.date === data.today);
   const classes = data.days.flatMap((d) => d.items.filter((i) => i.kind === "class" && !i.all_day));
   const first = Math.min(9 * 60, ...classes.map((c) => minutes(c.start)));
   const last = Math.max(18 * 60, ...classes.map((c) => minutes(c.end)));
@@ -273,7 +282,8 @@ export function Week({ start, course, onOut }) {
   const range = `${day(data.start, { day: "numeric" })} – ${day(sunday, { day: "numeric", month: "long" })}`;
   return html`<main class="screen">
     <header class="top">
-      <div><div class="kicker">${data.days.some((d) => d.date === data.today) ? t("thisWeek") : t("weekView")}</div>
+      <div><div class="kicker">${thisWeek ? t("thisWeek") : html`<button class="linkish"
+          onClick=${() => go("/week", { course })}>${t("backToThisWeek")}</button>`}</div>
         <h1>${range}</h1></div>
       <button class="rb" aria-label=${t("prevWeek")} onClick=${() => shift(-1)}>${icon(ICONS.back)}</button>
       <button class="rb" aria-label=${t("nextWeek")} onClick=${() => shift(1)}>${icon(ICONS.next)}</button>
@@ -287,7 +297,7 @@ export function Week({ start, course, onOut }) {
       <div class="wk-due"><span>${t("deadlinesShort").toUpperCase()}</span>${data.days.map((d) => {
         const due = d.items.filter((i) => i.kind === "deadline");
         return html`<div key=${d.date}>${due.length > 0 && html`<button class=${d.date < data.today ? "past" : ""}
-          onClick=${() => (due.length === 1 ? openItem(due[0]) : setOpened(d))}>
+          onClick=${() => (due.length === 1 ? openItem(due[0]) : setOpened(d.date))}>
           <span class="k kd" style="width:6px;height:6px"></span>${due.length}</button>`}</div>`;
       })}</div>
       <div class="wk-grid" style=${{ height: height + "px" }}>
@@ -306,11 +316,12 @@ export function Week({ start, course, onOut }) {
         </div>`)}
       </div>
     </div>
-    ${opened && html`<div class="scrim" onClick=${() => setOpened(null)}></div>
+    ${openedDay && html`<div class="scrim" onClick=${() => setOpened(null)}></div>
       <section class="sheet" role="dialog"><div>
         <div class="grab"></div>
-        <h2>${capital(day(opened.date, { weekday: "long", day: "numeric", month: "long" }))}</h2>
-        <div>${opened.items.filter((i) => i.kind === "deadline").map((i) => html`<${Row} key=${i.uid} item=${i} />`)}</div>
+        <h2>${capital(day(openedDay.date, { weekday: "long", day: "numeric", month: "long" }))}</h2>
+        <div>${openedDay.items.filter((i) => i.kind === "deadline").map((i) => html`<${Row} key=${i.uid} item=${i} />`)}</div>
+        <button class="sec wide" onClick=${() => setOpened(null)}>${t("close")}</button>
       </div></section>`}
     <${Bar} view="week" course=${course} />
   </main>`;
@@ -342,7 +353,7 @@ export function useAct(after) {
 
 function CourseLink({ course, title }) {
   if (!course) return null;
-  return html`<button class="sec" style="min-height:34px" onClick=${() => go("/course", { key: course })}>
+  return html`<button class="sec" style="min-height:40px" onClick=${() => go("/course", { key: course })}>
     ${title || course}${icon(ICONS.next, 16)}</button>`;
 }
 
@@ -374,8 +385,8 @@ function DeadlineActions({ d, onClose }) {
       <button class="sec" disabled=${busy} onClick=${() => setMode("edit")}>${icon(ICONS.edit, 18)}${t("edit")}</button>
       <button class="sec" disabled=${busy} onClick=${() => setMode("twin")}>${t("isDuplicate")}</button>
     </div>`}
-    ${mode === null && html`<button class="sec danger wide" disabled=${busy}
-      onClick=${() => doIt("not-mine", d.own ? "deleted" : "hiddenNotMine")}>${icon(ICONS.cross, 18)}${t("delete")}
+    ${mode === null && !d.own && html`<button class="sec danger wide" disabled=${busy}
+      onClick=${() => doIt("not-mine", "hiddenNotMine")}>${icon(ICONS.cross, 18)}${t("delete")}
       </button>`}
     ${mode === "edit" && html`<${EditForm} d=${d} busy=${busy} onCancel=${() => setMode(null)}
       onSave=${(fields) => doIt("edit", "saved", fields)} />`}
@@ -471,7 +482,9 @@ function ClassCard({ c, onClose }) {
       ${c.due.map((d) => html`<button key=${d.uid} class="it" onClick=${() => go("/d", { uid: d.uid })}>
         ${mark("Deadline")}<span class="ttl"><b>${d.title}</b></span></button>`)}</div>`}
     <${Quote} quote=${c.quote} link=${c.link} from=${c.origin} />
-    ${c.materials > 0 && html`<div class="note">${t("materialsN", { n: c.materials })}</div>`}
+    ${c.materials > 0 && (c.course ? html`<button class="sec wide" onClick=${() => go("/raw", { course: c.course })}>
+        ${icon(ICONS.shelf, 18)}${t("materialsN", { n: c.materials })}</button>`
+      : html`<div class="note">${t("materialsN", { n: c.materials })}</div>`)}
     <${EntryFix} c=${c} onClose=${onClose} />`;
 }
 
@@ -524,7 +537,9 @@ export function CheckQueue({ start, course, onClose, onOut }) {
   const { busy, error: failed, run } = useAct();
   if (!data) {
     return html`<div class="scrim" onClick=${onClose}></div><section class="sheet" role="dialog"><div>
-      <div class="err">${error}</div></div></section>`;
+      <div class="grab" aria-hidden="true"></div>
+      <div class="err">${error}</div>
+      <button class="sec wide" onClick=${onClose}>${t("close")}</button></div></section>`;
   }
   const open = data.items.filter((q) => !later.includes(q.id));
   const at = Math.max(0, open.findIndex((q) => q.id === first));
@@ -598,6 +613,7 @@ function AssumedQuestion({ q, busy, onRight, onDate }) {
       : html`<form class="acts" onSubmit=${(e) => { e.preventDefault(); if (due === q.item.due) onRight(); else onDate(due); }}>
         <input class="field" type="date" value=${due} required onInput=${(e) => setDue(e.target.value)} />
         <button class="btn" type="submit" disabled=${busy || !due}>${t("save")}</button>
+        <button class="sec" type="button" onClick=${() => setDue(null)}>${t("cancel")}</button>
       </form>`}`;
 }
 
@@ -606,6 +622,6 @@ function CourseQuestion({ q, courses, busy, onPick, onOutside }) {
     <div class="note">${t("courseText")}</div>
     <${Choice} d=${q.item} />
     <div class="picks">${courses.map((c) => html`<button key=${c.key} class="lens" disabled=${busy} title=${c.title}
-      onClick=${() => onPick(c.key)}>${c.key}</button>`)}</div>
+      onClick=${() => onPick(c.key)}>${c.title}</button>`)}</div>
     <button class="sec wide" disabled=${busy} onClick=${onOutside}>${t("outside")}</button>`;
 }

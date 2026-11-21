@@ -1108,6 +1108,8 @@ own; Claude is an optional door, not the brain (D53).
       field, shown as it is («№ 3» for a number); the note after an action closes with a cross or a swipe.
     - 17.8 routes (done, D77): «Back» returns to the screen the owner came from, the wiki pages have their own
       screen, the dead search button is gone.
+    - 17.9 a pass over every screen's flows (done, D78): cards leave no history entry, the course carries through
+      News and «+», confirmations where there is no undo, labelled forms, the week never strands the owner.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 
