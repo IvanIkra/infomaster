@@ -261,6 +261,12 @@ blockquote {
   color: var(--fg); font: 600 16px var(--fb); padding: 0 12px;
 }
 .field:focus { border-color: var(--acc); outline: none; }
+/* Safari draws an empty date input narrow and lets it overflow: give it the field's shape, with its name beside it */
+input[type="date"].field { -webkit-appearance: none; appearance: none; display: block; min-width: 0; line-height: 46px; }
+input[type="date"].field::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
+.datef { display: flex; align-items: center; gap: 10px; }
+.datef > span { flex: 0 0 auto; color: var(--mut); font-weight: 600; }
+.datef .field { flex: 1 1 auto; width: auto; }
 form.acts .field { flex: 1 1 160px; width: auto; }
 form.acts .btn { flex: 0 0 auto; padding: 0 20px; }
 .views button[aria-checked="true"] { background: var(--chip-bg); color: var(--chip-fg); }

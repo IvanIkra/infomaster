@@ -210,8 +210,9 @@ function AddSheet({ courses, course, onDone }) {
     <${CourseSelect} courses=${courses} value=${form.course} onChange=${(v) => setForm({ ...form, course: v })} />
     <input class="field" placeholder=${s("number")} maxlength="20" value=${form.number}
            onInput=${(e) => setForm({ ...form, number: e.target.value })} />
-    <input class="field" type="date" aria-label=${s("dueDate")} value=${form.due}
-           onInput=${(e) => setForm({ ...form, due: e.target.value })} />
+    <label class="datef"><span>${s("dueDate")}</span>
+      <input class="field" type="date" value=${form.due}
+             onInput=${(e) => setForm({ ...form, due: e.target.value })} /></label>
     <button class="btn" type="submit" disabled=${act.busy || !file}>${s("upload")}</button>
   </form>`;
 }
@@ -456,8 +457,9 @@ function SheetEdit({ sheet, courses, onDone }) {
     <${CourseSelect} courses=${courses} value=${form.course} onChange=${(v) => setForm({ ...form, course: v })} />
     <input class="field" placeholder=${s("number")} maxlength="20" value=${form.number}
            onInput=${(e) => setForm({ ...form, number: e.target.value })} />
-    <input class="field" type="date" aria-label=${s("dueDate")} value=${form.due}
-           onInput=${(e) => setForm({ ...form, due: e.target.value })} />
+    <label class="datef"><span>${s("dueDate")}</span>
+      <input class="field" type="date" value=${form.due}
+             onInput=${(e) => setForm({ ...form, due: e.target.value })} /></label>
     <textarea class="field" style="min-height:90px;padding:10px 12px" maxlength="600" placeholder=${s("summaryField")}
               value=${form.summary} onInput=${(e) => setForm({ ...form, summary: e.target.value })}></textarea>
     <div class="acts"><button class="btn" type="submit" disabled=${act.busy}>${s("save")}</button>
