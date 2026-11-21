@@ -406,7 +406,8 @@ Unchanged from §3: tab layout by Haiku with a cache, a 0–10 scale, a snapshot
 a journal of new grades. New grades go to the API and the course lenses of the web app; they are not pushed (D55).
 Zeros differ from Tablo's (D72): a read keeps, for each column of the own row, the share of the other students with
 points above zero there (only the share, no one's grade); a zero counts as the student's own once half of them have
-points, is a placeholder while none do, and is «being graded» in between.
+points, is a placeholder while none do, and is «being graded» in between. In a stream's sheet with a «Группа» column
+the others are the student's own group (D80).
 A read also keeps the own row's formulas and the teachers' comments on its cells (17.6, D75), never another row's
 comments or their authors; from the header it keeps only the cells those formulas read. The formulas are counted by
 `processing/formulas.py` (the part of Excel the gradebooks use) for the grade card and the calculator, and Haiku

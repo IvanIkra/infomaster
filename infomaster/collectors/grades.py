@@ -163,11 +163,33 @@ def positive(value) -> bool:
 NAME = re.compile(r"[^\W\d_][\w.\-]*(?: [^\W\d_][\w.\-]*){1,3}")  # two to four words of letters: a person
 
 
+GROUP_HEADERS = {"группа", "group"}  # a column of the students' groups: a stream's sheet is graded group by group
+
+
+def groups(rows: list[list], own_i: int, name_j: int) -> list[str | None] | None:
+    """Each row's group when a column above the own row is headed «Группа»: the last group named at or above the row
+    (a group's number stands once at its first row, or on every row). None without such a column."""
+    j = next((j for row in rows[:own_i] for j, c in enumerate(row)
+              if j != name_j and isinstance(c, str) and " ".join(c.split()).casefold() in GROUP_HEADERS), None)
+    if j is None:
+        return None
+    out, current = [], None
+    for row in rows:
+        current = text(row[j]) if j < len(row) and text(row[j]) else current
+        out.append(current)
+    return out
+
+
 def graded_shares(rows: list[list], own_i: int, name_j: int) -> dict[str, float]:
     """For each column of the own row: the share of the other students (a row whose name column holds a person's
-    name, not a header's words) who have a number above zero in it."""
-    others = [row for i, row in enumerate(rows) if i != own_i and name_j < len(row) and isinstance(row[name_j], str)
+    name, not a header's words) who have a number above zero in it. In a stream's sheet with a group column they are
+    the student's own group (D80): another group not graded yet does not make the own group's zero a placeholder."""
+    others = [i for i, row in enumerate(rows) if i != own_i and name_j < len(row) and isinstance(row[name_j], str)
               and NAME.fullmatch(" ".join(row[name_j].split())) and not any(ch.isdigit() for ch in row[name_j])]
+    group = groups(rows, own_i, name_j)
+    if group and group[own_i] and (same := [i for i in others if group[i] == group[own_i]]):
+        others = same
+    others = [rows[i] for i in others]
     if not others:
         return {}
     return {column(j): round(sum(positive(row[j]) for row in others if j < len(row)) / len(others), 3)

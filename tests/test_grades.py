@@ -271,6 +271,30 @@ def test_graded_shares_count_the_others_not_the_header():
     assert collector.graded_shares(rows, 5, 1) == {"C": round(1 / 3, 3)}  # of the three others, one has points
 
 
+STREAM = [[None, None, 10],
+          ["Группа", "Студент", "Балл"],
+          [101, "Петров Пётр", 0],
+          [None, "Сидорова Анна", 0],
+          [None, "Орлов Олег", 0],
+          [None, "Белова Белла", 0],
+          [102, "Козлова Катя", 7],
+          [None, "Иванов Иван", 0],
+          [None, "Зайцев Захар", 9],
+          [None, "Лисина Лиза", 0]]
+
+
+def test_graded_shares_count_the_own_group_of_a_stream():
+    """Another group not graded yet does not make the own group's zero a placeholder (D80)."""
+    assert collector.graded_shares(STREAM, 7, 1) == {"C": round(2 / 3, 3)}
+    assert collector.graded_shares(STREAM, 3, 1)["C"] == 0  # the own group not graded yet: still a placeholder
+
+
+def test_graded_shares_without_a_group_column_count_the_whole_tab():
+    rows = [[None, *row[1:]] for row in STREAM]
+    rows[1][0] = "Действительная группа"  # not the group column
+    assert collector.graded_shares(rows, 7, 1) == {"C": round(2 / 7, 3)}
+
+
 def test_the_newest_event_of_a_work_is_given(grades, now):
     grades.record("abc123", None, [])
     for value in (5, 6, 7):

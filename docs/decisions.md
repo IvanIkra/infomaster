@@ -623,3 +623,11 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
     keeps its own state as itself.
   Left as they are: a cross-site POST to the share target (the service worker cannot tell it from Android's share),
   refresh-token reuse within its two minutes of grace, and the LLM budget a flood of messages can spend.
+
+- **D80. A zero counts against the own group, 22.11.2026.** Amends D72. A homework's zero was dropped as «being
+  graded» in a stream's gradebook where the student's group was graded and another group had not been yet: about
+  half of the stream's rows had no points, so the share fell under `GRADED_SHARE`. When a column above the own row is
+  headed «Группа» (exactly; «Действительная группа» is another column), each row belongs to the last group named at
+  or above it, and the share is counted over the other students of the own group. Without such a column, or with no
+  one else in the group, the whole tab counts as before. The zeros already shown keep their shares on the real
+  gradebooks; a zero that now counts arrives as a new grade, as D72 says. gradebot takes the same rule.
