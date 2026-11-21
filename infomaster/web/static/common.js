@@ -43,6 +43,8 @@ export const ICONS = {
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
   file: '<path d="M6 3h8l4 4v14H6zM14 3v4h4"/>',
   note: '<path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5"/>',
+  comment: '<path d="M4 5h16v11H9l-5 4V5z"/>',
+  calc: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15v3M8 18h.01M12 18h.01"/>',
   shelf: '<path d="M5 4h4v16H5zM11 4h4v16h-4zM17.5 5l3 .8-3.2 14-3-.8z"/>',
   sheet: '<path d="M6 3h8l4 4v14H6zM14 3v4h4M9 14l2 2 4-4"/>',
   video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>',

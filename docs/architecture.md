@@ -406,6 +406,10 @@ a journal of new grades. New grades go to the API and the course lenses of the w
 Zeros differ from Tablo's (D72): a read keeps, for each column of the own row, the share of the other students with
 points above zero there (only the share, no one's grade); a zero counts as the student's own once half of them have
 points, is a placeholder while none do, and is «being graded» in between.
+A read also keeps the own row's formulas and the teachers' comments on its cells (17.6, D75), never another row's
+comments or their authors; from the header it keeps only the cells those formulas read. The formulas are counted by
+`processing/formulas.py` (the part of Excel the gradebooks use) for the grade card and the calculator, and Haiku
+(task `grades`) writes each in a line, once for a sheet while its formulas stay.
 
 **Stage 8 details:**
 
@@ -924,6 +928,18 @@ class, interim assessment, exam, consultation, event, talk), a deadline by an ho
 its kind (photo, audio, video, notes, slides, sheet, link, text, file). `mark(kind)` in `common.js` draws them as line
 icons in the colours the dot and the diamond had. A sheet's card shows the caption it came to the bot with.
 
+**A grade in full, and the calculator** (stage 17.6, D75). A work's card opens as a view: the points of its problems
+(a problem with a comment marked), the teachers' comments on the own row's cells (the work's own first, then each
+problem's under its number), and how it is counted (`how`: Haiku's line in the owner's language, else the formula
+with the names of its cells, «SUM(1а…2*) − HW 1*»); «Change», a small button, opens the grade's field. A part is
+named without a header row of numbers only (a maximum), and a column left of the student's name is no part. The
+summary tabs show each cell's comment and how it is counted. A gradebook whose own row has formulas has a
+«Calculator»: `POST /course/calc {key, book, target?, values: {cell: number|null}, solve?: {cell, goal}}` gives the
+targets (every formula cell of the own row, the course's grade by default), the target counted with the given values
+over the sheet's, its inputs (the works and the hand-filled cells it is counted from, a formula that is no work
+followed through), and with `solve` the least value of one input in [0, its maximum] for a goal, or none. Nothing is
+saved. The lens bar has no cross: «All» goes back from a course.
+
 ## 9. Storage (SQLite)
 
 Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Tablo (§9).
@@ -1077,6 +1093,9 @@ own; Claude is an optional door, not the brain (D53).
       caption, the rest goes to the inbox.
     - 17.5 an old message's edit (done, D74): a post edited after its 14 days is stored again and read as an edit,
       its 14 days counted from the edit.
+    - 17.6 a grade in full (done, D75): the teachers' comments on the own row and the own row's formulas read from
+      the gradebooks, a work's card as a view with its problems, comments and how it is counted, the edit behind a
+      small button, and a calculator of the course's grade with «How much is needed».
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

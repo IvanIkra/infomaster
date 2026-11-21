@@ -106,7 +106,7 @@ function Days({ days, todayIso, skipToday }) {
 }
 
 // The lens: «All» and a «Courses» button that opens the list of courses in a card; with a course chosen the button
-// names it and a cross goes back to all.
+// names it, and «All» goes back.
 function Lenses({ courses, active, onPick }) {
   const [open, setOpen] = useState(false);
   const chosen = courses.find((c) => c.key === active);
@@ -115,8 +115,6 @@ function Lenses({ courses, active, onPick }) {
     <button class="lens" aria-pressed=${!active} onClick=${() => pick(null)}>${t("all")}</button>
     <button class="lens" aria-pressed=${!!active} aria-haspopup="dialog" onClick=${() => setOpen(true)}>
       ${chosen ? chosen.title : t("courses")}<span class="caret" aria-hidden="true">▾</span></button>
-    ${active && html`<button class="lens" aria-label=${t("allCourses")} onClick=${() => pick(null)}>
-      ${icon(ICONS.cross, 16)}</button>`}
     ${open && html`<div class="scrim" onClick=${() => setOpen(false)}></div>
       <section class="sheet" role="dialog" aria-label=${t("courses")}><div>
         <div class="grab" aria-hidden="true"></div>

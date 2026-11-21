@@ -62,6 +62,9 @@ const TEXTS = {
   pendingNote: ["The sheet shows 0 and no one in the group has points for it yet: not graded, so in no average.",
                 "В таблице 0, и баллов за неё пока нет ни у кого в группе: не проверена, в среднее не идёт."],
   parts: ["By problem", "По задачам"],
+  comments: ["Comments", "Комментарии"],
+  howCounted: ["How it counts", "Как считается"],
+  hasComment: ["a comment", "есть комментарий"],
   asSheet: ["As the sheet has it", "Как в таблице"],
   deleteGrade: ["Delete", "Удалить"],
   gradeSaved: ["Grade saved", "Оценка сохранена"],
@@ -274,6 +277,7 @@ export function Hidden({ onOut }) {
 
 export function GradeRow({ w }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(w.value === null ? "" : String(w.value));
   const [label, setLabel] = useState(w.label);
   const { busy, error, run } = useRun();
@@ -283,43 +287,54 @@ export function GradeRow({ w }) {
     event.preventDefault();
     const body = { id: w.id, value: number };
     if (w.own && label.trim() && label.trim() !== w.label) body.label = label.trim();
-    run(async () => { await fixIt("/grade", body, f("gradeSaved")); setOpen(false); });
+    run(async () => { await fixIt("/grade", body, f("gradeSaved")); setEditing(false); });
   };
   const reset = () => run(async () => {
     await fixIt("/grade/reset", { id: w.id }, f(w.own ? "gradeDeleted" : "gradeReset"));
-    setOpen(false);
+    setEditing(false);
   });
+  const edit = () => { setValue(w.value === null ? "" : String(w.value)); setLabel(w.label); setEditing(!editing); };
   const bonus = Number(String(w.bonus || "").replace(",", "."));
+  const parts = w.parts || [];
+  const said = [w.note && { name: "", text: w.note }, ...parts.filter((p) => p.note).map((p) => ({ name: p.header,
+    text: p.note }))].filter(Boolean);
   const notes = [w.raw !== null && w.raw !== undefined && w.max && w.max !== 10 && f("points",
     { raw: mark(round(w.raw)), max: mark(w.max) }), bonus > 0 && f("bonusN", { n: mark(bonus) }),
     w.own && f("yours"), w.edited && f("edited")].filter(Boolean).join(" · ");
   return html`<div class=${"grade" + (w.pending ? " pending" : "")}>
-    <button class="doc plain" style="width:100%;text-align:left" aria-expanded=${open} onClick=${() => {
-        if (!open) { setValue(w.value === null ? "" : String(w.value)); setLabel(w.label); }  // as it is now
-        setOpen(!open);
-      }}>
+    <button class="doc plain" style="width:100%;text-align:left" aria-expanded=${open}
+      onClick=${() => { setOpen(!open); setEditing(false); }}>
       <span>${w.label}${w.new ? html` <span class="chip">new</span>` : ""}
         ${notes && html`<div class="mut small">${notes}</div>`}</span>
+      ${said.length > 0 && html`<span class="said" title=${f("hasComment")}>${icon(ICONS.comment, 16)}</span>`}
       ${w.pending ? html`<span class="chip plain">${f(w.checking ? "checking" : "pending")}</span>`
         : html`<b>${mark(w.value)}</b>`}</button>
-    ${open && w.parts && w.parts.length > 0 && html`<div class="parts" aria-label=${f("parts")}>
-      ${w.parts.map((p, i) => html`<span key=${i}><small>${p.header || "—"}</small><b>${p.value}</b></span>`)}</div>`}
-    ${open && w.pending && html`<div class="note small" style="padding:4px 0 8px">
-      ${f(w.checking ? "checkingNote" : "pendingNote")}</div>`}
-    ${open && !w.pending && html`<form class="stack" style="gap:8px;padding:8px 0" onSubmit=${save}>
-      <div class="err" role="alert">${error}</div>
-      ${w.own && html`<label class="lab" for=${"g-l-" + w.id}>${f("label")}</label>
-        <input id=${"g-l-" + w.id} class="field" value=${label} maxlength="40"
+    ${open && html`<div class="gview">
+      ${parts.length > 0 && html`<div class="parts" aria-label=${f("parts")}>
+        ${parts.map((p, i) => html`<span key=${i} class=${p.note ? "noted" : ""}><small>${p.header || "—"}</small>
+          <b>${p.value || "—"}</b></span>`)}</div>`}
+      ${said.length > 0 && html`<div class="said-list" aria-label=${f("comments")}>${said.map((c, i) => html`
+        <p key=${i}>${c.name && html`<b>${c.name}</b>`}${c.text}</p>`)}</div>`}
+      ${w.how && html`<div class="how"><span class="lab">${f("howCounted")}</span>
+        ${w.how.text && html`<div>${w.how.text}</div>`}
+        ${w.how.formula && html`<code>${w.how.formula}</code>`}</div>`}
+      ${w.pending && html`<div class="note small">${f(w.checking ? "checkingNote" : "pendingNote")}</div>`}
+      ${!w.pending && !editing && html`<div class="gacts">
+        <button class="sec sm" onClick=${edit}>${icon(ICONS.edit, 14)}${f("change")}</button></div>`}
+      ${!w.pending && editing && html`<form class="gedit" onSubmit=${save}>
+        <div class="err" role="alert">${error}</div>
+        ${w.own && html`<input class="field" aria-label=${f("label")} value=${label} maxlength="40"
                onInput=${(e) => setLabel(e.target.value)} />`}
-      <label class="lab" for=${"g-v-" + w.id}>${f("grade")}</label>
-      <input id=${"g-v-" + w.id} class="field narrow" inputmode="decimal" value=${value}
-             onInput=${(e) => setValue(e.target.value)} />
-      ${w.edited && html`<div class="note small">${f("sheetHas", { value: mark(w.sheet_value) })}</div>`}
-      <div class="acts">
-        <button class="btn" type="submit" disabled=${busy || !valid}>${f("save")}</button>
-        ${(w.edited || w.own) && html`<button class="sec" type="button" disabled=${busy} onClick=${reset}>
-          ${w.own ? f("deleteGrade") : f("asSheet")}</button>`}
-      </div>
-    </form>`}
+        <div class="row-in">
+          <input class="field narrow" aria-label=${f("grade")} inputmode="decimal" value=${value}
+                 onInput=${(e) => setValue(e.target.value)} />
+          <button class="sec sm acc" type="submit" disabled=${busy || !valid}>${f("save")}</button>
+          ${(w.edited || w.own) && html`<button class="sec sm" type="button" disabled=${busy} onClick=${reset}>
+            ${w.own ? f("deleteGrade") : f("asSheet")}</button>`}
+          <button class="sec sm" type="button" onClick=${() => setEditing(false)}>${f("cancel")}</button>
+        </div>
+        ${w.edited && html`<div class="note small">${f("sheetHas", { value: mark(w.sheet_value) })}</div>`}
+      </form>`}
+    </div>`}
   </div>`;
 }

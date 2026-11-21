@@ -256,13 +256,17 @@ async def test_grades_with_their_parts(fixer):
     grades = (await ask(fixer, "GET", "/course?key=DM"))["grades"]
     works = {w["label"]: w for w in grades["works"]}
     assert list(works) == ["DM HW 1", "HW 2", "DM Sem 1", "Sem 2", "DM Sem 3"]
-    assert works["DM HW 1"]["parts"] == [{"header": "5 / 1a", "value": "1"}, {"header": "1b", "value": "0.5"}]
+    # a part is named by its header without a row of numbers only (the maximum of the work above it)
+    assert works["DM HW 1"]["parts"] == [{"header": "1a", "value": "1", "note": None},
+                                         {"header": "1b", "value": "0.5", "note": None}]
     assert (works["DM HW 1"]["value"], works["DM HW 1"]["bonus"], works["DM HW 1"]["pending"]) == (7.5, "0", False)
     assert works["HW 2"]["pending"] and works["HW 2"]["value"] is None and works["HW 2"]["parts"] == []
     assert works["HW 2"]["checking"] and not works["Sem 2"]["checking"]
     assert works["Sem 2"]["pending"] and works["DM Sem 3"]["parts"] == []
     assert (grades["count"], grades["pending"], grades["average"]) == (3, 2, 7.2)
-    assert grades["books"][0]["summaries"] == [{"tab": "Totals", "cells": [{"header": "Midterm", "value": "4.5"}]}]
+    assert grades["books"][0]["summaries"] == [{"tab": "Totals", "cells": [
+        {"header": "Midterm", "value": "4.5", "note": None, "how": None}]}]
+    assert not grades["books"][0]["calc"]  # no formulas: no calculator
     # an owner's change shows over the sheet's grade, and the average follows it
     await ask(fixer, "POST", "/fix/grade", {"id": "abc123|Seminars|D|Sem 3", "value": 9})
     grades = (await ask(fixer, "GET", "/course?key=DM"))["grades"]

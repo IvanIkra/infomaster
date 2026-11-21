@@ -8,7 +8,8 @@ In every visible tab the student's own row is found by the name (grades_student)
 most TOP_ROWS) and that row are kept (TabView). Where the header ends among the top
 rows is the model's to say, so the top rows go to it whole, other students' rows among them (§10); the own name does
 not. The layout by Haiku, the 0-10 scale and what counts as a new grade are processing/grades.py's: `on_sheet` gets a
-sheet read and says what came of it (Read).
+sheet read and says what came of it (Read). The own row's formulas and the teachers' comments on its cells are read
+too (17.6, D75), still read-only: a full load of a large gradebook takes more memory than the server's container has.
 
 Failures count per sheet: the download, a file that is no workbook (a sheet closed to the link gives a login page,
 a deleted or private Dropbox link an HTML page),
@@ -23,11 +24,14 @@ import datetime as dt
 import html
 import io
 import logging
+import posixpath
 import re
+import zipfile
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from xml.etree import ElementTree
 
 import aiohttp
 
@@ -130,6 +134,10 @@ class TabView:
     # column letter -> the share of the other students with a number above zero there (17.3, D72): whether a work
     # is graded for the group, so the student's zero in it is a real one. Only the share is kept, no one's grade.
     graded: dict[str, float] = field(default_factory=dict)
+    # 17.6: the own row's formulas (column letter -> "=..."), and the teachers' comments on its cells (column letter
+    # -> text, without the author). Never another row's comments.
+    formulas: dict[str, str] = field(default_factory=dict)
+    notes: dict[str, str] = field(default_factory=dict)
 
     def header(self, numbers: list[int]) -> list[dict[str, str]]:
         """The rows the model named the header, in tab order."""
@@ -163,7 +171,11 @@ def graded_shares(rows: list[list], own_i: int, name_j: int) -> dict[str, float]
 
 
 def read_views(data: bytes, student: str) -> list[TabView]:
-    """The visible tabs that have the student's row. ValueError when the data is no workbook."""
+    """The visible tabs that have the student's row. ValueError when the data is no workbook.
+
+    Read-only, as the server's memory asks (a full load of a large gradebook took more than the container has): the
+    values in one pass, the own row's formulas in a second, the comments from the file itself (read-only openpyxl
+    skips them)."""
     from openpyxl import load_workbook
 
     target = norm(student).split()
@@ -188,7 +200,89 @@ def read_views(data: bytes, student: str) -> list[TabView]:
                                  graded=graded_shares(rows, own_i, name_j)))
     finally:
         wb.close()
-    return views
+    if not views:
+        return views
+    try:
+        formulas = own_formulas(data, {v.tab: v.own_row for v in views})
+    except Exception as e:  # the values are read: the formulas are an extra
+        log.warning("the formulas of a sheet cannot be read: %s", e)
+        formulas = {}
+    try:
+        notes = own_notes(data, {v.tab: v.own_row for v in views})
+    except Exception as e:
+        log.warning("the comments of a sheet cannot be read: %s", e)
+        notes = {}
+    return [TabView(tab=v.tab, rows=v.rows, mine=v.mine, name_col=v.name_col, own_row=v.own_row, graded=v.graded,
+                    formulas={c: f for c, f in formulas.get(v.tab, {}).items() if c != v.name_col},
+                    notes={c: n for c, n in notes.get(v.tab, {}).items() if c != v.name_col}) for v in views]
+
+
+NOTE_CHARS = 1_000
+
+
+def own_formulas(data: bytes, own_rows: dict[str, int]) -> dict[str, dict[str, str]]:
+    """The formulas of the own row of each tab: tab -> column letter -> "=...". A formula's text only, no values."""
+    from openpyxl import load_workbook
+
+    found: dict[str, dict[str, str]] = {}
+    wb = load_workbook(io.BytesIO(data), read_only=True, data_only=False)
+    try:
+        for ws in wb.worksheets:
+            row = own_rows.get(ws.title)
+            if row is None:
+                continue
+            for cells in ws.iter_rows(min_row=row, max_row=row, values_only=True):
+                found[ws.title] = {column(j): c for j, c in enumerate(cells)
+                                   if isinstance(c, str) and c.startswith("=")}
+    finally:
+        wb.close()
+    return found
+
+
+MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+RELS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+DOC_RID = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+CELL_REF = re.compile(r"([A-Z]+)(\d+)")
+
+
+def own_notes(data: bytes, own_rows: dict[str, int]) -> dict[str, dict[str, str]]:
+    """The comments on the own row's cells of each tab, read from the xlsx's comment parts: tab -> column -> text.
+    Only the own row's are taken, and never the author (a teacher's name)."""
+    found: dict[str, dict[str, str]] = {}
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        names = set(z.namelist())
+
+        def rels(part: str) -> dict[str, tuple[str, str]]:
+            path = posixpath.join(posixpath.dirname(part), "_rels", posixpath.basename(part) + ".rels")
+            if path not in names:
+                return {}
+            return {e.get("Id"): (e.get("Type", ""), target(part, e.get("Target", "")))
+                    for e in ElementTree.fromstring(z.read(path)) if e.tag == RELS + "Relationship"}
+
+        def target(part: str, to: str) -> str:
+            if to.startswith("/"):
+                return to.lstrip("/")
+            return posixpath.normpath(posixpath.join(posixpath.dirname(part), to))
+
+        book = ElementTree.fromstring(z.read("xl/workbook.xml"))
+        sheets = rels("xl/workbook.xml")
+        for sheet in book.iter(MAIN + "sheet"):
+            row = own_rows.get(sheet.get("name"))
+            part = sheets.get(sheet.get(DOC_RID), ("", ""))[1]
+            if row is None or part not in names:
+                continue
+            for kind, comments in rels(part).values():
+                if not kind.endswith("/comments") or comments not in names:
+                    continue
+                for c in ElementTree.fromstring(z.read(comments)).iter(MAIN + "comment"):
+                    m = CELL_REF.fullmatch(c.get("ref", "").replace("$", ""))
+                    if m is None or int(m.group(2)) != row:
+                        continue
+                    note = "\n".join(line.strip() for line in "".join(t.text or "" for t in c.iter(MAIN + "t"))
+                                      .strip().splitlines()).strip()
+                    if note:
+                        found.setdefault(sheet.get("name"), {})[m.group(1)] = note[:NOTE_CHARS]
+    return found
 
 
 # --- the source ----------------------------------------------------------------------------

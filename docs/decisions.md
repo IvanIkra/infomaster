@@ -537,3 +537,21 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   Its batch treats it as a message read before: what its earlier text gave and is still in force (news, deadlines,
   events, found by the message's id) is replaced or withdrawn, and the model sees the edit's time next to the
   message's, so a relative date counts from the edit. Edits made while the twin was offline are caught up only when such an event comes.
+
+- **D75. A grade in full: comments, formulas and a calculator, 21.11.2026.** Stage 17.6 of §11.1. The owner wanted
+  more of a grade than its points: the gradebooks hold the teachers' comments on the student's cells (why a problem
+  lost points) and most of them the formulas that count a work from its problems and the course's grade from the
+  works (0.35·Test 1 + 0.35·Test 2 + 0.3·homework, rounded; an exam weighted 0.5). Neither was read: openpyxl's
+  read-only mode skips comments, and the values were read without formulas. A full load of the largest gradebook
+  took more memory than the container has, so the read stays read-only: the formulas come in a second read-only
+  pass over the own row, the comments from the file's comment parts, the own row's only and without the author. Of
+  the rest of a tab only the header cells the formulas read are kept (a maximum, the stars of bonus problems); a
+  formula reading another student's row is shown but not counted. A small evaluator of our own (no `eval`, no new
+  dependency) counts the formulas as Excel does (`ROUND` half away from zero, `SUMIF` with wildcards, blanks in
+  `AVERAGE` and `COUNT`); a function it does not know leaves that formula uncounted. Haiku writes each formula in a
+  line for the card, since a chain of `IF(ISNUMBER(…))` written mechanically does not read; the mechanical form, with
+  the names of the cells, stands when there is no answer. The calculator is the server's (one evaluator, tested):
+  the course's grade by default (a formula cell on top of the most formulas, not a 0/1 flag; a header like «Итог»
+  first), its works as inputs, a «what if» counted again on every change, and «How much is needed» by bisection over
+  one input, which holds since a grade grows with its works. A new comment is not news. The grade card opens as a
+  view, its edit behind a small «Change»; the lens bar lost its cross, which did what «All» does.

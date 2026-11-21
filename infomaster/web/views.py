@@ -18,7 +18,9 @@ from ..collectors.inbox import MAILBOX, message_link
 from ..i18n import Phrase, say
 from ..library import Library
 from ..library.links import Links
+from ..processing.calc import Book, short, split
 from ..processing.events import OWN
+from ..processing.formulas import col_index
 from ..processing.grades import GRADED_SHARE, Grades
 from ..processing.merge import DeadlineList
 from ..processing.news import News
@@ -416,12 +418,30 @@ class Data:
             sid = book["id"]
             read = {item["id"]: item for item in self.grades.items(sid)}
             summaries, seen = [], set()
-            for tab in self.grades.view(sid)["tabs"]:
+            view = self.grades.view(sid)
+            sheet = Book(view)
+            how = view.get("how") or {}
+
+            def told(tab: str, col: str | None, sheet: Book = sheet, how: dict = how) -> dict | None:
+                """How a cell is counted: Haiku's line in the owner's language, else the formula with names."""
+                if not col:
+                    return None
+                line = how.get(f"{tab}!{col}")
+                written = sheet.written(tab, col)
+                if not line and not written:
+                    return None
+                return {"text": line.get(self.lang(), line.get("en")) if line else None, "formula": written}
+
+            for tab in view["tabs"]:
                 cells = tab.get("columns") or []
+                notes = tab.get("notes") or {}
+                if tab.get("name_col"):  # the grades are right of the name: the group's number is none
+                    cells = [c for c in cells if col_index(c["column"]) > col_index(tab["name_col"])]
                 if tab.get("skip"):
                     if cells:
-                        summaries.append({"tab": tab["tab"], "cells": [{"header": c["header"], "value": c["value"]}
-                                                                       for c in cells]})
+                        summaries.append({"tab": tab["tab"], "cells": [
+                            {"header": c["header"], "value": c["value"], "note": notes.get(c["column"]),
+                             "how": told(tab["tab"], c["column"])} for c in cells]})
                     continue
                 laid = [w for w in tab.get("works") or [] if w.get("column")]
                 own = {w["column"] for w in laid} | {w["bonus_column"] for w in laid if w.get("bonus_column")}
@@ -429,9 +449,10 @@ class Data:
                 before = None
                 for w in sorted(laid, key=lambda w: order.index(w["column"]) if w["column"] in order else len(order)):
                     at = order.index(w["column"]) if w["column"] in order else None
-                    parts = [{"header": c["header"], "value": c["value"]}
+                    parts = [{"header": short(c["header"]), "value": c["value"], "note": notes.get(c["column"])}
                              for c in cells[(before + 1 if before is not None else 0):at or 0]
-                             if c["column"] not in own] if at is not None else []
+                             if c["column"] not in own and (c["value"] or notes.get(c["column"]))] \
+                        if at is not None else []
                     if at is not None:
                         before = at
                     work_key = f"{sid}|{tab['tab']}|{w['column']}|{w.get('header', '')}"
@@ -444,6 +465,9 @@ class Data:
                                   "label": item["label"] if item else w.get("label") or w.get("header") or "",
                                   "value": item["value"] if item else None, "raw": w.get("raw"), "max": w.get("max"),
                                   "bonus": bonus, "parts": parts, "pending": item is None,
+                                  "note": "\n".join(n for n in (notes.get(w["column"]),
+                                                                 notes.get(w.get("bonus_column") or "")) if n) or None,
+                                  "how": told(tab["tab"], w["column"]),
                                   "checking": item is None and w.get("graded") is not None
                                   and 0 < w["graded"] < GRADED_SHARE,
                                   "new": bool(item and item["new"]), "edited": bool(item and item["edited"]),
@@ -452,7 +476,7 @@ class Data:
             works += [{**item, "book": sid, "tab": "", "parts": [], "pending": False, "checking": False, "own": False}
                       for item_id, item in read.items() if item_id not in seen]
             books.append({"id": sid, "url": book["url"], "label": book["label"], "name": book.get("name", ""),
-                          "summaries": summaries})
+                          "summaries": summaries, "calc": bool(sheet.targets())})
         if self.grades is not None:
             # the grades added by hand: their course is a title, as «+» gives it
             works += [{"id": g["id"], "book": None, "tab": "", "label": g["label"], "value": g["value"], "raw": None,
@@ -463,6 +487,33 @@ class Data:
         values = [w["value"] for w in works if not w["pending"] and w["value"] is not None]
         return {"count": len(values), "pending": sum(w["pending"] for w in works), "new": sum(w["new"] for w in works),
                 "average": round(sum(values) / len(values), 1) if values else None, "works": works, "books": books}
+
+    def calc(self, key: str, book_id: str, target: str | None, given: dict[str, float | None],
+             solve: dict | None = None) -> dict | None:
+        """The calculator of a gradebook of the course (17.6): the targets it may aim at, the target counted with the
+        given values over the sheet's, its inputs, and with `solve` {cell, goal} the least value of that input that
+        brings the target to the goal. None for a gradebook that is not the course's, or a target it has not."""
+        names = sorted({item["subject"] for item in self.schedule.ruz.classes() if self.key(item["subject"]) == key})
+        book = next((b for b in self._books(key, names) if b["id"] == book_id), None) if self.grades else None
+        if book is None:
+            return None
+        sheet = Book(self.grades.view(book_id))
+        targets = sheet.targets()
+        target = target or sheet.default_target(targets)
+        if target not in {t["cell"] for t in targets}:
+            return None
+        inputs = sheet.inputs(target, {})
+        allowed = {i["cell"] for i in inputs}
+        given = {cell: value for cell, value in given.items() if cell in allowed}
+        tab, col = split(target)
+        value = sheet.value(tab, col, given)
+        answer = {"targets": [{k: t[k] for k in ("cell", "tab", "name", "value")} for t in targets],
+                  "target": target, "value": value if not isinstance(value, bool) else float(value),
+                  "how": sheet.written(tab, col), "inputs": sheet.inputs(target, given)}
+        if solve and solve.get("cell") in allowed and isinstance(solve.get("goal"), int | float):
+            answer["solve"] = {"cell": solve["cell"], "goal": float(solve["goal"]),
+                               **sheet.solve(target, solve["cell"], float(solve["goal"]), given)}
+        return answer
 
     def _documents(self, names: list[str]) -> list[dict]:
         if self.library is None or not names:

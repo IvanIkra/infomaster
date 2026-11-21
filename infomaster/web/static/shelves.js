@@ -90,6 +90,19 @@ const TEXTS = {
   lecture: ["lecture", "лекция"],
   seminar: ["seminar", "семинар"],
   classWord: ["class", "пара"],
+  calc: ["Calculator", "Калькулятор"],
+  calcTarget: ["Count", "Считать"],
+  calcFrom: ["Counted from", "Из чего считается"],
+  calcSheet: ["the sheet has {v}", "в таблице {v}"],
+  calcReset: ["As the sheet has it", "Как в таблице"],
+  calcNeed: ["How much is needed", "Сколько нужно"],
+  calcFor: ["for", "чтобы получить"],
+  calcOn: ["on", "по"],
+  calcNeedIs: ["at least {x} of {max}", "не меньше {x} из {max}"],
+  calcNever: ["not reachable even with the maximum, {max}", "не получится даже с максимумом, {max}"],
+  calcAlready: ["reached already, whatever you get", "уже есть при любом результате"],
+  ofMax: ["of {max}", "из {max}"],
+  notYetShort: ["not graded", "не оценено"],
 };
 const KINDS = { photo: ["photo", "фото"], audio: ["audio", "аудио"], video: ["video", "видео"],
                 notes: ["notes", "конспект"], slides: ["slides", "слайды"], sheet: ["sheet", "листочек"],
@@ -300,7 +313,10 @@ export function GradesList({ course, onOut }) {
           ${b.summaries.map((sum) => html`<div key=${sum.tab} class="box">
             <div class="lab" style="padding-top:10px">${sum.tab}</div>
             <dl class="pairs">${sum.cells.map((c, i) => html`<dt key=${"t" + i}>${c.header || "—"}</dt>
-              <dd key=${"d" + i}>${c.value}</dd>`)}</dl></div>`)}
+              <dd key=${"d" + i}>${c.value}${c.how && html`<div class="how"><div class="mut small">
+                ${c.how.text || html`<code>${c.how.formula}</code>`}</div></div>`}
+                ${c.note && html`<div class="said-list"><p>${c.note}</p></div>`}</dd>`)}</dl></div>`)}
+          ${b.calc && html`<${Calculator} course=${course} book=${b.id} />`}
         </section>`;
       })}
       ${g.works.some((w) => w.own) && html`<section class="stack" style="gap:8px"><h2>${s("byHand")}</h2>
@@ -309,6 +325,90 @@ export function GradesList({ course, onOut }) {
       ${!g.works.length && !g.books.length && html`<div class="box"><div class="note">${t("noGrades")}</div></div>`}
       <${AddBook} course=${course} labelChars=${status ? status.label_chars : 10} />`}
   <//>`;
+}
+
+// The calculator of a gradebook (17.6): a formula cell of the own row (the course's grade by default), the works
+// and cells it is counted from with the sheet's values, any of them changed to see the grade counted again as the
+// sheet would, and «How much is needed»: the least result on one of them for a grade. Nothing is saved.
+const dec = (v) => String(v).replace(".", getDecimal());
+
+function Calculator({ course, book }) {
+  const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState(null);
+  const [values, setValues] = useState({});
+  const [texts, setTexts] = useState({});
+  const [need, setNeed] = useState({ cell: "", goal: "" });
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const goal = Number(String(need.goal).replace(",", "."));
+  const solve = need.cell && need.goal !== "" && Number.isFinite(goal) ? { cell: need.cell, goal } : null;
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    const timer = setTimeout(async () => {
+      try {
+        const answer = await api("POST", "/course/calc", { key: course, book, target, values, solve });
+        if (!alive) return;
+        setData(answer); setError("");
+        if (!need.cell) {
+          const first = answer.inputs.find((i) => i.pending) || answer.inputs[answer.inputs.length - 1];
+          if (first) setNeed((n) => ({ ...n, cell: first.cell }));
+        }
+      } catch (e) {
+        if (alive) setError(e instanceof ApiError ? e.message : String(e));
+      }
+    }, 250);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [open, target, JSON.stringify(values), need.cell, need.goal]);
+  if (!open) return html`<button class="sec" onClick=${() => setOpen(true)}>${icon(ICONS.calc, 18)}${s("calc")}</button>`;
+  const put = (cell, text) => {
+    setTexts({ ...texts, [cell]: text });
+    const number = Number(text.replace(",", "."));
+    const next = { ...values };
+    if (text.trim() === "") next[cell] = null;
+    else if (Number.isFinite(number)) next[cell] = number;
+    setValues(next);
+  };
+  const reset = () => { setValues({}); setTexts({}); };
+  const num = (v) => (v === null || v === undefined || v === "" ? "—" : typeof v === "number"
+    ? dec(Math.round(v * 100) / 100) : String(v));
+  const changedAny = Object.keys(values).length > 0;
+  const sol = data && data.solve;
+  const solIn = data && sol && data.inputs.find((i) => i.cell === sol.cell);
+  return html`<div class="box calc">
+    <div class="lab">${s("calc")}</div>
+    <div class="err" role="alert">${error}</div>
+    ${data && html`
+      <label class="lab" for=${"ct-" + book}>${s("calcTarget")}</label>
+      <select id=${"ct-" + book} class="field" value=${data.target}
+        onChange=${(e) => { setTarget(e.target.value); setValues({}); setTexts({}); setNeed({ cell: "", goal: need.goal }); }}>
+        ${data.targets.map((tg) => html`<option key=${tg.cell} value=${tg.cell}>${tg.tab} · ${tg.name}</option>`)}
+      </select>
+      <div class="res"><big>${num(data.value)}</big>
+        ${changedAny && html`<span class="mut small">${s("calcSheet", {
+          v: num((data.targets.find((tg) => tg.cell === data.target) || {}).value) })}</span>`}</div>
+      ${data.how && html`<div class="how"><code>${data.how}</code></div>`}
+      <div class="lab">${s("calcFrom")}</div>
+      <div class="ins">${data.inputs.map((i) => html`
+        <label key=${"l" + i.cell} for=${"ci-" + i.cell}>${i.name}<small>${[i.tab, i.max && s("ofMax", { max: dec(i.max) }),
+          i.pending && s("notYetShort")].filter(Boolean).join(" · ")}</small></label>
+        <input key=${"i" + i.cell} id=${"ci-" + i.cell} class=${"field" + (i.changed ? " changed" : "")}
+          inputmode="decimal" value=${i.cell in texts ? texts[i.cell] : (i.sheet === null ? "" : num(i.sheet))}
+          onInput=${(e) => put(i.cell, e.target.value)} />`)}</div>
+      ${changedAny && html`<div><button class="sec sm" onClick=${reset}>${s("calcReset")}</button></div>`}
+      <div class="lab">${s("calcNeed")}</div>
+      <div class="need">${s("calcFor")}
+        <input class="field narrow" inputmode="decimal" aria-label=${s("calcFor")} value=${need.goal}
+          onInput=${(e) => setNeed({ ...need, goal: e.target.value })} />
+        ${s("calcOn")}
+        <select class="field" aria-label=${s("calcOn")} value=${need.cell}
+          onChange=${(e) => setNeed({ ...need, cell: e.target.value })}>
+          ${data.inputs.map((i) => html`<option key=${i.cell} value=${i.cell}>${i.name} (${i.tab})</option>`)}
+        </select></div>
+      ${sol && html`<div class="answer">${sol.need === null ? s("calcNever", { max: dec(sol.max) })
+        : sol.need === 0 ? s("calcAlready")
+        : s("calcNeedIs", { x: dec(sol.need), max: dec(solIn && solIn.max ? solIn.max : sol.max) })}</div>`}`}
+  </div>`;
 }
 
 function AddBook({ course, labelChars }) {

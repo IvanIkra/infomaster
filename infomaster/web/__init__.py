@@ -36,6 +36,7 @@ The client is plain ES modules, no build step: Preact and htm are vendored in st
 
 import datetime as dt
 import json
+import math
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -107,6 +108,7 @@ class WebApp:
                ("GET", "/deadline", deadline),
                ("GET", "/class", class_),
                ("GET", "/course", course),
+               ("POST", "/course/calc", course_calc),
                ("GET", "/news", news),
                ("GET", "/news/{news_id}", news_card),
                ("POST", "/news/{news_id}/hide", hide_news),
@@ -343,6 +345,23 @@ async def class_(request: web.Request) -> web.Response:
 async def course(request: web.Request) -> web.Response:
     found = _data(request).course(" ".join(request.query.get("key", "").split()))
     return web.json_response(found) if found else error(404, "no such course")
+
+
+async def course_calc(request: web.Request) -> web.Response:
+    """POST {key, book, target?, values: {cell: number|null}, solve?: {cell, goal}}: a gradebook's calculator (17.6).
+    Nothing is saved: the values are the owner's «what if»."""
+    data = await body(request)
+    given = data.get("values") or {}
+    if not isinstance(given, dict) or not all(isinstance(k, str) and (v is None or isinstance(v, int | float))
+                                              and not isinstance(v, bool) and (v is None or math.isfinite(v))
+                                              for k, v in given.items()):
+        return error(400, "values: {cell: number or null} expected")
+    target, solve = data.get("target"), data.get("solve")
+    found = _data(request).calc(" ".join(str(data.get("key") or "").split()), str(data.get("book") or ""),
+                                target if isinstance(target, str) else None,
+                                {k: float(v) if v is not None else None for k, v in given.items()},
+                                solve if isinstance(solve, dict) else None)
+    return web.json_response(found) if found else error(404, "no such gradebook or target")
 
 
 # --- news (stage 16.7) ----------------------------------------------------------------------------------------
