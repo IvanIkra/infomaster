@@ -39,6 +39,7 @@ from .. import clock
 from ..i18n import Alert, Phrase, say
 from ..llm.budget import BudgetExceeded
 from ..llm.client import LLMError
+from ..net import public_session
 from ..settings import DROPBOX_PREFIX, Settings, dropbox_file, grade_sheet_id, not_xlsx
 
 log = logging.getLogger(__name__)
@@ -373,7 +374,7 @@ class GradeSheets:
         self.sheets = {sid: self.sheets.get(sid) or SheetStatus() for sid in ids}
         if not student or not sheets:
             return
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=TIMEOUT)) as session:
+        async with public_session(timeout=aiohttp.ClientTimeout(total=TIMEOUT)) as session:
             for sid, sheet in zip(ids, sheets, strict=True):
                 await self._poll_sheet(session, sid, sheet, student)
 

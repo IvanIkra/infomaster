@@ -17,6 +17,8 @@ from urllib.parse import parse_qsl, quote, unquote, urlencode, urlsplit, urlunsp
 
 import aiohttp
 
+from ..net import PrivateAddress, public_session
+
 LINK = re.compile(r"https?://[^\s<>\"'«»\[\]]+")
 TRAILING = ".,;:!?)»"
 TIMEOUT = aiohttp.ClientTimeout(total=120, sock_read=60)
@@ -130,7 +132,7 @@ async def fetch(url: str, path: Path, limit: int) -> str | None:
     """Files.fetch_url: the PDF behind a link into `path`; its name, or None when there is none (a folder, a page, a
     file that is no PDF, a link that needs a login). LinkError when the service or the network fails."""
     try:
-        async with aiohttp.ClientSession(timeout=TIMEOUT, headers={"User-Agent": "infomaster"}) as session:
+        async with public_session(timeout=TIMEOUT, headers={"User-Agent": "infomaster"}) as session:
             host = urlsplit(url).netloc.lower().removeprefix("www.")
             if host in ("disk.yandex.ru", "disk.yandex.com", "yadi.sk", "disk.360.yandex.ru"):
                 found = await _yandex(session, url)
@@ -139,5 +141,7 @@ async def fetch(url: str, path: Path, limit: int) -> str | None:
                 address, name = found
                 return name if await _save(session, address, path, limit) else None
             return await _save(session, direct(url), path, limit)
+    except PrivateAddress:
+        return None  # a link into the service's own network is no sheet (D79)
     except (aiohttp.ClientError, TimeoutError) as e:
         raise LinkError(str(e) or type(e).__name__) from e

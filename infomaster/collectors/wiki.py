@@ -31,6 +31,7 @@ import aiohttp
 
 from .. import clock
 from ..i18n import Alert, Phrase
+from ..net import public_session
 from ..settings import Settings
 from ..store import Store
 from .inbox import Inbox
@@ -264,7 +265,7 @@ async def read_page(api: str, title: str) -> tuple[int, str, str]:
     their own (curl's is refused)."""
     params = {"action": "parse", "page": title, "prop": "wikitext|revid", "format": "json", "formatversion": "2",
               "redirects": "1"}
-    async with aiohttp.ClientSession(timeout=TIMEOUT, headers={"User-Agent": "infomaster"}) as session:
+    async with public_session(timeout=TIMEOUT, headers={"User-Agent": "infomaster"}) as session:
         async with session.get(api, params=params) as response:
             response.raise_for_status()
             data = await response.json(content_type=None)

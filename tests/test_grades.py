@@ -85,6 +85,14 @@ class FakeLLM:
         return spec(prompt)
 
 
+@pytest.fixture(autouse=True)
+def local_sheets(monkeypatch):
+    """The fake Google and Dropbox servers listen on 127.0.0.1, which the service never fetches from (D79)."""
+    from infomaster import net
+
+    monkeypatch.setattr(net, "is_public", lambda address: True)
+
+
 @pytest.fixture
 def settings(store):
     settings = Settings(store)
