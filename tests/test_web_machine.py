@@ -121,7 +121,7 @@ async def test_overview(machine, merged):
     assert [(a["text"], a["screen"]) for a in seen["attention"]] == [
         ("The twin is not logged in: no chat is read", "machine/chats"),
         ("HSE App X needs a login", "machine/hseapp"),
-        ("A wiki page is not read: DM", "machine/processing"),
+        ("A wiki page is not read: DM", "machine/wiki"),
         ("The calendar feeds are off: no CALENDAR_SECRET in .env", None)]
     assert seen["library"] is None  # no library on this port
     assert seen["has"] == {"twin": True, "settings": True, "grades": True, "reminders": True, "pdf": False,

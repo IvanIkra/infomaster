@@ -1,7 +1,7 @@
 // «Machine» (§8.6, stage 16.6, D65): the sources and their freshness, the journal with undo, and the settings moved
 // over from the Mini App. A change of a setting is journaled on the server; the note at the top offers its undo.
 import { useEffect, useState } from "preact/hooks";
-import { ApiError, CHANGED, ICONS, api, changed, go, html, icon, toast } from "./common.js";
+import { ApiError, CHANGED, ICONS, api, backTo, changed, go, html, icon, toast } from "./common.js";
 import { getLang, setLang } from "./i18n.js";
 
 const TEXTS = {
@@ -145,6 +145,7 @@ const TEXTS = {
   aboutMeHint: ["Group, subgroup, English group, electives: what is meant for others does not count.",
                 "Группа, подгруппа, группа английского, майноры: что адресовано другим, не учитывается."],
   wikiPages: ["Course wiki pages", "Страницы вики курсов"],
+  wikiFailed: ["Not read, tried again on the next round: {error}", "Не прочиталась, попробую в следующий раз: {error}"],
   wikiHint: ["New sheets and homework of these pages come as letters. One address a line.",
              "Новые листочки и ДЗ с этих страниц приходят письмами. По адресу в строке."],
   reminders: ["Deadline reminders", "Напоминания о сроках"],
@@ -290,7 +291,7 @@ function useMachine(path, onOut) {
 function Screen({ title, sub, back = "#/machine", error, children }) {
   return html`<main class="screen">
     <header class="top">
-      <a class="rb" href=${back} aria-label=${m("back")}>${icon(ICONS.back)}</a>
+      <a class="rb" href=${backTo(back)} aria-label=${m("back")}>${icon(ICONS.back)}</a>
       <div><h1>${title}</h1>${sub && html`<div class="mut small">${sub}</div>`}</div>
     </header>
     <div class="err" role="alert">${error}</div>
@@ -298,8 +299,8 @@ function Screen({ title, sub, back = "#/machine", error, children }) {
   </main>`;
 }
 
-function Section({ title, foot, children }) {
-  return html`<section class="stack" style="gap:6px">
+function Section({ id, title, foot, children }) {
+  return html`<section class="stack" style="gap:6px" id=${id}>
     ${title && html`<h2>${title}</h2>`}
     <div class="box list">${children}</div>
     ${foot && html`<div class="note small">${foot}</div>`}
@@ -335,7 +336,7 @@ function Field({ value, onSave, ...rest }) {
 const COUNTS = { twin: "countTwin", mail: "countMail", ruz: "countRuz", hseapp: "countHseapp", grades: "countGrades",
                  wiki: "countWiki", batches: "countBatches", images: "countImages" };
 const SCREENS = { twin: "#/machine/chats", hseapp: "#/machine/hseapp", grades: "#/machine/grades",
-                  wiki: "#/machine/processing", images: "#/machine/processing", llm: "#/machine/llm",
+                  wiki: "#/machine/wiki", images: "#/machine/processing?at=images", llm: "#/machine/llm",
                   batches: "#/machine/processing" };
 
 function SourceRow({ s, llm }) {
@@ -376,6 +377,7 @@ export function Machine({ onOut, onLang }) {
         ${data.has.hseapp && html`<${Go} href="#/machine/hseapp" title=${m("hseapp")} />`}
         ${data.has.grades && html`<${Go} href="#/machine/grades" title=${m("grades")} />`}
         ${data.has.settings && html`<${Go} href="#/machine/processing" title=${m("processing")} />`}
+        ${data.has.settings && html`<${Go} href="#/machine/wiki" title=${m("wiki")} />`}
         <${Go} href="#/machine/courses" title=${m("courses")} />
         ${data.llm && html`<${Go} href="#/machine/llm" title=${m("llm")}
           value=${`${usd(data.llm.spent_usd)} / ${usd(data.llm.limit_usd)}`} bad=${data.llm.level === "hard"} />`}
@@ -621,13 +623,41 @@ export function HseApp({ onOut }) {
 
 // --- batches, news, reminders, PDFs, images ---------------------------------------------------------------------
 
-export function Processing({ onOut }) {
+// A section named in the route (`?at=images`) is scrolled to once the screen has its data.
+function useFocus(at, ready) {
+  useEffect(() => {
+    const target = at && ready && document.getElementById(at);
+    if (target) target.scrollIntoView({ block: "start" });
+  }, [at, ready]);
+}
+
+export function Wiki({ onOut }) {
+  const { data, error, busy, run } = useMachine("/machine/settings", onOut);
+  if (!data) return html`<${Screen} title=${m("wiki")} error=${error} />`;
+  const pages = data.general.wiki_pages, wiki = data.wiki || {};
+  const save = (text) => run(() => api("PATCH", "/machine/settings/general",
+    { wiki_pages: text.split("\n").map((v) => v.trim()).filter(Boolean) }));
+  return html`<${Screen} title=${m("wiki")} error=${error}>
+    <${Section} title=${m("wikiPages")} foot=${m("wikiHint")}>
+      <textarea class="field area" style="margin:10px 0" disabled=${busy} spellcheck="false" autocomplete="off"
+        placeholder="https://wiki…/Course" value=${pages.join("\n")} onChange=${(e) => save(e.target.value)}
+      ></textarea>
+      ${pages.map((url) => wiki[url] && (wiki[url].error || wiki[url].title) && html`<div class="row" key=${url}>
+        <div><b>${wiki[url].title || url}</b>
+          <div class=${wiki[url].error ? "err small" : "mut small"}>${wiki[url].error
+            ? m("wikiFailed", { error: wiki[url].error }) : m("works", { n: wiki[url].items })}</div>
+        </div></div>`)}
+    <//>
+  <//>`;
+}
+
+export function Processing({ at, onOut }) {
   const { data, error, busy, run } = useMachine("/machine/settings", onOut);
   const set = (group, values) => run(() => api("PATCH", `/machine/settings/${group}`, values));
   const number = (text) => (text.trim() === "" ? NaN : Number(text));
+  useFocus(at, !!data);
   if (!data) return html`<${Screen} title=${m("processing")} error=${error} />`;
   const g = data.general;
-  const wiki = data.wiki || {};
   return html`<${Screen} title=${m("processing")} error=${error}>
     <${Section} foot=${m("batchHint")}>
       <div class="row"><div><b>${m("batchEvery")}</b></div>
@@ -642,16 +672,6 @@ export function Processing({ onOut }) {
     <${Section} title=${m("aboutMe")} foot=${m("aboutMeHint")}>
       <textarea class="field area" style="margin:10px 0" maxlength="500" disabled=${busy} value=${g.about_me}
         onChange=${(e) => set("general", { about_me: e.target.value })}></textarea>
-    <//>
-    <${Section} title=${m("wikiPages")} foot=${m("wikiHint")}>
-      <textarea class="field area" style="margin:10px 0" disabled=${busy} spellcheck="false" autocomplete="off"
-        placeholder="https://wiki…/Course" value=${g.wiki_pages.join("\n")}
-        onChange=${(e) => set("general", { wiki_pages: e.target.value.split("\n").map((v) => v.trim()).filter(Boolean) })}
-      ></textarea>
-      ${g.wiki_pages.map((url) => wiki[url] && (wiki[url].error || wiki[url].title) && html`<div class="row" key=${url}>
-        <div><b>${wiki[url].title || url}</b>
-          <div class=${wiki[url].error ? "err small" : "mut small"}>${wiki[url].error || m("works", { n: wiki[url].items })}</div>
-        </div></div>`)}
     <//>
     ${data.reminders && html`<${Section} title=${m("reminders")}>
       <div class="row"><div><b>${m("remindersOn")}</b></div>
@@ -673,7 +693,7 @@ export function Processing({ onOut }) {
         <${Field} class="field narrow" type="number" min="1000" max="200000" step="1000" inputmode="numeric"
           value=${data.pdf.pdf_tokens} disabled=${busy} onSave=${(v) => set("pdf", { pdf_tokens: number(v) })} /></div>
     <//>`}
-    <${Section} title=${m("images")} foot=${m("imagesHint")}>
+    <${Section} id="images" title=${m("images")} foot=${m("imagesHint")}>
       <div class="row"><div><b>${m("imagesDaily")}</b>
           ${data.images.today !== undefined && html`<div class="mut small">${m("countImages", { n: data.images.today })}</div>`}</div>
         <${Field} class="field narrow" type="number" min="0" max="500" inputmode="numeric" value=${data.images.daily}

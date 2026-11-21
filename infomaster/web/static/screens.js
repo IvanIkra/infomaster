@@ -190,7 +190,6 @@ export function Feed({ course, push, onOut }) {
   return html`<main class="screen">
     <header class="top">
       ${header}
-      <button class="rb" aria-label=${t("search")} disabled>${icon(ICONS.search)}</button>
       <a class="rb" href="#/shelf" aria-label=${t("shelves")}>${icon(ICONS.shelf)}
         ${data && data.inbox > 0 && html`<span class="count">${data.inbox}</span>`}</a>
       <${MachineDot} data=${data} error=${error} />

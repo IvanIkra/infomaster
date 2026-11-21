@@ -75,6 +75,23 @@ export function route() {
   return { path: path || "/", params: new URLSearchParams(query || "") };
 }
 
+// The screens the owner went through since the last top screen (the feed, a course, the week, the news): «Back»
+// returns to the one before, where they came from; with none (a link opened straight), to the screen's own parent.
+// Cards over a screen are not screens. Runs before the app reads the new route (registered first).
+const TOP = new Set(["/", "/week", "/news", "/course"]);
+const OVER = new Set(["/d", "/c", "/n", "/s", "/i", "/check", "/add"]);
+let trail = [];
+const step = () => {
+  const at = location.hash.slice(1) || "/", path = at.split("?")[0] || "/";
+  if (OVER.has(path)) return;
+  if (TOP.has(path)) trail = [at];
+  else if (trail.length > 1 && trail[trail.length - 2] === at) trail.pop();
+  else if (trail[trail.length - 1] !== at) trail.push(at);
+};
+step();
+window.addEventListener("hashchange", step);
+export const backTo = (parent) => (trail.length > 1 ? "#" + trail[trail.length - 2] : parent);
+
 export function go(path, params = {}) {
   const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
   location.hash = path + (query ? "?" + query : "");

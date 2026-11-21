@@ -5,7 +5,7 @@ from test_sheet_sources import remote_links  # noqa: F401
 from test_sheets import SHEET3, batches, files, llm, sheet_item, sheets  # noqa: F401
 
 from infomaster.collectors.inbox import MAILBOX
-from infomaster.collectors.wiki import NEXT_KEY, SENDER, STALE_AFTER, Wiki, items, page_api
+from infomaster.collectors.wiki import NEXT_KEY, SENDER, STALE_AFTER, Wiki, WikiDown, items, page_api
 from infomaster.processing.batches import Changes
 from infomaster.settings import Settings
 
@@ -117,6 +117,12 @@ async def test_a_failing_page_is_told_after_a_day(wiki, now):
     wiki.reader.fail = None
     await wiki.poll()
     assert len(wiki.told) == 2 and wiki.status()["pages"][PAGE]["error"] is None
+
+
+async def test_the_wikis_own_failure_reads_plainly(wiki):
+    wiki.reader.fail = WikiDown("Wikimedia\\Rdbms\\DBConnectionError")
+    assert await wiki.poll() == 0
+    assert wiki.status()["pages"][PAGE]["error"] == "the wiki's server failed (Wikimedia\\Rdbms\\DBConnectionError)"
 
 
 async def test_a_notice_becomes_a_sheet(wiki, batches, llm, sheets, files, remote_links):  # noqa: F811

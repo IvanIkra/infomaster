@@ -564,3 +564,14 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   deadline «Calc: Test 1 problems». The batch gives such a title when a sheet has no number. The note on top after an
   action has a cross and goes when swiped up or aside, besides its 10 seconds. The empty due date of a sheet's form
   keeps the field's shape in Safari, with «Due date» beside it.
+
+- **D77. «Back» returns where the owner came from; the wiki has its own screen, 21.11.2026.** Stage 17.8 of §11.1.
+  The «Course wiki» row of «Machine» opened «Batches and news», where the wiki pages were the third section, below
+  the screen: it looked like the wrong screen. The wiki pages now have a screen of their own (`#/machine/wiki`), and a
+  route may name a section to scroll to (`#/machine/processing?at=images`). A pass over every route found «Back»
+  fixed to a screen's parent wherever it was opened from: the library opened from «Machine» went back to the feed, a
+  course's raw items opened from the shelves went back to the course. The client now keeps the screens the owner went
+  through since the last top screen (the feed, a course, the week, the news; cards over a screen are not screens),
+  and «Back» returns to the one before, the parent only for a link opened straight. The feed's search button, which
+  never did anything, is gone; the news have the shelves' button as the feed has. An error of the wiki's own (its
+  database down, `internal_api_error_*`) reads «the wiki's server failed», not as a Python exception.

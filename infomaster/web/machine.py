@@ -158,10 +158,10 @@ class Machine:
         for url, page in ((status.get("wiki") or {}).get("pages") or {}).items():
             if page.get("error"):
                 name = page.get("title") or url
-                add(f"A wiki page is not read: {name}", f"Страница вики не читается: {name}", "machine/processing")
+                add(f"A wiki page is not read: {name}", f"Страница вики не читается: {name}", "machine/wiki")
         if (images := status.get("images") or {}).get("error"):
             add(f"Reading images failed: {say(images['error'], lang)}",
-                f"Чтение картинок не удалось: {say(images['error'], lang)}", "machine/processing")
+                f"Чтение картинок не удалось: {say(images['error'], lang)}", "machine/processing?at=images")
         if (budget := app.get(actions.BUDGET_KEY)) is not None:
             level = budget.status().get("level")
             if level == "hard":

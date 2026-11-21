@@ -2,7 +2,7 @@
 // to the screens (screens.js).
 import { render } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
-import { ApiError, CHANGED, ICONS, TOAST, api, go, html, icon, route } from "./common.js";
+import { ApiError, CHANGED, ICONS, TOAST, api, backTo, go, html, icon, route } from "./common.js";
 import { getLang, setLang, t, when } from "./i18n.js";
 import * as passkey from "./passkey.js";
 import { Card, CheckQueue, Feed, Week } from "./screens.js";
@@ -11,7 +11,7 @@ import { AddSheet } from "./add.js";
 import { NewsCard, NewsList } from "./news.js";
 import { Hidden } from "./fixes.js";
 import { DocsList, GradesList, Inbox, ItemCard, RawList, SheetCard, SheetList, ShelfHome } from "./shelves.js";
-import { Chat, Chats, ConnectorScreen, Courses, Gradebook, Gradebooks, HseApp, Journal, Llm, Machine,
+import { Chat, Chats, ConnectorScreen, Courses, Gradebook, Gradebooks, HseApp, Journal, Llm, Machine, Wiki,
          NotificationPrefs, Processing, Tab } from "./machine.js";
 
 const LANG_KEY = "infomaster.lang";  // the login screen's choice, before the server's setting is known
@@ -136,7 +136,7 @@ function Devices({ onOut }) {
 
   return html`<main class="screen">
     <header class="top">
-      <a class="rb" href="#/machine" aria-label=${t("back")}>${icon(ICONS.back)}</a>
+      <a class="rb" href=${backTo("#/machine")} aria-label=${t("back")}>${icon(ICONS.back)}</a>
       <div><h1>${t("login")}</h1></div>
     </header>
     <div class="err" role="alert">${error}</div>
@@ -226,7 +226,8 @@ function machineScreen(at, out, load) {
     case "/machine/chats": return html`<${Chats} onOut=${out} />`;
     case "/machine/chat": return html`<${Chat} key=${p.get("id")} id=${p.get("id")} onOut=${out} />`;
     case "/machine/hseapp": return html`<${HseApp} onOut=${out} />`;
-    case "/machine/processing": return html`<${Processing} onOut=${out} />`;
+    case "/machine/processing": return html`<${Processing} key=${p.get("at")} at=${p.get("at")} onOut=${out} />`;
+    case "/machine/wiki": return html`<${Wiki} onOut=${out} />`;
     case "/machine/courses": return html`<${Courses} onOut=${out} />`;
     case "/machine/llm": return html`<${Llm} onOut=${out} />`;
     case "/machine/grades": return html`<${Gradebooks} onOut=${out} />`;

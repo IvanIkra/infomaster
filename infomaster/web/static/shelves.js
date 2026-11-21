@@ -2,7 +2,7 @@
 // and the sorting of its inbox. A sheet and an item have a card over the screen, as news have. Every change is the
 // connector's tool behind the API: the toast offers the undo, but for a sheet joined or deleted, which has none.
 import { useEffect, useState } from "preact/hooks";
-import { ApiError, ICONS, api, changed, go, html, icon, mark, toast } from "./common.js";
+import { ApiError, ICONS, api, backTo, changed, go, html, icon, mark, toast } from "./common.js";
 import { day, getLang, t } from "./i18n.js";
 import { getDecimal, useAct, useLoad } from "./screens.js";
 import { GradeRow } from "./fixes.js";
@@ -136,7 +136,7 @@ const done = (answer, text) => {
 function Screen({ title, sub, back, error, children }) {
   return html`<main class="screen">
     <header class="top">
-      <a class="rb" href=${back} aria-label=${t("back")}>${icon(ICONS.back)}</a>
+      <a class="rb" href=${backTo(back)} aria-label=${t("back")}>${icon(ICONS.back)}</a>
       <div><h1>${title}</h1>${sub && html`<div class="mut small">${sub}</div>`}</div>
     </header>
     <div class="err" role="alert">${error}</div>

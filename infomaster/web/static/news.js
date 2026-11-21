@@ -27,6 +27,7 @@ export function NewsList({ onOut }) {
   return html`<main class="screen">
     <header class="top">
       <div><div class="kicker">${data ? t("newsLive", { n: data.ttl_hours }) : ""}</div><h1>${t("newsTitle")}</h1></div>
+      <a class="rb" href="#/shelf" aria-label=${t("shelves")}>${icon(ICONS.shelf)}</a>
       <${MachineDot} data=${data} error=${error} />
     </header>
     <div class="err" role="alert">${error}</div>

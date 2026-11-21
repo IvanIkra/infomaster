@@ -3,7 +3,7 @@
 // Every change is the connector's tool behind /fix, journaled: the toast offers its undo. A class's correction takes
 // every field at once (the tool resets one it is not given), so the card's fields go with the owner's changes.
 import { useEffect, useState } from "preact/hooks";
-import { ApiError, ICONS, api, changed, html, icon, toast } from "./common.js";
+import { ApiError, ICONS, api, backTo, changed, html, icon, toast } from "./common.js";
 import { day, getLang, kind, t } from "./i18n.js";
 
 const TEXTS = {
@@ -248,7 +248,7 @@ export function Hidden({ onOut }) {
   const restore = (path, body) => run(() => fixIt(path, body, f("restored")));
   return html`<main class="screen">
     <header class="top">
-      <a class="rb" href="#/machine" aria-label=${t("back")}>${icon(ICONS.back)}</a>
+      <a class="rb" href=${backTo("#/machine")} aria-label=${t("back")}>${icon(ICONS.back)}</a>
       <div><h1>${f("hiddenTitle")}</h1><div class="mut small">${f("hiddenSub")}</div></div>
     </header>
     <div class="err" role="alert">${loadError || error}</div>

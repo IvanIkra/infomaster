@@ -1,6 +1,6 @@
 // «Machine → Notifications» (stage 16.4): Web Push on this device, on or off, and a test message.
 import { useEffect, useState } from "preact/hooks";
-import { ICONS, api, html, icon } from "./common.js";
+import { ICONS, api, backTo, html, icon } from "./common.js";
 import { t } from "./i18n.js";
 
 const supported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
@@ -60,7 +60,7 @@ export function Notifications({ onOut, onChange, children }) {
   const blocked = supported() && Notification.permission === "denied";
   return html`<main class="screen">
     <header class="top">
-      <a class="rb" href="#/machine" aria-label=${t("back")}>${icon(ICONS.back)}</a>
+      <a class="rb" href=${backTo("#/machine")} aria-label=${t("back")}>${icon(ICONS.back)}</a>
       <div><h1>${t("notifications")}</h1></div>
     </header>
     <div class="stack">

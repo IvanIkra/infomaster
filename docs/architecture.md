@@ -928,6 +928,10 @@ class, interim assessment, exam, consultation, event, talk), a deadline by an ho
 its kind (photo, audio, video, notes, slides, sheet, link, text, file). `mark(kind)` in `common.js` draws them as line
 icons in the colours the dot and the diamond had. A sheet's card shows the caption it came to the bot with.
 
+**Routes and «Back»** (stage 17.8, D77). «Back» returns to the screen the owner came from since the last top screen
+(the feed, a course, the week, the news), else to the screen's parent; cards over a screen do not count. «Machine →
+Course wiki» is a screen of its own; a route may name a section to scroll to (`?at=images`).
+
 **A sheet's number or title** (stage 17.7, D76). The sheet's form has one field «Number or title»: a number shows as
 «№ 3», a title (a sheet without a number, «Test 1 problems») as it is. The note on top after an action has a
 cross and goes when swiped up or aside.
@@ -1102,6 +1106,8 @@ own; Claude is an optional door, not the brain (D53).
       small button, and a calculator of the course's grade with «How much is needed».
     - 17.7 a sheet's title and notes that go (done, D76): a sheet without a number takes a short title in the same
       field, shown as it is («№ 3» for a number); the note after an action closes with a cross or a swipe.
+    - 17.8 routes (done, D77): «Back» returns to the screen the owner came from, the wiki pages have their own
+      screen, the dead search button is gone.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

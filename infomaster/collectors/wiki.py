@@ -195,6 +195,9 @@ class Wiki:
             try:
                 api, title = page_api(url)
                 revid, title, wikitext = await self.reader(api, title)
+            except WikiDown as e:
+                self._failed(url, f"the wiki's server failed ({e})")
+                continue
             except (aiohttp.ClientError, TimeoutError, ValueError, KeyError) as e:
                 self._failed(url, f"{type(e).__name__}: {e}")
                 continue
@@ -252,6 +255,10 @@ class Wiki:
         self._told.discard(url)
 
 
+class WikiDown(ValueError):
+    """The wiki answered with an error of its own (a database down): it passes, the page is read on a later poll."""
+
+
 async def read_page(api: str, title: str) -> tuple[int, str, str]:
     """(revision id, title, wikitext) of a page by the MediaWiki API. The wiki refuses requests without a user agent of
     their own (curl's is refused)."""
@@ -262,6 +269,9 @@ async def read_page(api: str, title: str) -> tuple[int, str, str]:
             response.raise_for_status()
             data = await response.json(content_type=None)
     if "error" in data:
-        raise ValueError(data["error"].get("info") or data["error"].get("code"))
+        code = str(data["error"].get("code") or "")
+        if code.startswith("internal_api_error"):  # the wiki's own failure, its database down: not the page's
+            raise WikiDown(code.removeprefix("internal_api_error_"))
+        raise ValueError(data["error"].get("info") or code)
     parsed = data["parse"]
     return int(parsed["revid"]), parsed["title"], parsed["wikitext"]
