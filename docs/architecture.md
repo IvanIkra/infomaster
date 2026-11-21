@@ -87,6 +87,7 @@ connector/    oauth, mcp, tools, catalog, changes       — the MCP connector fo
 web/          the web app: server and static client     — §8.6
 library/      raw material and the knowledge base       — §6.8
 settings/     storing and validating settings
+net.py        HTTP to public addresses only             — every fetch of a link others chose (D79)
 ```
 
 The rule: collectors never call the LLM, and processing never goes to the network except through `llm/`.
@@ -653,8 +654,8 @@ access; the client's own approval of each change is the gate.
 
 There is no password. The authorize page names the client and where the browser goes back to; **Send a code to
 Telegram** makes the bot send a six-digit code to the owner's private chat (`TG_OWNER_ID`; the owner must have pressed
-Start there once), and the owner types it in. Five wrong codes end the page's code; a page gets a code every 30
-seconds at most and the bot sends at most 10 an hour; a page and its code live 10 minutes. Then the browser goes back
+Start there once), and the owner types it in. Three wrong codes end the page's code; a page gets a code every 30
+seconds at most and the bot sends at most 6 an hour and 12 a day (D79); a page and its code live 10 minutes. Then the browser goes back
 with an authorization code (5 minutes, one use; used twice, it revokes the connection it gave). An access token lives
 an hour; a refresh token rotates at each use (the one just used still works two minutes, for two refreshes in flight)
 and lapses after 30 days unused. Tokens are kept as SHA-256 hashes (`connector_grants`, `connector_tokens`); the open
@@ -728,15 +729,18 @@ makes it installable; on iOS, notifications need the app on the Home Screen, and
 **Login** (`web/auth.py`). Only the owner:
 
 - the first login on a device is a six-digit code the bot sends to the owner's private chat on request (a new code
-  at most every 30 seconds and 10 an hour; 5 wrong tries drop it; it lives 10 minutes);
+  at most every 30 seconds, 6 an hour and 12 a day; 3 wrong tries drop it; it lives 10 minutes (D79));
 - a logged-in device may add a passkey: discoverable, with user verification, bound to the host of `PUBLIC_URL`.
   Later logins use it with no name and no code. If the Funnel name changes, passkeys stop working and the code still
   does;
 - a session is a random token in a cookie on `/web` (HttpOnly, Secure, SameSite=Strict, 90 days); the database keeps
-  its SHA-256 (`web_sessions`), and a session unused for 90 days is gone. **Machine → Login and devices** lists the
+  its SHA-256 (`web_sessions`), and a session unused for 90 days, or a year after its login, is gone; the bot tells
+  the owner when a passkey is added (D79). **Machine → Login and devices** lists the
   sessions and passkeys, ends a session elsewhere, removes a passkey, adds one and logs out;
 - a request under `/web/api` that changes something must carry the app's own `Origin`; codes and WebAuthn
-  challenges live in memory, so a restart only asks for a new code.
+  challenges live in memory, so a restart only asks for a new code;
+- every response under `/web` has a CSP that runs only the app's own files and its import map, no framing and no
+  type sniffing; the library's files (`/library/<token>`) never run on this origin (D79).
 
 **Reading** (`web/views.py`, step 16.2). A course is known by its key, the dictionary's abbreviation of its name
 (§6.2), or the name until the dictionary has one: classes, events and deadlines name their course each in their own
@@ -1109,6 +1113,9 @@ own; Claude is an optional door, not the brain (D53).
       screen, the dead search button is gone.
     - 17.9 a pass over every screen's flows (done, D78): cards leave no history entry, the course carries through
       News and «+», confirmations where there is no undo, labelled forms, the week never strands the owner.
+    - 17.10 a security review (done, D79): library files never run on the app's origin and the app has a CSP, fewer
+      guesses of the bot's codes, small bodies before anyone is known, fetches to public addresses only, memory bounds
+      for PDFs, letters, grade sheets and formulas, only trusted study sources move what others told.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

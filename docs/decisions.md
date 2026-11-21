@@ -597,3 +597,28 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
     after a change, larger tap targets in the week and the grade edit, long file names wrap.
   Left as they are: overlapping classes in the week's grid, a «Hidden» link outside «Machine», days counted by the
   phone's clock in a card.
+- **D79. A security review, 22.11.2026.** Stage 17.10 of §11.1. Nine reviewers went over the public port, the
+  connector, the outbound fetches, the parsers, the model's answers, the client and the deployment; each finding was
+  checked from three sides (can it be reached, does the code do it, what does it cost). What changed:
+  - Files of the library are served as a safe image, audio, video or PDF, any text as plain text, the rest as a
+    download, with `nosniff` and a sandbox CSP: a chat member chooses a file's type, and an HTML or SVG file opened
+    inline ran next to the web app's session. The web app sends a CSP that runs only its own files and its import map
+    (by hash), no framing, a same-origin referrer and `no-store` on the API.
+  - The codes from the bot (the web app and the connector): three tries each, six codes an hour and twelve a day,
+    counted before the bot is awaited. WebAuthn challenges are capped; a claude.ai redirect must be its MCP callback.
+    A session ends a year after its login; the bot tells the owner when a passkey is added.
+  - The public port reads at most 2 MB whole; uploads stream, /mcp reads its body after the token.
+  - Links of chats and letters, wiki pages and grade sheets are fetched from public addresses only
+    (`infomaster/net.py`: every host resolved and checked, on every redirect).
+  - Memory within the 256 MB container: the twin checks a file's size of now before downloading; a sheet's PDF up
+    to 20 MB, hashed in chunks, pypdf streams inflate to 20 MB; a letter over 15 MB is read by its headers, a poll
+    holds 40 MB; a grade sheet up to 20 MB, refused when it unpacks past 120 MB, a tab read up to 5000×400; a
+    formula's range up to 20000 cells, its nesting up to 64, odd arithmetic an error of the cell.
+  - The model's answers: a letter from outside hse.ru (the wiki's own notices aside) adds but moves, cancels and
+    replaces nothing; a chat that is no study one sees and changes only its own items; a withdrawn move gives back
+    the deadline it moved; names in the prompt are quoted; fields are capped. The connector marks outside text and
+    may not turn a chat on.
+  - The HSE callback shows only an OAuth error code; the service's container does not hold the sidecar's key.
+  Left as they are: the container runs as root (the data directory on the server is root's: a switch needs a chown
+  at deployment), a cross-site POST to the share target (the service worker cannot tell it from Android's share),
+  refresh-token reuse within its two minutes of grace, and the LLM budget a flood of messages can spend.
