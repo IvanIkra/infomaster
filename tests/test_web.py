@@ -165,6 +165,24 @@ async def test_files(client):
         assert response.status == 200 and response.headers["Cache-Control"] == "no-cache", path
 
 
+async def test_the_pages_run_only_their_own_scripts(client):
+    """D79: the CSP lets the page run its files and its import map, no other script; nothing frames or sniffs it."""
+    import base64
+    import hashlib
+    import re
+
+    page = await client.get("/web/")
+    csp = page.headers["Content-Security-Policy"]
+    [importmap] = re.findall(r'<script type="importmap">(.*?)</script>', await page.text(), re.S)
+    digest = base64.b64encode(hashlib.sha256(importmap.encode()).digest()).decode()
+    script_src = csp.split("script-src")[1].split(";")[0]
+    assert script_src == f" 'self' 'sha256-{digest}'"
+    assert "frame-ancestors 'none'" in csp and page.headers["X-Frame-Options"] == "DENY"
+    assert page.headers["X-Content-Type-Options"] == "nosniff"
+    api = await client.get("/web/api/me")
+    assert api.headers["Cache-Control"] == "no-store" and api.headers["X-Content-Type-Options"] == "nosniff"
+
+
 async def test_everything_static_is_referenced_files_exist(client):
     """The files that index.html, fonts.css and the manifest name are all there."""
     from infomaster.web import STATIC

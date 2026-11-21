@@ -202,6 +202,23 @@ async def test_links(library, http):
     assert "Calculus v1.pdf" in response.headers["Content-Disposition"]
 
 
+async def test_a_chat_members_file_never_runs_on_the_apps_origin(library, http):
+    """A sender picks a file's type: svg is downloaded, any text (html too) is plain text; every file is sniff-free
+    and sandboxed (a PDF aside: a viewer refuses a sandbox)."""
+    client, links = http
+    cases = {"text/html": ("text/plain; charset=utf-8", "inline"),
+             "image/svg+xml": ("application/octet-stream", "attachment"),
+             "application/xhtml+xml": ("application/octet-stream", "attachment"),
+             "text/markdown": ("text/plain; charset=utf-8", "inline"),
+             "image/png": ("image/png", "inline"), "application/pdf": ("application/pdf", "inline")}
+    for sent, (served, kind) in cases.items():
+        item = await library.add_stream(stream(b"<script>x</script>"), name="slides", media_type=sent, source="chat")
+        response = await client.get(links.material(library.get(item)).removeprefix("https://example.test"))
+        assert response.headers["Content-Type"] == served and response.headers["Content-Disposition"].startswith(kind)
+        assert response.headers["X-Content-Type-Options"] == "nosniff"
+        assert ("sandbox" in response.headers.get("Content-Security-Policy", "")) == (sent != "application/pdf")
+
+
 async def test_a_renamed_course_is_one_course(library):
     """RUZ's feed went from Russian to English: the old classes keep the old name, and both are one course."""
     add_class(library.store, "calc-0", "Математический анализ", "2026-10-07T09:30:00", "Семинар")

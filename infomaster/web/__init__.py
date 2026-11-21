@@ -34,9 +34,12 @@ opens «+» with them; without it, the server only sends the app there.
 The client is plain ES modules, no build step: Preact and htm are vendored in static/vendor, the fonts in static/fonts.
 """
 
+import base64
 import datetime as dt
+import hashlib
 import json
 import math
+import re
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -62,6 +65,20 @@ from .views import Data
 
 STATIC = Path(__file__).parent / "static"
 NO_CACHE = {"Cache-Control": "no-cache"}
+
+
+def _inline_scripts_csp() -> str:
+    """The hashes of index.html's inline scripts (the import map): the only scripts the page runs besides its files."""
+    page = (STATIC / "index.html").read_text()
+    found = re.findall(r"<script[^>]*>(.*?)</script>", page, re.S)
+    return " ".join(f"'sha256-{base64.b64encode(hashlib.sha256(s.encode()).digest()).decode()}'" for s in found if s)
+
+
+# The app's pages run only its own files: a script slipped into a page (a quote, a link) has nowhere to load from, and
+# no other site may frame the app. Styles stay inline-capable: Preact sets style attributes.
+CSP = ("default-src 'self'; script-src 'self' " + _inline_scripts_csp() + "; style-src 'self' 'unsafe-inline'; "
+       "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self'; "
+       "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 CHANGES = {"POST", "PUT", "PATCH", "DELETE"}
 
 
@@ -91,6 +108,7 @@ class WebApp:
         app.router.add_get("/web/manifest.webmanifest", manifest)
         app.router.add_static("/web/static", STATIC)
         app.on_response_prepare.append(revalidate_static)
+        app.on_response_prepare.append(secure_headers)
         app.router.add_post("/web/share", shared)
         api = [("GET", "/me", me),
                ("POST", "/login/code", send_code),
@@ -214,6 +232,18 @@ async def revalidate_static(request: web.Request, response: web.StreamResponse) 
     module by its own guess after a deploy, and the new page runs with it."""
     if request.path.startswith("/web/static/") and "Cache-Control" not in response.headers:
         response.headers["Cache-Control"] = "no-cache"
+
+
+async def secure_headers(request: web.Request, response: web.StreamResponse) -> None:
+    """Every response of the web app: no type sniffing, no framing, no referrer to other sites, the CSP."""
+    if not request.path.startswith("/web"):
+        return
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Content-Security-Policy", CSP)
+    if request.path.startswith("/web/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
 
 
 async def index(request: web.Request) -> web.FileResponse:

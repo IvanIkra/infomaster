@@ -26,7 +26,11 @@ from . import Library, LibraryError
 SECRET_KEY = "library_link_secret"
 GET_TTL = 24 * 3600       # seconds a download link works
 PUT_TTL = 6 * 3600        # an upload link
-INLINE = ("image/", "audio/", "video/", "text/", "application/pdf")
+# Types a browser opens without running anything on the app's origin; the rest is downloaded (a chat member chooses a
+# file's type: text/html or image/svg+xml served inline would run a script next to the web app's session).
+INLINE = ("image/png", "image/jpeg", "image/gif", "image/webp", "image/heic", "image/avif", "audio/", "video/",
+          "application/pdf")
+SANDBOX = "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'"
 
 
 def _b64(data: bytes) -> str:
@@ -99,8 +103,18 @@ def file_name(version: dict, part: str) -> str:
     return f"{title[:100]}{number}{suffix}"
 
 
+def served_type(media_type: str | None) -> str:
+    """The type a file is served with: a safe one as it is, any text as plain text, the rest as bytes to download."""
+    kind = (media_type or "").split(";")[0].strip().lower()
+    if kind.startswith(INLINE):
+        return kind
+    if kind.startswith("text/"):
+        return "text/plain; charset=utf-8"
+    return "application/octet-stream"
+
+
 def disposition(name: str, media_type: str) -> str:
-    kind = "inline" if media_type.startswith(INLINE) else "attachment"
+    kind = "inline" if media_type.startswith((*INLINE, "text/plain")) else "attachment"
     ascii_name = name.encode("ascii", "replace").decode().replace('"', "_").replace("?", "_")
     return f"{kind}; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}"
 
@@ -120,7 +134,7 @@ async def download(request: web.Request) -> web.StreamResponse:
         path = library.path(row) if row else None
         if path is None:
             raise web.HTTPNotFound(text="the file is gone")
-        name, media_type = row["name"] or "file", row["media_type"] or "application/octet-stream"
+        name, media_type = row["name"] or "file", served_type(row["media_type"])
     elif "k" in payload:
         path = links.kept(str(payload["k"])) if links.kept is not None else None
         if path is None:
@@ -133,9 +147,11 @@ async def download(request: web.Request) -> web.StreamResponse:
             raise web.HTTPNotFound(text="the file is gone")
         name = file_name(version, payload["p"])
         media_type = "application/pdf" if payload["p"] == "pdf" else "text/plain; charset=utf-8"
-    return web.FileResponse(path, headers={"Content-Type": media_type,
-                                           "Content-Disposition": disposition(name, media_type.split(";")[0]),
-                                           "Cache-Control": "private, max-age=3600"})
+    headers = {"Content-Type": media_type, "Content-Disposition": disposition(name, media_type.split(";")[0]),
+               "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"}
+    if media_type != "application/pdf":  # a PDF viewer refuses a sandbox; a PDF runs nothing on the origin
+        headers["Content-Security-Policy"] = SANDBOX
+    return web.FileResponse(path, headers=headers)
 
 
 async def upload(request: web.Request) -> web.Response:
