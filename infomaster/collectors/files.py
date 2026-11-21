@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import secrets
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
@@ -34,7 +35,7 @@ from .links import LinkError, document_links
 
 log = logging.getLogger(__name__)
 
-MAX_SIZE = 50 * 1024 * 1024  # bytes: a bigger PDF is a book, not a sheet, and is not downloaded
+MAX_SIZE = 20 * 1024 * 1024  # bytes: a bigger PDF is a book, not a sheet, and is not downloaded (256 MB of memory)
 UPLOAD_MAX_SIZE = 20 * 1024 * 1024  # bytes of a PDF the owner uploads
 OWN_CHAT = -1                # the chat of the owner's own sheets: no chat has this id (the mailbox is 0)
 IMAGE_MAX_SIZE = 3_750_000   # bytes: in base64 it stays within the API's 5 MB for an image
@@ -283,14 +284,20 @@ class Files:
 
     def _store(self, part: Path, kind: str) -> dict:
         """The downloaded file under its hash, a PDF with its first page read. In a thread."""
-        data = part.read_bytes()
-        sha = hashlib.sha256(data).hexdigest()
+        if kind == "pdf" and (size := part.stat().st_size) > MAX_SIZE:
+            raise ValueError(f"the PDF is too big ({size} bytes)")
+        sha = hashlib.sha256()
+        with part.open("rb") as stream:
+            while chunk := stream.read(1 << 20):
+                sha.update(chunk)
+        sha = sha.hexdigest()
         values = {"sha256": sha}
         if kind == "pdf":
             extract = pdf.extract(part, 1)
             values.update(pages=extract.pages, first_page=extract.first[:FIRST_PAGE_CHARS])
             extension = "pdf"
         else:
+            data = part.read_bytes()  # an image: within IMAGE_MAX_SIZE
             found = media_type(data)
             if found is None:
                 raise ValueError("not a JPEG, PNG, GIF or WebP image")
@@ -310,6 +317,9 @@ class Files:
         kept = {row["path"] for row in self.db.execute("select path from files where path is not null")}
         if self.directory.exists():
             for path in self.directory.iterdir():
-                if path.suffix != ".part" and str(path.relative_to(self.data_dir)) not in kept:
+                if path.suffix == ".part":  # a download under way, or one a crash left: gone after a day
+                    if path.stat().st_mtime < time.time() - 86400:
+                        path.unlink(missing_ok=True)
+                elif str(path.relative_to(self.data_dir)) not in kept:
                     path.unlink(missing_ok=True)
         return removed

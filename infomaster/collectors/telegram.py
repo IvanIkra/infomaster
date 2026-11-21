@@ -310,8 +310,9 @@ class Twin:
 
     # --- files --------------------------------------------------------------------
 
-    async def download(self, chat_id: int, msg_id: int, path: Path) -> bool:
-        """Files.download: the file of a message into `path`; False when the message or its file is gone. NotNow when
+    async def download(self, chat_id: int, msg_id: int, path: Path, limit: int | None = None) -> bool:
+        """Files.download: the file of a message into `path`; False when the message or its file is gone, or is over
+        `limit` bytes now (an edit may have replaced a small file with a big one since it was stored). NotNow when
         the twin is offline or the download failed on the way: the message waits for its next batch. Any other
         Telegram error (the chat is closed to the twin) is final for the file."""
         if self.client is None or not self.client.is_connected():
@@ -319,6 +320,9 @@ class Twin:
         try:
             message = await self.client.get_messages(chat_id, ids=msg_id)
             if message is None or not own_media(message):
+                return False
+            if limit is not None and message.file is not None and (message.file.size or 0) > limit:
+                log.info("message %s in %s: its file is over %d bytes now, not downloaded", msg_id, chat_id, limit)
                 return False
             return await message.download_media(file=str(path)) is not None
         except (errors.FloodError, errors.ServerError, ConnectionError, TimeoutError) as e:

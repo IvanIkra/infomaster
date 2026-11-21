@@ -11,7 +11,15 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import pypdf
 from pypdf import PdfReader, PdfWriter
+
+# What one stream may inflate to (pypdf's default is 75 MB): the container has 256 MB (D79).
+STREAM_MAX = 20 * 2**20
+LIMITS = {name: STREAM_MAX for name in (
+    "maximum_declared_stream_length", "array_based_stream_maximum_output_length", "jbig2_maximum_output_length",
+    "lzw_maximum_output_length", "run_length_maximum_output_length", "zlib_maximum_output_length",
+    "brotli_maximum_output_length", "image_maximum_buffer_size")}
 
 SCAN_WORDS = 5  # a first page with fewer words has no text layer worth the name: a scan
 
@@ -39,6 +47,7 @@ def scanned(first_page: str) -> bool:
 
 
 def _reader(path: Path) -> PdfReader:
+    pypdf.overwrite_configuration(**LIMITS)  # per thread: the limits hold wherever the PDF is read
     try:
         reader = PdfReader(str(path))
         if reader.is_encrypted and not reader.decrypt(""):
@@ -66,11 +75,14 @@ def extract(path: Path, pages: int) -> Extract:
 def head(path: Path, pages: int) -> bytes:
     """A PDF of the first `pages` pages: what the model sees of a scan."""
     reader = _reader(path)
-    writer = PdfWriter()
-    for page in reader.pages[:pages]:
-        writer.add_page(page)
-    out = io.BytesIO()
-    writer.write(out)
+    try:
+        writer = PdfWriter()
+        for page in reader.pages[:pages]:
+            writer.add_page(page)
+        out = io.BytesIO()
+        writer.write(out)
+    except Exception as e:  # a broken page's resources: the scan is not attached, the batch goes on
+        raise PdfError(f"cannot copy the PDF's pages: {e}") from e
     return out.getvalue()
 
 

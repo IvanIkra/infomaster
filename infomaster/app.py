@@ -4,13 +4,14 @@ import asyncio
 import contextlib
 import logging
 import signal
+from functools import partial
 from pathlib import Path
 from urllib.parse import quote
 
 from aiohttp import web
 
 from . import actions, clock
-from .collectors.files import Files
+from .collectors.files import MAX_SIZE, Files
 from .collectors.grades import GradeSheets
 from .collectors.hseapp import CALLBACK_PATH, HseApp
 from .collectors.inbox import Inbox
@@ -22,7 +23,7 @@ from .collectors.wiki import Wiki
 from .config import Env
 from .connector import Connector
 from .i18n import Phrase
-from .library import Library
+from .library import MAX_FILE, Library
 from .library import links as library_links
 from .library.feed import ChatMaterials
 from .llm.budget import Budget
@@ -84,7 +85,7 @@ class Service:
                                self.schedule, self.llm)
         # PDFs come through the twin when a batch needs them; the sheets among them are published (§6.3).
         self.files = Files(self.store, data_dir)
-        self.files.download = self.twin.download
+        self.files.download = partial(self.twin.download, limit=MAX_SIZE)  # the size of now, not the stored one
         self.files.fetch_url = fetch_linked_pdf  # PDFs behind links of study chats and letters (D59)
         self.sheets = Sheets(self.store, self.settings, self.chat_settings, self.inbox, self.files, self.deadlines,
                              self.subjects, self.llm)
@@ -122,7 +123,7 @@ class Service:
         # Its sources (§6.8): materials the batches find in study chats (files by the twin, after the run), every
         # sheet's PDF, and what the owner sends the bot (files by the bot itself).
         self.library_feed = ChatMaterials(self.store, self.library, self.inbox)
-        self.library_feed.download = self.twin.download
+        self.library_feed.download = partial(self.twin.download, limit=MAX_FILE)
         self.batches.materials = self.library_feed
         self.sheets.library = self.library
         # A PDF sent to the bot that is a sheet goes to the sheets with its caption (D73), the rest to the inbox.

@@ -884,7 +884,7 @@ class Batches:
                           self.events.upcoming(today),
                           self.schedule.upcoming_classes(today) if settings["study"] else [],
                           self.subjects.all())
-        documents = self._scans(chunk)  # before the prompt: a scan that cannot be attached is not referred to
+        documents = await self._scans(chunk)  # before the prompt: a scan that cannot be attached is not referred to
         try:
             answer = await self.llm.json("batch", SYSTEM, self._prompt(chat, settings, chunk, context),
                                          self._schema(chat, settings), max_tokens=MAX_TOKENS, chat_id=chat["id"],
@@ -914,7 +914,7 @@ class Batches:
         while grown := {i for item in items if again_ids & set(item["msg_ids"]) for i in item["msg_ids"]} - again_ids:
             again_ids |= grown  # an item that shares a message with them is answered anew too
         again = [m for m in chunk if m["msg_id"] in again_ids]
-        documents = self._scans(again)
+        documents = await self._scans(again)
         try:
             answer = await self.llm.json("batch", SYSTEM, self._prompt(chat, settings, again, context, notes),
                                          self._schema(chat, settings), max_tokens=MAX_TOKENS, chat_id=chat["id"],
@@ -1042,7 +1042,7 @@ class Batches:
             text = text[:CONTEXT_CHARS - 1].rstrip() + "…"
         return ["- " + " · ".join(head)] + ([f"  {text}"] if text else [])
 
-    def _scans(self, messages: list[dict]) -> list[Document]:
+    async def _scans(self, messages: list[dict]) -> list[Document]:
         """The first pages of the scanned PDFs, in the order of the prompt. A file that cannot be attached (gone
         meanwhile) leaves the message with its file's name only."""
         documents = []
@@ -1051,7 +1051,7 @@ class Batches:
             try:
                 if path is None:
                     raise pdf.PdfError("the file is gone")
-                documents.append(Document(pdf.head(path, 1), 1))
+                documents.append(Document(await asyncio.to_thread(pdf.head, path, 1), 1))  # off the loop
             except pdf.PdfError as e:
                 log.warning("first page of %s not attached: %s", message["pdf"]["name"], e)
                 message["pdf"] = None
