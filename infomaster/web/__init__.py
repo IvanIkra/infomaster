@@ -316,7 +316,6 @@ async def feed(request: web.Request) -> web.Response:
     answer = _data(request).feed(course)
     answer["check"] = request.app[WEB_KEY].check.items(course)
     answer["problems"] = len(request.app[WEB_KEY].machine.attention(request.app))  # the status dot
-    answer["news"] = _data(request).important_news()  # the mark on the News view
     library = _data(request).library
     answer["inbox"] = library.inbox_count() if library is not None else 0  # the mark on the shelves
     return web.json_response(answer)

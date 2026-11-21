@@ -130,10 +130,6 @@ function Lenses({ courses, active, onPick }) {
   </div>`;
 }
 
-// The important live news (4 or 5) the feed last counted: the mark on the News view.
-let newsMark = 0;
-export const markNews = (n) => { newsMark = n || 0; };
-
 // The status dot of «Machine»: green when all works, red when something needs attention, grey while there is no
 // answer from infomaster (no connection, or not yet loaded) — then nothing is known about the machine.
 export function MachineDot({ data, error }) {
@@ -151,7 +147,7 @@ export function Bar({ view, course }) {
       <button role="tab" aria-selected=${view === "week"} onClick=${() => go("/week", { course })}>
         ${t("weekView")}</button>
       <button role="tab" aria-selected=${view === "news"} onClick=${() => go("/news", { course })}>
-        ${t("newsView")}${newsMark > 0 && view !== "news" && html`<span class="count">${newsMark}</span>`}</button>
+        ${t("newsView")}</button>
     </div>
     <a class="plus" href=${course ? "#/add?course=" + encodeURIComponent(course) : "#/add"} aria-label=${t("add")}>${icon(ICONS.plus, 26)}</a>
   </div></div>`;
@@ -181,7 +177,6 @@ export function Feed({ course, push, onOut }) {
   const { data, error } = useLoad("/feed" + (course ? "?course=" + encodeURIComponent(course) : ""), onOut);
   const info = useLoad(course ? "/course?key=" + encodeURIComponent(course) : null, onOut).data;
   const pick = (key) => go(key ? "/course" : "/", { key });
-  if (data && !course) markNews(data.news);
   const { weekday, day: date } = today();
   const header = course
     ? html`<div><div class="kicker">${t("course")}</div><h1>${(info && info.title) || course}</h1></div>`

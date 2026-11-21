@@ -843,8 +843,7 @@ needs the owner (`problems` in the feed):
 
 - `GET /web/api/news`: the live news in rank order (`importance + study`, the newer first), the same items as Tablo's
   `/api/news`, each with where it came from (a chat by its name, a letter by its subject while
-  it is kept) and when; `ttl_hours` says how long news lives. The feed's `news` counts the live items of importance 4
-  and 5, the mark on the view;
+  it is kept) and when; `ttl_hours` says how long news lives. The News view carries no count;
 - `GET /web/api/news/{id}`: an item with the message it came from (while it is kept, D29) and its link where the
   chat has one;
 - `POST /web/api/news/{id}/hide`: the connector's `hide_news`, journaled; its undo shows the item again, and the items

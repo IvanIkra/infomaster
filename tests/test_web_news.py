@@ -80,7 +80,7 @@ async def test_news_list_card_and_hide(reader, store, now):
     assert [i["id"] for i in listed["items"]] == [test, letter, party]  # importance + study, as Tablo has them
     assert listed["items"][0]["from"] == {"kind": "supergroup", "name": "Course chat"}
     assert listed["items"][1]["from"] == {"kind": "mail", "name": None}  # the letter is not kept
-    assert (await get(reader, "/feed"))["news"] == 2  # the important ones: the mark on the News view
+    assert "news" not in await get(reader, "/feed")  # the News view carries no count
 
     card = await get(reader, f"/news/{test}")
     assert card["quote"]["text"] == "The test moves to Thursday, 13:00" and card["quote"]["sender"] == "Assistant"

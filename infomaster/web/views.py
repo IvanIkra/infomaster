@@ -357,12 +357,6 @@ class Data:
         live = self.news.live(self.schedule.now(), self.ttl_hours())
         return {"items": [self.news_item(item) for item in live], "ttl_hours": self.ttl_hours()}
 
-    def important_news(self) -> int:
-        """How many live items are of importance 4 or 5: the mark on the News view."""
-        if self.news is None:
-            return 0
-        return sum(item["importance"] >= 4 for item in self.news.live(self.schedule.now(), self.ttl_hours()))
-
     def news_card(self, news_id: int) -> dict | None:
         """An item with the message it came from, while it is kept, and its link where the chat has one."""
         item = self.news.get(news_id) if self.news is not None else None
