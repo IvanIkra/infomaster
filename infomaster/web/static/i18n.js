@@ -95,7 +95,6 @@ const TEXTS = {
   fromHseApp: ["from HSE App X", "из HSE App X"],
   ownAdded: ["added by you", "добавлен вами"],
   inDays: ["in {n} d", "через {n} д"],
-  inHours: ["in {n} h", "через {n} ч"],
   todayDue: ["today", "сегодня"],
   daysAgo: ["{n} d ago", "{n} д назад"],
   handedHere: ["Handed in here", "Сдаётся на этой паре"],

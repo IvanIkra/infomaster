@@ -51,7 +51,10 @@ class DeadlineReminders:
         self.start()
         while True:
             self._woken.clear()
-            await self.tick()
+            try:
+                await self.tick()
+            except Exception:  # a broken setting or store: the loop lives on to the next slot
+                log.exception("the deadline reminders failed")
             try:
                 await asyncio.wait_for(self._woken.wait(), self._seconds_to_next())
             except TimeoutError:
