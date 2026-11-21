@@ -252,7 +252,7 @@ by hand.
   the way (the twin not connected, the network, FloodWait, a Telegram server error) is not remembered: the message
   stays in the queue until the next run, and the chat's other messages are parsed without it. Any other failure (a
   chat closed to the twin) is tried again at the next runs, three times in all (`files.tries`); a deleted or broken
-  file is given up at once. Files over 50 MB are not downloaded. A document whose type is not `application/pdf` but
+  file is given up at once. Files over 20 MB are not downloaded (D79). A document whose type is not `application/pdf` but
   whose name ends in `.pdf` counts as a PDF.
 - There is no page rendering (pypdf does not draw): a scan (fewer than 5 words on the first page) goes to the model
   as a PDF of its first pages, as a document; the model sees the pages as images. The budget reserve is 3000 tokens

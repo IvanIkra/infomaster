@@ -92,7 +92,7 @@ Tablo is `GET /api/news`: `{"items": [{id, source, study, posted_at, full, short
 order, the same items as the web app's news (without replaced, withdrawn and hidden ones).
 
 **Problem sheets.** The twin downloads a PDF from an enabled chat when batch processing reaches its message (files
-over 50 MB are skipped); the first page is read on the spot, and a scan goes to the model as an image. Batch
+over 20 MB are skipped); the first page is read on the spot, and a scan goes to the model as an image. Batch
 processing decides whether a PDF is a sheet (homework, problems, a variant); the sheet is copied into the library and
 shown on the web app's **Sheets** shelf with its course, number, due date, source and PDF. A sheet without a due date
 is due before the next seminar of its course in RUZ, marked as assumed until a real date comes (architecture.md,
