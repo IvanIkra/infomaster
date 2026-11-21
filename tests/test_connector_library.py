@@ -240,6 +240,13 @@ async def test_undo_sort_remove_update(client, token, connector, library):
     await undo_last(connector)
     assert library.get(b) is not None and library.get(t) is not None
 
+    # Several at once (the recording and its transcript among them): one change, and one undo brings all back.
+    many = data(await call(client, token, "remove_material", {"ids": [a, b, t]}))
+    assert [r["removed"] for r in many["removed"]] == [a, b] and many["removed"][1]["with"] == [t]
+    assert all(library.get(i) is None for i in (a, b, t))
+    await undo_last(connector)
+    assert all(library.get(i) is not None for i in (a, b, t))
+
     # An upload that never came: removed, nothing to undo; its link takes nothing then.
     draft = data(await call(client, token, "add_material", {"file_name": "rec.mp3"}))
     gone = data(await call(client, token, "remove_material", {"id": draft["id"]}))
@@ -258,6 +265,9 @@ async def test_refusals(client, token):
     assert "no item 99" in refused(await call(client, token, "get_material", {"id": 99}))
     assert "ids: 1 to" in refused(await call(client, token, "sort_material", {"ids": [], "course": "Algebra"}))
     assert "give course" in refused(await call(client, token, "sort_material", {"ids": [99]}))
+    assert "give id" in refused(await call(client, token, "remove_material", {}))
+    assert "give id" in refused(await call(client, token, "remove_material", {"id": 1, "ids": [1]}))
+    assert "no item 99" in refused(await call(client, token, "remove_material", {"ids": [99]}))
     assert "needs class_uid" in refused(await call(client, token, "start_document_version", {
         "course": "Calculus", "kind": "lecture"}))
     assert "one of" in refused(await call(client, token, "start_document_version", {

@@ -325,10 +325,22 @@ async def test_an_item_card_its_changes_and_its_file(shelves):
     await undo(shelves, removed["change"])
     assert (await ask(shelves, "GET", f"/items/{new}"))["id"] == new
 
+    # The inbox's «Delete» of several: one change, and its undo brings them all back.
+    other = (await ask(shelves, "GET", "/inbox"))["items"]
+    ids = [new] + [i["id"] for i in other if i["id"] != new][:1]
+    many = await ask(shelves, "POST", "/remove", {"ids": ids})
+    assert many["change"]["undo"]
+    for item_id in ids:
+        await ask(shelves, "GET", f"/items/{item_id}", status=404)
+    await undo(shelves, many["change"])
+    for item_id in ids:
+        assert (await ask(shelves, "GET", f"/items/{item_id}"))["id"] == item_id
+    await ask(shelves, "POST", "/remove", {"ids": []}, status=400)
+
 
 async def test_everything_is_behind_the_session_and_the_origin(shelves):
     for method, path in (("GET", "/shelf"), ("GET", "/shelf/sheets"), ("GET", "/shelf/inbox"),
-                         ("POST", "/shelf/sort")):
+                         ("POST", "/shelf/sort"), ("POST", "/shelf/remove")):
         assert (await call(shelves, method, path, {} if method == "POST" else None)).status == 401
     wrong = await call(shelves, "POST", "/shelf/sort", {"ids": [1], "course": "Calc"}, token=shelves.token,
                        origin="https://evil.example")

@@ -668,7 +668,7 @@ client: Claude Code on the owner's Mac, which has a shell, and claude.ai on the 
 
 | Reads | Writes |
 |---|---|
-| `list_library` (courses with counts, the inbox, disk usage), `list_materials` (the inbox, a course, a class; by status or kind; no long text, a 200-character preview), `get_material` (one item: its text, a text file's or a PDF's text, in pages of 30,000 characters by default; a photo inline; `download_url`; the items on it), `list_classes` (a course's started classes with counts and their documents), `list_documents`, `get_document` (versions; a version's source inline in pages, links to its source and PDF), `get_cheatsheet` | `add_material` (a text, a link or a transcript inline; or a file: a draft and its upload link), `sort_material` (course and class of up to 100 items; destructive), `update_material` (title, kind, author, note, status, a text's words; destructive), `remove_material` (destructive), `start_document_version` (not journaled), `publish_document_version` |
+| `list_library` (courses with counts, the inbox, disk usage), `list_materials` (the inbox, a course, a class; by status or kind; no long text, a 200-character preview), `get_material` (one item: its text, a text file's or a PDF's text, in pages of 30,000 characters by default; a photo inline; `download_url`; the items on it), `list_classes` (a course's started classes with counts and their documents), `list_documents`, `get_document` (versions; a version's source inline in pages, links to its source and PDF), `get_cheatsheet` | `add_material` (a text, a link or a transcript inline; or a file: a draft and its upload link), `sort_material` (course and class of up to 100 items; destructive), `update_material` (title, kind, author, note, status, a text's words; destructive), `remove_material` (one item or up to 100 as one change; destructive), `start_document_version` (not journaled), `publish_document_version` |
 
 Files never travel inside a call (a recording is hundreds of megabytes, and a result is read by the model): a tool
 gives a signed link (§6.8) and the answer carries the exact command, `curl --fail-with-body -T <file> '<link>'` for an
@@ -899,6 +899,15 @@ connector's tool with its undo:
 - `POST /fix/grade {id, value, label?}` (`change_grade`), `POST /fix/grade/reset {id}` (`delete_grade`: a sheet's grade
   as the sheet has it, one added by hand deleted); the lens lists the grades with their ids, the ones added by hand too.
 
+**Deleting and finding** (stage 17, D70). A deadline's and an event's card end with one «Delete»: an own item is
+deleted, a source's one is hidden (`not-mine`; `/fix/options {hidden}`), and «Machine → Hidden» brings it back. A
+class keeps «Mark cancelled». `POST /shelf/remove {ids}` deletes several items of the inbox as one change
+(`remove_material` with `ids`). The lens is «All» and a «Courses» button that lists the courses in a card; its tiles
+open `#/docs?course=`, `#/sheets?course=`, `#/grades?course=` and `#/raw?course=` (the average opens the grades), each
+a screen with a way back and no views bar, and the shelf of all sheets is grouped by the course key. A card over the
+screen closes when pulled down from its top (`app.js`), and the «Machine» dot is grey while infomaster does not answer
+(`MachineDot`).
+
 ## 9. Storage (SQLite)
 
 Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Tablo (§9).
@@ -1038,6 +1047,15 @@ own; Claude is an optional door, not the brain (D53).
       «Machine», a signed link to a sheet's kept PDF, the calendar's links to the app's cards; then the forum and the
       Mini App are removed from the code, the bot stays for login codes and material, and the deadlines' news, the
       reminders and the sheets go on without posting.
+17. **After the first days on the phone** (D70). The owner's notes from the iPhone, in rounds:
+    - 17.1 what misled (done): a dark icon, the «Machine» dot with a state for no connection, the «Check» queue's
+      fixes, cards that close when pulled down, no views bar under the shelves, the header below the iOS blur;
+    - 17.2 deleting and finding (done): one «Delete» on a deadline's and an event's card, «Mark cancelled» for a
+      class, deleting several items of the library's inbox, a «Courses» button for the lens, a screen per lens tile,
+      the sheets by course;
+    - 17.3 grades: a real zero told from a placeholder, every work with its points, the course's gradebooks on its
+      page;
+    - 17.4 own icons for the kinds of items; a sheet sent to the bot read as a sheet, with its caption.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

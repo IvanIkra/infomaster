@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, CHANGED, ICONS, act, api, changed, go, html, icon, toast } from "./common.js";
 import { day, kind, t, today } from "./i18n.js";
-import { EntryFix, GradeRow } from "./fixes.js";
+import { EntryFix } from "./fixes.js";
 
 const hm = (iso) => iso.slice(11, 16);
 const dateOf = (iso) => iso.slice(0, 10);
@@ -105,16 +105,30 @@ function Days({ days, todayIso, skipToday }) {
   });
 }
 
+// The lens: «All» and a «Courses» button that opens the list of courses in a card; with a course chosen the button
+// names it and a cross goes back to all.
 function Lenses({ courses, active, onPick }) {
-  const ref = useRef(null);
-  useEffect(() => {  // the chosen course in view, also when it is far to the right
-    const chosen = ref.current && ref.current.querySelector('[aria-selected="true"]');
-    if (chosen) chosen.scrollIntoView({ block: "nearest", inline: "center" });
-  }, [active, courses.length]);
-  return html`<div class="lenses" role="tablist" aria-label="Lens" ref=${ref}>
-    <button class="lens" role="tab" aria-selected=${!active} onClick=${() => onPick(null)}>${t("all")}</button>
-    ${courses.map((c) => html`<button key=${c.key} class="lens" role="tab" aria-selected=${active === c.key}
-      title=${c.title} onClick=${() => onPick(c.key)}>${c.key}</button>`)}
+  const [open, setOpen] = useState(false);
+  const chosen = courses.find((c) => c.key === active);
+  const pick = (key) => { setOpen(false); if (key !== (active || null)) onPick(key); };
+  return html`<div class="lenses">
+    <button class="lens" aria-pressed=${!active} onClick=${() => pick(null)}>${t("all")}</button>
+    <button class="lens" aria-pressed=${!!active} aria-haspopup="dialog" onClick=${() => setOpen(true)}>
+      ${chosen ? chosen.title : t("courses")}<span class="caret" aria-hidden="true">▾</span></button>
+    ${active && html`<button class="lens" aria-label=${t("allCourses")} onClick=${() => pick(null)}>
+      ${icon(ICONS.cross, 16)}</button>`}
+    ${open && html`<div class="scrim" onClick=${() => setOpen(false)}></div>
+      <section class="sheet" role="dialog" aria-label=${t("courses")}><div>
+        <div class="grab" aria-hidden="true"></div>
+        <h1>${t("courses")}</h1>
+        <div class="box list">
+          <button class="row pick" aria-current=${!active} onClick=${() => pick(null)}>
+            <b>${t("allCourses")}</b>${!active && icon(ICONS.check, 18)}</button>
+          ${courses.map((c) => html`<button key=${c.key} class="row pick" aria-current=${active === c.key}
+            onClick=${() => pick(c.key)}><span><b>${c.title}</b>${c.key !== c.title && html`<div class="mut small">${c.key}</div>`}</span>
+            ${active === c.key && icon(ICONS.check, 18)}</button>`)}
+        </div>
+      </div></section>`}
   </div>`;
 }
 
@@ -204,19 +218,16 @@ export function Feed({ course, push, onOut }) {
   </main>`;
 }
 
+// A course's lens on top of its feed: the average and the next class, and its four shelves; each opens its own
+// screen (the shelves' screens, and the knowledge base and the grades in shelves.js).
 function CourseHead({ info, todayIso }) {
-  const [open, setOpen] = useState(null);
   const g = info.grades, n = info.next;
-  const toggle = (name) => {
-    if (name === "sheets" || name === "raw") go("/" + name, { course: info.key });  // the shelves' own screens
-    else setOpen(open === name ? null : name);
-  };
-  const shelf = (name, title, note, badge) => html`<button class="shelf" aria-expanded=${open === name}
-    onClick=${() => toggle(name)}><b>${title}${badge ? html`<span class="count">${badge}</span>` : ""}</b>
-    <span>${note}</span></button>`;
+  const open = (name) => go("/" + name, { course: info.key });
+  const shelf = (name, title, note, badge) => html`<button class="shelf" onClick=${() => open(name)}>
+    <b>${title}${badge ? html`<span class="count">${badge}</span>` : ""}</b><span>${note}</span></button>`;
   return html`<div class="stack">
     <div class="stats">
-      <button class="stat dark" onClick=${() => toggle("grades")}>
+      <button class="stat dark" onClick=${() => open("grades")}>
         <span class="lab">${t("byCourse")}</span>
         <big>${g.average === null ? "—" : String(g.average).replace(".", getDecimal())}<small> / 10</small></big>
         <small>${g.count ? t("worksN", { n: g.count }) + (g.new ? " · " + t("newN", { n: g.new }) : "")
@@ -236,21 +247,10 @@ function CourseHead({ info, todayIso }) {
       ${shelf("grades", t("grades"), g.count ? t("worksN", { n: g.count }) : t("noGrades"), g.new)}
       ${shelf("raw", t("raw"), t("rawN", { n: info.materials.count }), info.materials.new)}
     </div>
-    ${open === "docs" && html`<div class="box">${info.documents.length ? info.documents.map((d) => html`
-      <div class="doc" key=${d.id}><span><b>${d.title}</b><div class="mut small">${d.kind === "book" ? t("book")
-        : d.kind === "cheatsheet" ? t("cheatsheet") : d.day ? day(d.day, { day: "numeric", month: "long" }) : ""}
-        </div>${d.versions.length > 1 && html`<div class="mut small">${t("versions")}: ${d.versions.slice(1)
-          .map((v) => v.url ? html`<a key=${v.version} href=${v.url} target="_blank" rel="noopener">v${v.version}</a> `
-            : html`<span key=${v.version}>v${v.version} </span>`)}</div>`}
-        </span>${d.url && html`<a class="sec" href=${d.url} target="_blank" rel="noopener">${d.kind === "cheatsheet"
-          ? "MD" : "PDF"} v${d.versions[0].version}</a>`}</div>`)
-      : html`<div class="note">—</div>`}</div>`}
-    ${open === "grades" && html`<div class="box">${g.works.length ? g.works.map((w) => html`
-      <${GradeRow} key=${w.id} w=${w} />`) : html`<div class="note">${t("noGrades")}</div>`}</div>`}
   </div>`;
 }
 
-const getDecimal = () => (document.documentElement.lang === "ru" ? "," : ".");
+export const getDecimal = () => (document.documentElement.lang === "ru" ? "," : ".");
 
 // --- the week ------------------------------------------------------------------------------------------------
 
@@ -375,10 +375,11 @@ function DeadlineActions({ d, onClose }) {
       ${d.assumed && html`<button class="sec" disabled=${busy} onClick=${() => doIt("confirm", "confirmed")}>
         ${t("dateRight")}</button>`}
       <button class="sec" disabled=${busy} onClick=${() => setMode("edit")}>${icon(ICONS.edit, 18)}${t("edit")}</button>
-      <button class="sec" disabled=${busy} onClick=${() => doIt("not-mine", d.own ? "deleted" : "hiddenNotMine")}>
-        ${d.own ? t("delete") : t("notMine")}</button>
       <button class="sec" disabled=${busy} onClick=${() => setMode("twin")}>${t("isDuplicate")}</button>
     </div>`}
+    ${mode === null && html`<button class="sec danger wide" disabled=${busy}
+      onClick=${() => doIt("not-mine", d.own ? "deleted" : "hiddenNotMine")}>${icon(ICONS.cross, 18)}${t("delete")}
+      </button>`}
     ${mode === "edit" && html`<${EditForm} d=${d} busy=${busy} onCancel=${() => setMode(null)}
       onSave=${(fields) => doIt("edit", "saved", fields)} />`}
     ${mode === "twin" && html`<div class="box stack" style="gap:6px">

@@ -8,16 +8,17 @@ import { day, getLang, kind, t } from "./i18n.js";
 
 const TEXTS = {
   change: ["Change", "Изменить"],
-  cancelClass: ["Cancel", "Отменить"],
-  cancelEvent: ["Cancelled", "Отменено"],
-  notCancelled: ["Not cancelled", "Не отменена"],
+  cancelClass: ["Mark cancelled", "Отметить отменённой"],
+  cancelEvent: ["Marked cancelled", "Отмечено отменённым"],
+  notCancelled: ["Not cancelled after all", "Всё-таки не отменена"],
+  cancelHint: ["A cancelled one stays in the timetable, struck through.",
+               "Отменённая остаётся в расписании зачёркнутой."],
   asItWas: ["As it was", "Как было"],
   asItWasHint: ["Takes your change back: the class is as the timetable and the chats have it.",
                 "Убирает вашу правку: пара — как в РУЗ и в чатах."],
   copyHint: ["Your copy stands for the chat's event; «As it was» brings the chat's one back.",
              "Вместо события из чата — ваша копия; «Как было» вернёт событие из чата."],
   optional: ["In the optional calendar", "В необязательном календаре"],
-  hide: ["Hide", "Скрыть"],
   deleteEvent: ["Delete", "Удалить"],
   chatMoved: ["A chat changed it: {from}", "Изменено в чате: {from}"],
   chatIgnored: ["A chat's change is ignored: {from}", "Изменение из чата не учитывается: {from}"],
@@ -36,6 +37,7 @@ const TEXTS = {
   classCancelled: ["Class cancelled", "Пара отменена"],
   classBack: ["The class is back", "Пара возвращена"],
   hidden: ["Hidden", "Скрыто"],
+  deletedHidden: ["Deleted. To bring it back: Machine → Hidden", "Удалено. Вернуть: Машина → Скрытое"],
   shown: ["Shown again", "Снова показано"],
   deleted: ["Deleted", "Удалено"],
   calendarOptional: ["In the optional calendar now", "Теперь в необязательном календаре"],
@@ -172,6 +174,7 @@ function ClassFix({ c, onClose }) {
         ${fix.own && html`<button class="sec" disabled=${busy} title=${f("asItWasHint")}
           onClick=${() => run(() => fixIt("/remove", { id: fix.own }, f("asItWas"), onClose))}>${f("asItWas")}</button>`}
       </div>`}
+    ${!editing && !fix.fields.cancelled && html`<div class="note small">${f("cancelHint")}</div>`}
     <${Optional} on=${!fix.fields.required} busy=${busy}
       onChange=${(on) => correct({ required: !on }, f(on ? "calendarOptional" : "calendarMain"))} />
   </div>`;
@@ -195,15 +198,14 @@ function EventFix({ c, onClose }) {
         <button class="sec" disabled=${busy} onClick=${() => edit({ cancelled: !fix.fields.cancelled },
           f(fix.fields.cancelled ? "classBack" : "cancelEvent"))}>
           ${fix.fields.cancelled ? f("notCancelled") : f("cancelClass")}</button>
-        ${!fix.own && html`<button class="sec" disabled=${busy} onClick=${() => option({ hidden: true }, f("hidden"))}>
-          ${f("hide")}</button>`}
-        ${fix.own && !fix.copy && html`<button class="sec" disabled=${busy} onClick=${() => remove(f("deleted"))}>
-          ${f("deleteEvent")}</button>`}
         ${fix.copy && html`<button class="sec" disabled=${busy} onClick=${() => remove(f("asItWas"))}>
           ${f("asItWas")}</button>`}
       </div>`}
     <${Optional} on=${!fix.required} busy=${busy}
       onChange=${(on) => option({ required: !on }, f(on ? "calendarOptional" : "calendarMain"))} />
+    ${!editing && html`<button class="sec danger wide" disabled=${busy} onClick=${() => (fix.own && !fix.copy
+      ? remove(f("deleted")) : option({ hidden: true }, f("deletedHidden")))}>${icon(ICONS.cross, 18)}
+      ${f("deleteEvent")}</button>`}
   </div>`;
 }
 

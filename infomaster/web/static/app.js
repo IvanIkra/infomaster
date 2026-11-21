@@ -10,7 +10,7 @@ import { Notifications } from "./notifications.js";
 import { AddSheet } from "./add.js";
 import { NewsCard, NewsList } from "./news.js";
 import { Hidden } from "./fixes.js";
-import { Inbox, ItemCard, RawList, SheetCard, SheetList, ShelfHome } from "./shelves.js";
+import { DocsList, GradesList, Inbox, ItemCard, RawList, SheetCard, SheetList, ShelfHome } from "./shelves.js";
 import { Chat, Chats, ConnectorScreen, Courses, Gradebook, Gradebooks, HseApp, Journal, Llm, Machine,
          NotificationPrefs, Processing, Tab } from "./machine.js";
 
@@ -263,6 +263,8 @@ function App() {
   const shelf = base.path === "/shelf" ? html`<${ShelfHome} onOut=${out} />`
     : base.path === "/sheets" ? html`<${SheetList} course=${base.params.get("course")} onOut=${out} />`
     : base.path === "/raw" ? html`<${RawList} course=${base.params.get("course")} onOut=${out} />`
+    : base.path === "/docs" ? html`<${DocsList} course=${base.params.get("course")} onOut=${out} />`
+    : base.path === "/grades" ? html`<${GradesList} course=${base.params.get("course")} onOut=${out} />`
     : base.path === "/inbox" ? html`<${Inbox} onOut=${out} />` : null;
   const screen = shelf ? shelf : base.path === "/news" ? html`<${NewsList} onOut=${out} />` : base.path === "/week"
     ? html`<${Week} start=${base.params.get("start")} course=${base.params.get("course")} onOut=${out} />`

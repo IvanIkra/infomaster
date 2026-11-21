@@ -381,22 +381,40 @@ async def update_material(ctx: Context, args: dict) -> Output:
 
 
 async def remove_material(ctx: Context, args: dict) -> Output:
+    """One item (`id`) or several (`ids`) leave every list with the transcripts on them: one change, one undo."""
     library = library_of(ctx)
-    row = library.get(args["id"], drafts=True)
-    if row is None:
-        raise ToolError(f"no item {args['id']}: take the id from list_materials")
-    children = library.children(row["id"])
-    try:
-        library.remove(row["id"])
-    except LibraryError as e:
-        raise ToolError(str(e)) from None
-    summary = f"Removed {label(row)} ({row['kind']}) from {where(library, row)}" + \
-        (f" with {len(children)} item(s) on it" if children else "")
-    if row["status"] == "uploading":
-        return Output({"removed": row["id"]}, summary + ", an upload that never came", None,
+    if ("id" in args) == ("ids" in args):
+        raise ToolError("give id (one item) or ids (several)")
+    ids = list(dict.fromkeys(args["ids"])) if "ids" in args else [args["id"]]
+    if not 1 <= len(ids) <= IDS_MAX:
+        raise ToolError(f"ids: 1 to {IDS_MAX} items")
+    rows = []
+    for item_id in ids:
+        row = library.get(item_id, drafts=True)
+        if row is None:
+            raise ToolError(f"no item {item_id}: take the id from list_materials")
+        rows.append(row)
+    removed, gone, undo, lines = [], set(), [], []
+    for row in rows:
+        if row["id"] in gone:  # a transcript of a recording removed just before
+            continue
+        children = library.children(row["id"])
+        try:
+            library.remove(row["id"])
+        except LibraryError as e:
+            raise ToolError(str(e)) from None
+        gone |= {child["id"] for child in children}
+        removed.append({"removed": row["id"], "with": [child["id"] for child in children]})
+        lines.append(f"{label(row)} ({row['kind']}) from {where(library, row)}" +
+                     (f" with {len(children)} item(s) on it" if children else ""))
+        if row["status"] != "uploading":  # an upload that never came: nothing to bring back
+            undo.append(step("_restore_material", id=row["id"]))
+    summary = "Removed " + "; ".join(lines)
+    data = removed[0] if "id" in args else {"removed": removed}
+    if not undo:
+        return Output(data, summary + ", an upload that never came", None,
                       "its upload never came: there is nothing to bring back")
-    return Output({"removed": row["id"], "with": [child["id"] for child in children]}, summary,
-                  [step("_restore_material", id=row["id"])], "the file is kept 30 days for the undo")
+    return Output(data, summary, undo, "the file is kept 30 days for the undo")
 
 
 async def restore_material(ctx: Context, args: dict) -> None:
@@ -572,9 +590,11 @@ def register(registry: Registry, app) -> None:
            "status": {"type": "string", "enum": ["new", "processed"]},
            "text": {"type": "string", "maxLength": MAX_TEXT}},
           update_material, ("id",), idempotent=True)
-    write("remove_material", "Remove a raw item",
-          "Remove an item (and the transcripts on it) from every list; the owner can bring it back for 30 days.",
-          {"id": ITEM_ID}, remove_material, ("id",))
+    write("remove_material", "Remove raw items",
+          "Remove an item (id), or several at once (ids), with the transcripts on them, from every list; the owner "
+          "can bring them back for 30 days.",
+          {"id": ITEM_ID, "ids": {"type": "array", "items": {"type": "integer"}, "minItems": 1, "maxItems": IDS_MAX}},
+          remove_material, ())
     registry.op("_restore_material", restore_material)
     write("start_document_version", "Start a document version",
           "Start a new version of a document: kind book (the whole course), lecture or seminar (one class: "

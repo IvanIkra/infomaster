@@ -416,6 +416,25 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   are dropped, and `TG_FORUM_ID` is no longer read. Web Push is now the only notification channel and has not yet
   been seen on a real device, so the server keeps the old image until it has; a rollback is the previous commit.
 
+- **D70. After the first days on the phone: plain deleting, a course picker, a page per shelf, 21.11.2026.**
+  Stage 17 of §11.1, from the owner's notes on the iPhone. The first round (17.1) fixed what misled: the icon was
+  light paper with a dark «i», and the dark Home Screen of iOS darkens a light icon so the letter sank into it, so the
+  icon is dark with a light «i»; the «Machine» dot was green whenever the feed had not said otherwise, also with no
+  connection, so it has three states (all works, needs attention, a grey ring for no answer) and the News screen
+  reads it too; a guessed date saved unchanged is «Right»; in «The same?» either card can be the one that stays (a
+  tap on it), since the one the server keeps is only its guess; «N more» unfolds the questions in place; a card over
+  the screen closes when pulled down and the screen behind it no longer scrolls; the shelves' screens drop the views
+  bar; the header starts below the band iOS blurs under the status bar. The second round (17.2): deleting was spread
+  over «Not mine», «Hide» and «Delete» by where an item came from, and the owner found none of it, so a deadline's
+  and an event's card end with one «Delete»: an own item is deleted, a source's one is hidden (a deadline with the
+  reason `not_mine`, an event by `set_event_options`), and the note says where to bring it back; a timetable class
+  cannot be deleted, so its «Cancel» says what it does («Mark cancelled», struck through in the timetable). The
+  library's inbox deletes the checked items at once: `remove_material` takes `ids` as well as `id`, one change with
+  one undo, as `sort_material` does. The row of course chips grew past the screen, so the lens is «All» and a
+  «Courses» button with the list in a card. The lens's four tiles each open a screen of their own (the knowledge
+  base and the grades are new ones), and the shelf of all sheets is grouped by course, by the course key each sheet
+  is matched with, so two names of one course make one group.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

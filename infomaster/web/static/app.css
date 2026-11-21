@@ -121,7 +121,12 @@ img.logo { display: block; background: none; box-shadow: 0 0 0 1px var(--line); 
   min-height: 36px; padding: 0 14px; border-radius: var(--rc); border: 1px solid var(--line); background: var(--card);
   font: 700 13px var(--fb); color: var(--mut); white-space: nowrap; cursor: pointer; flex-shrink: 0;
 }
-.lens[aria-selected="true"] { background: var(--chip-bg); color: var(--chip-fg); border-color: var(--chip-bg); }
+.lens[aria-pressed="true"] { background: var(--chip-bg); color: var(--chip-fg); border-color: var(--chip-bg); }
+.lens { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.lens .caret { font-size: 11px; opacity: 0.7; }
+.row.pick { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  text-align: left; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+.row.pick[aria-current="true"] b { color: var(--acc); }
 
 /* the feed */
 .feed { display: flex; flex-direction: column; gap: 14px; padding-bottom: 96px; }

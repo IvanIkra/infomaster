@@ -4,7 +4,8 @@
 import { useEffect, useState } from "preact/hooks";
 import { ApiError, ICONS, api, changed, go, html, icon, toast } from "./common.js";
 import { day, getLang, t } from "./i18n.js";
-import { useAct, useLoad } from "./screens.js";
+import { getDecimal, useAct, useLoad } from "./screens.js";
+import { GradeRow } from "./fixes.js";
 
 const TEXTS = {
   shelves: ["Shelves", "Полки"],
@@ -65,7 +66,11 @@ const TEXTS = {
   noteField: ["Note", "Заметка"],
   markProcessed: ["Mark processed", "Отметить обработанным"],
   markNew: ["Mark new", "Отметить новым"],
-  remove: ["Remove", "Убрать"],
+  remove: ["Delete", "Удалить"],
+  noCourse: ["No course", "Без курса"],
+  noDocs: ["Nothing in the knowledge base yet.", "В базе знаний пока ничего нет."],
+  removeN: ["Delete {n}", "Удалить: {n}"],
+  removed: ["Deleted", "Удалено"],
   openFile: ["Open the file", "Открыть файл"],
   openLink: ["Open the link", "Открыть ссылку"],
   transcripts: ["On it", "К нему"],
@@ -196,12 +201,64 @@ export function SheetList({ course, onOut }) {
     ${data && html`
       ${adding ? html`<${AddSheet} courses=${data.courses} course=${course} onDone=${() => setAdding(false)} />`
         : html`<button class="sec" onClick=${() => setAdding(true)}>${icon(ICONS.plus, 18)}${s("addSheet")}</button>`}
-      <div class="box list">${data.sheets.length ? data.sheets.map((e) => html`<${Row} key=${e.first}
-        onClick=${() => go("/s", { id: e.id })} title=${sheetName(e)}
-        sub=${[dueText(e), e.versions > 1 && s("versionsN", { n: e.versions }), e.own ? s("yours") : e.chat]
-          .filter(Boolean).join(" · ")}
-        aside=${e.status !== "posted" && html`<span class="chip plain">${e.status === "failed" ? s("notRead")
-          : s("waiting")}</span>`} />`) : html`<div class="note">${s("noSheets")}</div>`}</div>`}
+      ${!data.sheets.length ? html`<div class="box"><div class="note">${s("noSheets")}</div></div>`
+        : course ? html`<${SheetRows} sheets=${data.sheets} />`
+        : byCourse(data.sheets, data.courses).map(([key, title, rows]) => html`<section key=${key || "-"}
+            class="stack" style="gap:6px"><h2>${title}</h2><${SheetRows} sheets=${rows} /></section>`)}`}
+  <//>`;
+}
+
+// All the sheets by course: the lenses' courses in their order, then other known courses, then no course.
+function byCourse(sheets, courses) {
+  const order = new Map(courses.map((c, i) => [c.key, i]));
+  const groups = new Map();
+  for (const e of sheets) {
+    const key = e.course || null;
+    if (!groups.has(key)) groups.set(key, [key, key ? e.course_title || key : s("noCourse"), []]);
+    groups.get(key)[2].push(e);
+  }
+  const rank = (key) => (key === null ? Infinity : order.has(key) ? order.get(key) : courses.length);
+  return [...groups.values()].sort((a, b) => rank(a[0]) - rank(b[0]));
+}
+
+const SheetRows = ({ sheets }) => html`<div class="box list">${sheets.map((e) => html`<${Row} key=${e.first}
+  onClick=${() => go("/s", { id: e.id })} title=${sheetName(e)}
+  sub=${[dueText(e), e.versions > 1 && s("versionsN", { n: e.versions }), e.own ? s("yours") : e.chat]
+    .filter(Boolean).join(" · ")}
+  aside=${e.status !== "posted" && html`<span class="chip plain">${e.status === "failed" ? s("notRead")
+    : s("waiting")}</span>`} />`)}</div>`;
+
+// --- a course's knowledge base and grades: the lens's tiles open these ------------------------------------------
+
+const lensBack = (course) => "#/course?key=" + encodeURIComponent(course || "");
+
+export function DocsList({ course, onOut }) {
+  const { data, error } = useLoad("/course?key=" + encodeURIComponent(course || ""), onOut);
+  return html`<${Screen} title=${(data && data.title) || course} sub=${t("knowledge")} back=${lensBack(course)}
+      error=${error}>
+    ${data && html`<div class="box">${data.documents.length ? data.documents.map((d) => html`
+      <div class="doc" key=${d.id}><span><b>${d.title}</b><div class="mut small">${d.kind === "book" ? t("book")
+        : d.kind === "cheatsheet" ? t("cheatsheet") : d.day ? day(d.day, { day: "numeric", month: "long" }) : ""}
+        </div>${d.versions.length > 1 && html`<div class="mut small">${t("versions")}: ${d.versions.slice(1)
+          .map((v) => v.url ? html`<a key=${v.version} href=${v.url} target="_blank" rel="noopener">v${v.version}</a> `
+            : html`<span key=${v.version}>v${v.version} </span>`)}</div>`}
+        </span>${d.url && html`<a class="sec" href=${d.url} target="_blank" rel="noopener">${d.kind === "cheatsheet"
+          ? "MD" : "PDF"} v${d.versions[0].version}</a>`}</div>`)
+      : html`<div class="note">${s("noDocs")}</div>`}</div>`}
+  <//>`;
+}
+
+export function GradesList({ course, onOut }) {
+  const { data, error } = useLoad("/course?key=" + encodeURIComponent(course || ""), onOut);
+  const g = data && data.grades;
+  return html`<${Screen} title=${(data && data.title) || course} sub=${t("grades")} back=${lensBack(course)}
+      error=${error}>
+    ${g && html`<div class="stat dark" style="align-self:stretch">
+        <span class="lab">${t("byCourse")}</span>
+        <big>${g.average === null ? "—" : String(g.average).replace(".", getDecimal())}<small> / 10</small></big>
+        ${g.count > 0 && html`<small>${t("worksN", { n: g.count })}</small>`}</div>
+      <div class="box">${g.works.length ? g.works.map((w) => html`<${GradeRow} key=${w.id} w=${w} />`)
+        : html`<div class="note">${t("noGrades")}</div>`}</div>`}
   <//>`;
 }
 
@@ -350,6 +407,11 @@ export function Inbox({ onOut }) {
     setChosen([]);
     done(answer, s("sorted"));
   });
+  const remove = () => act.run(async () => {
+    const answer = await api("POST", "/shelf/remove", { ids: chosen });
+    setChosen([]);
+    done(answer, s("removed"));
+  });
   return html`<${Screen} title=${s("inboxRow")} back="#/shelf" error=${error || act.error}>
     ${data && html`
       <div class="box list">${data.items.length ? data.items.map((item) => html`<div class="row" key=${item.id}>
@@ -362,7 +424,9 @@ export function Inbox({ onOut }) {
             item.author].filter(Boolean).join(" · ")}</div></button></div>`)
         : html`<div class="note">${s("inboxEmpty")}</div>`}</div>
       ${chosen.length > 0 && html`<div class="box"><${Place} courses=${data.courses} inbox=${true} busy=${act.busy}
-        label=${s("sortN", { n: chosen.length })} onPick=${sort} /></div>`}`}
+        label=${s("sortN", { n: chosen.length })} onPick=${sort} />
+        <button class="sec danger wide" style="margin-top:8px" disabled=${act.busy} onClick=${remove}>
+          ${icon(ICONS.cross, 18)}${s("removeN", { n: chosen.length })}</button></div>`}`}
   <//>`;
 }
 

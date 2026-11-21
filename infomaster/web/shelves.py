@@ -58,7 +58,8 @@ class Shelves:
                 ("GET", "/items/{item_id}", item),
                 ("PATCH", "/items/{item_id}", update_item),
                 ("DELETE", "/items/{item_id}", remove_item),
-                ("POST", "/sort", sort)]
+                ("POST", "/sort", sort),
+                ("POST", "/remove", remove_items)]
 
 
 SHELVES_KEY = web.AppKey("shelves", Shelves)
@@ -411,13 +412,22 @@ async def remove_item(request: web.Request) -> web.Response:
     return _answer(request, {"change": await _act(request, "remove_material", {"id": _id(request, "item_id")})})
 
 
-async def sort(request: web.Request) -> web.Response:
-    """{ids, class_uid} or {ids, course: a key, or null for back to the inbox}: the connector's sort_material."""
-    values = await _body(request)
+def _ids(values: dict) -> list[int]:
     ids = values.get("ids")
     if not isinstance(ids, list) or not ids or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids):
         raise web.HTTPBadRequest(text="expected {ids: [item ids]}")
-    arguments: dict = {"ids": ids}
+    return ids
+
+
+async def remove_items(request: web.Request) -> web.Response:
+    """{ids}: the connector's remove_material of several items, one change with one undo (the inbox's «Delete»)."""
+    return _answer(request, {"change": await _act(request, "remove_material", {"ids": _ids(await _body(request))})})
+
+
+async def sort(request: web.Request) -> web.Response:
+    """{ids, class_uid} or {ids, course: a key, or null for back to the inbox}: the connector's sort_material."""
+    values = await _body(request)
+    arguments: dict = {"ids": _ids(values)}
     if values.get("class_uid"):
         arguments["class_uid"] = values["class_uid"]
     elif "course" in values:
