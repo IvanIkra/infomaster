@@ -31,7 +31,7 @@ from ..i18n import json_default, reason
 log = logging.getLogger(__name__)
 
 SHEET_COURSE_LIMIT = 60
-SHEET_NUMBER_LIMIT = 20
+SHEET_NUMBER_LIMIT = 60  # the number, or a short title instead
 ITEMS = 500          # of a course's page or of the inbox
 CLASSES = 40         # the classes a course's item can be moved to
 PREVIEW = 600        # characters of a text on a list

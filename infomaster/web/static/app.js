@@ -1,7 +1,7 @@
 // The web app (§8.6, D61): the login (a code from the bot, then a passkey), the devices, and the frame that routes
 // to the screens (screens.js).
 import { render } from "preact";
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError, CHANGED, ICONS, TOAST, api, go, html, icon, route } from "./common.js";
 import { getLang, setLang, t, when } from "./i18n.js";
 import * as passkey from "./passkey.js";
@@ -166,15 +166,19 @@ function Devices({ onOut }) {
 function Toast() {
   const [note, setNote] = useState(null);  // {text, changeId}
   const [busy, setBusy] = useState(false);
+  const [shift, setShift] = useState(null);  // a finger's drag: {x, y}
+  const timer = useRef(null);
+  const start = useRef(null);  // where the finger touched
+  const hide = () => { clearTimeout(timer.current); setNote(null); setShift(null); };
   useEffect(() => {
-    let timer = null;
     const show = (event) => {
-      clearTimeout(timer);
+      clearTimeout(timer.current);
       setNote(event.detail);
-      timer = setTimeout(() => setNote(null), 10000);
+      setShift(null);
+      timer.current = setTimeout(() => setNote(null), 10000);
     };
     window.addEventListener(TOAST, show);
-    return () => { clearTimeout(timer); window.removeEventListener(TOAST, show); };
+    return () => { clearTimeout(timer.current); window.removeEventListener(TOAST, show); };
   }, []);
   if (!note) return null;
   const undo = async () => {
@@ -187,9 +191,25 @@ function Toast() {
       setNote({ text: e.message, changeId: null });
     } finally { setBusy(false); }
   };
-  return html`<div class="toast" role="status"><div>
+  // Swiped up or aside, the note goes; a short drag springs back.
+  const down = (e) => { start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; };
+  const move = (e) => {
+    if (!start.current) return;
+    const x = e.touches[0].clientX - start.current.x, y = e.touches[0].clientY - start.current.y;
+    setShift({ x: Math.abs(x) > Math.abs(y) ? x : 0, y: Math.abs(y) >= Math.abs(x) ? Math.min(y, 0) : 0 });
+  };
+  const up = () => {
+    start.current = null;
+    if (shift && (shift.y < -30 || Math.abs(shift.x) > 80)) hide();
+    else setShift(null);
+  };
+  const style = shift ? { transform: `translate(${shift.x}px, ${shift.y}px)`, transition: "none",
+    opacity: Math.max(0.3, 1 - (Math.abs(shift.x) + Math.abs(shift.y)) / 200) } : null;
+  return html`<div class="toast" role="status"><div style=${style}
+      onTouchStart=${down} onTouchMove=${move} onTouchEnd=${up} onTouchCancel=${up}>
     <span>${note.text}</span>
     ${note.changeId !== null && html`<button disabled=${busy} onClick=${undo}>${t("undo")}</button>`}
+    <button class="x" aria-label=${t("close")} onClick=${hide}>${icon(ICONS.cross, 18)}</button>
   </div></div>`;
 }
 

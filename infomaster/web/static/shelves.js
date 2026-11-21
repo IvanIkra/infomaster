@@ -39,7 +39,7 @@ const TEXTS = {
   bookSettings: ["Layout", "Разметка"],
   byHand: ["Added by hand", "Добавлены вручную"],
   bookAdded: ["Gradebook added: it is read in a minute", "Таблица добавлена: прочитается через минуту"],
-  number: ["Number", "Номер"],
+  number: ["Number or title", "Номер или название"],
   dueDate: ["Due date", "Срок"],
   summaryField: ["Summary", "Описание"],
   save: ["Save", "Сохранить"],
@@ -119,7 +119,10 @@ const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const hm = (iso) => iso.slice(11, 16);
 const dayOf = (iso) => capital(day(iso, { weekday: "short", day: "numeric", month: "short" }));
 const classLabel = (c) => `${dayOf(c.start)}, ${hm(c.start)} · ${c.kind ? s(c.kind) : s("classWord")}`;
-const sheetName = (e) => [e.course_title, e.number && "№" + e.number].filter(Boolean).join(" · ") || e.name;
+// The number shows as "№ 3"; a title written instead of it (no number), as it is.
+const numbered = (text) => /^[\s№#]*\d/.test(text || "");
+const sheetTitle = (text) => (numbered(text) ? "№" + text.replace(/^[\s№#]+/, "") : text);
+const sheetName = (e) => [e.course_title, e.number && sheetTitle(e.number)].filter(Boolean).join(" · ") || e.name;
 const dueText = (e) => (e.due ? `${s("due")} ${e.due_assumed ? "≈ " : ""}${day(e.due, { day: "numeric", month: "short" })}`
   : s("noDue"));
 
@@ -208,7 +211,7 @@ function AddSheet({ courses, course, onDone }) {
     <input class="field" type="file" accept="application/pdf" required
            onChange=${(e) => setFile(e.target.files[0] || null)} />
     <${CourseSelect} courses=${courses} value=${form.course} onChange=${(v) => setForm({ ...form, course: v })} />
-    <input class="field" placeholder=${s("number")} maxlength="20" value=${form.number}
+    <input class="field" placeholder=${s("number")} maxlength="60" value=${form.number}
            onInput=${(e) => setForm({ ...form, number: e.target.value })} />
     <label class="datef"><span>${s("dueDate")}</span>
       <input class="field" type="date" value=${form.due}
@@ -455,7 +458,7 @@ function SheetEdit({ sheet, courses, onDone }) {
   return html`<form class="stack" style="gap:10px" onSubmit=${save}>
     <div class="err" role="alert">${act.error}</div>
     <${CourseSelect} courses=${courses} value=${form.course} onChange=${(v) => setForm({ ...form, course: v })} />
-    <input class="field" placeholder=${s("number")} maxlength="20" value=${form.number}
+    <input class="field" placeholder=${s("number")} maxlength="60" value=${form.number}
            onInput=${(e) => setForm({ ...form, number: e.target.value })} />
     <label class="datef"><span>${s("dueDate")}</span>
       <input class="field" type="date" value=${form.due}

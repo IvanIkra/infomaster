@@ -928,6 +928,10 @@ class, interim assessment, exam, consultation, event, talk), a deadline by an ho
 its kind (photo, audio, video, notes, slides, sheet, link, text, file). `mark(kind)` in `common.js` draws them as line
 icons in the colours the dot and the diamond had. A sheet's card shows the caption it came to the bot with.
 
+**A sheet's number or title** (stage 17.7, D76). The sheet's form has one field «Number or title»: a number shows as
+«№ 3», a title (a sheet without a number, «Test 1 problems») as it is. The note on top after an action has a
+cross and goes when swiped up or aside.
+
 **A grade in full, and the calculator** (stage 17.6, D75). A work's card opens as a view: the points of its problems
 (a problem with a comment marked), the teachers' comments on the own row's cells (the work's own first, then each
 problem's under its number), and how it is counted (`how`: Haiku's line in the owner's language, else the formula
@@ -1096,6 +1100,8 @@ own; Claude is an optional door, not the brain (D53).
     - 17.6 a grade in full (done, D75): the teachers' comments on the own row and the own row's formulas read from
       the gradebooks, a work's card as a view with its problems, comments and how it is counted, the edit behind a
       small button, and a calculator of the course's grade with «How much is needed».
+    - 17.7 a sheet's title and notes that go (done, D76): a sheet without a number takes a short title in the same
+      field, shown as it is («№ 3» for a number); the note after an action closes with a cross or a swipe.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

@@ -912,8 +912,8 @@ def register(registry: Registry, app) -> None:
              "spending (read only).", {}, get_settings)
     if has[actions.SETTINGS_KEY] and has[actions.SHEETS_KEY]:
         read("list_sheets", "Problem sheets",
-             "Problem sheets found in the chats or uploaded, newest first, with course, number, due date, summary, "
-             "versions, and the limits of reading a PDF whole.", {}, list_sheets)
+             "Problem sheets found in the chats or uploaded, newest first, with course, number (or a title), due "
+             "date, summary, versions, and the limits of reading a PDF whole.", {}, list_sheets)
         read("get_sheet", "One problem sheet",
              "A sheet's details and the text of its pages as read locally (empty for a scan). With "
              "first_page_image, a scanned first page comes as an image while the file is kept (14 days).",
@@ -1035,9 +1035,10 @@ def register(registry: Registry, app) -> None:
                "day": {"type": "string", "description": "HH:MM"}}, update_reminders, idempotent=True)
     if has[actions.SETTINGS_KEY] and has[actions.SHEETS_KEY]:
         write("edit_sheet", "Change a problem sheet",
-              "The course, number, due date or summary of a sheet; the caption of its message follows. An empty "
-              "course or a null due clears it.",
-              {"sheet_id": {"type": "integer"}, "course": {"type": "string"}, "number": {"type": "string"},
+              "The course, number (or a short title for a sheet without one), due date or summary of a sheet; "
+              "the caption of its message follows. An empty course or a null due clears it.",
+              {"sheet_id": {"type": "integer"}, "course": {"type": "string"},
+               "number": {"type": "string", "description": "the number (\"3\"), or a short title instead, up to 60"},
                "due": {"type": ["string", "null"], "description": "YYYY-MM-DD, or null"},
                "summary": {"type": "string"}}, edit_sheet, ("sheet_id",))
         write("delete_sheet", "Delete an own sheet",

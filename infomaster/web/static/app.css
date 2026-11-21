@@ -280,6 +280,8 @@ form.acts .btn { flex: 0 0 auto; padding: 0 20px; }
   box-shadow: 0 8px 24px rgba(28, 25, 23, 0.25); pointer-events: auto; font-weight: 700; font-size: 14px;
 }
 .toast span { flex: 1; }
+.toast > div { transition: transform .2s, opacity .2s; touch-action: none; }
+.toast button.x { padding: 0 8px; color: var(--now-mut); display: flex; align-items: center; }
 .toast button { min-height: 36px; padding: 0 14px; border: 0; border-radius: var(--rc); background: none;
                 color: var(--now-lab); font: 800 14px var(--fb); cursor: pointer; }
 

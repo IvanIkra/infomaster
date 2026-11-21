@@ -555,3 +555,12 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   first), its works as inputs, a «what if» counted again on every change, and «How much is needed» by bisection over
   one input, which holds since a grade grows with its works. A new comment is not news. The grade card opens as a
   view, its edit behind a small «Change»; the lens bar lost its cross, which did what «All» does.
+
+- **D76. A sheet's title instead of a number; notes that go, 21.11.2026.** Stage 17.7 of §11.1. Not every sheet has a
+  number: a sheet of typical problems for a test could only be left without one. The sheet's `number` now holds its number or, without
+  one, a short title (up to 60 characters, it was 20): one field, no new column, so the connector's `edit_sheet`, the
+  journal and its undo stay as they were. Text that starts with a digit (after «№» or «#») is a number and shows as
+  «№ 3», the deadline «Calc sheet 3», the library item «Sheet 3», as before; any other text shows as it is, the
+  deadline «Calc: Test 1 problems». The batch gives such a title when a sheet has no number. The note on top after an
+  action has a cross and goes when swiped up or aside, besides its 10 seconds. The empty due date of a sheet's form
+  keeps the field's shape in Safari, with «Due date» beside it.

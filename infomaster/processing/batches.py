@@ -282,7 +282,8 @@ sheet, a lab or project assignment, a test or exam variant. Not lecture notes or
 grading formula, an order, a form or a list of students. Judge by the file name, the first page and the message.
 - msg_id: the message with the PDF;
 - course: as for deadlines, or "";
-- number: the sheet's number as the sheet or the message gives it ("3", "2.1"), "" if none;
+- number: the sheet's number as the sheet or the message gives it ("3", "2.1"); without a number, a short title \
+of what it is in the sheet's language, at most 60 characters ("Типовые задачи КР1", "Вариант экзамена"); "" if neither;
 - due: YYYY-MM-DD when the message or the first page tells when to hand it in, else "". Its deadline also goes to \
 deadlines as usual.
 A message with a sheet usually also gets news ("Calc sheet 3 posted, due Oct 29").
@@ -527,7 +528,7 @@ def check(answer: dict, msg_ids: set[int], pdfs: set[int] = frozenset(), materia
         events = [event for raw_event in raw.get("events") or [] if (event := _event(raw_event))]
         sheets = list({raw_sheet["msg_id"]: {
             "msg_id": raw_sheet["msg_id"], "course": (raw_sheet.get("course") or "").strip(),
-            "number": " ".join(str(raw_sheet.get("number") or "").split())[:20], "due": _due(raw_sheet.get("due"))}
+            "number": " ".join(str(raw_sheet.get("number") or "").split())[:60], "due": _due(raw_sheet.get("due"))}
             for raw_sheet in raw.get("sheets") or [] if raw_sheet.get("msg_id") in pdfs}.values())
         found = _materials(raw, msg_ids, sheets) if materials else []
         if news or deadlines or events or sheets or found:

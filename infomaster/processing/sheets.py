@@ -15,9 +15,10 @@
    diff of the texts and says what changed. The summary and the changes are written in the app's language (D41),
    as it is when the sheet is prepared.
 
-4. The owner changes a sheet's course, number, due date and summary in the web app, and adds sheets of their own:
-   a PDF uploaded there, of the chat OWN_CHAT (D44). An own sheet is published as a chat's, gets newer versions by
-   the same rules among the own ones, and is the only kind the owner may delete.
+4. The owner changes a sheet's course, number (or a short title instead, `numbered`), due date and summary in the
+   web app, and adds sheets of their own: a PDF uploaded there, of the chat OWN_CHAT (D44). An own sheet is
+   published as a chat's, gets newer versions by the same rules among the own ones, and is the only kind the
+   owner may delete.
 5. A sheet without a due date is due before the next seminar of its course (`due_assumed`): the first seminar or
    practical class in the timetable as the feeds show it (corrections applied, cancelled ones skipped) that starts
    after its message, within 21 days (processing/schedule.py, `next_class`); a course without seminars takes its next
@@ -128,9 +129,21 @@ def number_key(number: str | None) -> str:
     return re.sub(r"[\s№#]+", "", (number or "").casefold())
 
 
+def numbered(number: str | None) -> bool:
+    """A sheet's `number` holds its number ("3", "№ 2.1", "4b") or, without one, a short title ("Test 1 problems")."""
+    return bool(re.match(r"[\s№#]*\d", number or ""))
+
+
+def sheet_title(number: str | None) -> str:
+    """'3' -> 'Sheet 3', a title as it is, nothing -> 'Sheet'."""
+    return " ".join(f"Sheet {number}".split()) if numbered(number) else (" ".join((number or "").split()) or "Sheet")
+
+
 def sheet_label(course: str, number: str) -> str:
-    """The label of a sheet's assumed deadline, as the batches write a sheet's: "Calc sheet 3"."""
-    return " ".join(f"{course} sheet {number}".split())
+    """The label of a sheet's assumed deadline, as the batches write a sheet's: "Calc sheet 3", "Calc: Test 1 tasks"."""
+    if numbered(number) or not number.strip():
+        return " ".join(f"{course} sheet {number}".split())
+    return " ".join(f"{course}: {number}".split()) if course.strip() else " ".join(number.split())
 
 
 def due_date(value) -> str | None:
@@ -350,7 +363,7 @@ class Sheets:
         return await self.library.add_download(
             copy, name=sheet["name"], media_type="application/pdf", kind="sheet", source="sheet",
             chat_id=sheet["chat_id"], msg_id=sheet["msg_id"], course=sheet["course"],
-            class_uid=found["uid"] if found else None, title=" ".join(f"Sheet {sheet['number'] or ''}".split()),
+            class_uid=found["uid"] if found else None, title=sheet_title(sheet["number"]),
             author=author, at=sent, note="" if sheet["course"] else "the sheet's course is not known")
 
     async def _prepare(self, sheet_id: int) -> dict | None:
@@ -555,7 +568,7 @@ class Sheets:
                 f"Chat: {where}",
                 f"File: {sheet['name']}",
                 f"Course: {sheet['course'] or '(none)'}" + (f", abbreviation {abbr}" if abbr else ""),
-                f"Number: {sheet['number'] or '(none)'}"] + \
+                f"Number or title: {sheet['number'] or '(none)'}"] + \
             ([f"The owner's caption: {sheet['caption']}"] if sheet.get("caption") else [])
 
     async def _read(self, sheet: dict, path, extract: pdf.Extract) -> tuple[str | None, list[dict]]:

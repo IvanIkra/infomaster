@@ -22,7 +22,7 @@ from infomaster.processing import pdf
 from infomaster.processing.batches import Batches, Changes, check
 from infomaster.processing.bot_sheets import BotSheets
 from infomaster.processing.news import News
-from infomaster.processing.sheets import Sheets, number_key
+from infomaster.processing.sheets import Sheets, number_key, sheet_label, sheet_title
 from infomaster.settings import ChatSettings, Settings
 
 CHAT = -1001234567890
@@ -150,6 +150,14 @@ def test_similar_names(a, b, same):
 
 def test_keys():
     assert number_key("№ 3") == "3" and number_key("ДЗ-2.1") == "дз-2.1"
+
+
+def test_a_title_instead_of_a_number():
+    assert sheet_label("Calc", "3") == "Calc sheet 3" and sheet_label("Calc", "") == "Calc sheet"
+    assert sheet_label("Alg", "Test 1 problems") == "Alg: Test 1 problems"
+    assert sheet_label("", "Test 1 problems") == "Test 1 problems"
+    assert sheet_title("№ 4b") == "Sheet № 4b" and sheet_title("Exam variant") == "Exam variant"
+    assert sheet_title("") == "Sheet"
 
 
 # --- the files ------------------------------------------------------------------------------------
