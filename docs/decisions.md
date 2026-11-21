@@ -619,6 +619,7 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
     the deadline it moved; names in the prompt are quoted; fields are capped. The connector marks outside text and
     may not turn a chat on.
   - The HSE callback shows only an OAuth error code; the service's container does not hold the sidecar's key.
-  Left as they are: the container runs as root (the data directory on the server is root's: a switch needs a chown
-  at deployment), a cross-site POST to the share target (the service worker cannot tell it from Android's share),
+  - The service runs as a plain user whose id is `APP_UID` in `.env`, the host user that owns `./data`; the sidecar
+    keeps its own state as itself.
+  Left as they are: a cross-site POST to the share target (the service worker cannot tell it from Android's share),
   refresh-token reuse within its two minutes of grace, and the LLM budget a flood of messages can spend.
