@@ -74,6 +74,25 @@ def constants(views: list[TabView]) -> dict[str, str]:
     return found
 
 
+def referenced(views: list[TabView]) -> dict[str, set[str]]:
+    """The own row's columns the own rows' formulas read, by tab, empty ones too (a test not written yet): the view
+    keeps them under their headers, so the calculator has them as inputs."""
+    by_tab = {v.tab: v for v in views}
+    found: dict[str, set[str]] = {}
+    for v in views:
+        for formula in v.formulas.values():
+            try:
+                tree = fx.parse(formula)
+            except fx.Unsupported:
+                continue
+            for node in fx.refs(tree):
+                for tab, col, row in fx.cells(node):
+                    other = by_tab.get(tab or v.tab)
+                    if other is not None and row == other.own_row and col != other.name_col:
+                        found.setdefault(other.tab, set()).add(col)
+    return found
+
+
 @dataclass
 class Tab:
     name: str
@@ -83,6 +102,7 @@ class Tab:
     formulas: dict[str, str]
     notes: dict[str, str]
     works: dict[str, dict]                       # by column: the works laid out, and their bonus columns
+    name_col: str = ""
     trees: dict[str, fx.Node | None] = field(default_factory=dict)
 
     def tree(self, col: str) -> fx.Node | None:
@@ -108,7 +128,7 @@ class Book:
             self.tabs[t["tab"]] = Tab(t["tab"], t.get("own_row") or 0,
                                       {c["column"]: cell_value(c["value"]) for c in t.get("columns") or []},
                                       {c["column"]: c.get("header") or "" for c in t.get("columns") or []},
-                                      t.get("formulas") or {}, t.get("notes") or {}, works)
+                                      t.get("formulas") or {}, t.get("notes") or {}, works, t.get("name_col") or "")
         self.constants = {key: cell_value(value) for key, value in (view.get("constants") or {}).items()}
 
     # --- names ------------------------------------------------------------------------------
@@ -210,6 +230,8 @@ class Book:
             t = self.tabs.get(tab)
             if t is None:
                 return
+            if not top and t.name_col and fx.col_index(col) <= fx.col_index(t.name_col):
+                return  # the group's number, the name: no input
             if not top and (col in t.works or col not in t.formulas):
                 if col in t.values or col in t.works or row_cell(t, col):
                     found.append((tab, col))

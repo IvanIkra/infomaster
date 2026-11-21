@@ -13,7 +13,7 @@ from test_web_fixes import ask, fixer  # noqa: F401  (the fixture)
 
 from infomaster.collectors.grades import TabView, read_views
 from infomaster.processing import formulas as fx
-from infomaster.processing.calc import Book, constants, short
+from infomaster.processing.calc import Book, constants, referenced, short
 from infomaster.processing.grades import VIEW, Grades, describe, extract
 
 ME = "Тестов Тест"
@@ -73,11 +73,11 @@ def gradebook() -> bytes:
     hw["D4"].comment = Comment("пример стоит проверить подстановкой", "Преподаватель Первый")
     hw["F4"].comment = Comment("в целом хорошо", "Преподаватель Первый")
     hw["C3"].comment = Comment("a classmate's comment", "Преподаватель Первый")
-    for title, points in (("КР1", [4, 3, 0]), ("КР2", [0, 0, 0])):
+    for title, points in (("КР1", [4, 3, 0]), ("КР2", [None, None, None])):  # the second not written yet
         ws = wb.create_sheet(title)
         ws.append(["Группа", "Студент", "1", "2", "3", title])
         ws.append([1, "Петров Пётр", 5, 5, 5, "=10*SUM(C2:E2)/15"])
-        ws.append([1, ME, *points, "=10*SUM(C3:E3)/15"])
+        ws.append([1, ME, *points, '=IF($A3<>"",10*SUM(C3:E3)/15,"")'])
     wb["КР1"]["E3"].comment = Comment("ход решения ясен, ответ не получен", "Преподаватель Второй")
     total = wb.create_sheet("Итоги")
     total.append(["Группа", "Студент", "КР1", "КР2", "ДЗ", "НК", "Экзамен обязателен", "Чужое"])
@@ -105,7 +105,9 @@ def computed(views: list[TabView]) -> list[TabView]:
 
 
 def kept(views) -> dict:
-    return {"course": "DM", "tabs": [describe(v, LAYOUTS[v.tab]) for v in views], "constants": constants(views)}
+    wanted = referenced(views)
+    return {"course": "DM", "tabs": [describe(v, LAYOUTS[v.tab], wanted.get(v.tab, ())) for v in views],
+            "constants": constants(views)}
 
 
 def test_the_own_rows_formulas_and_comments_are_read_and_no_one_elses():
@@ -122,7 +124,7 @@ def test_the_own_rows_formulas_and_comments_are_read_and_no_one_elses():
 
 
 def test_the_calculator_counts_the_grade_and_what_is_needed():
-    book = Book(kept(read_views(gradebook(), ME)))
+    book = Book(kept(computed(read_views(gradebook(), ME))))
     targets = book.targets()
     assert book.default_target(targets) == "Итоги!F"  # the grade, not the flag on top of it
     assert book.written("Итоги", "F") == "ROUND(0.35·КР1 + 0.35·КР2 + 0.3·ДЗ; 0)"
@@ -137,6 +139,10 @@ def test_the_calculator_counts_the_grade_and_what_is_needed():
     assert book.value("Итоги", "F", {"КР2!F": 6.77}) == 6 and book.value("Итоги", "F", {"КР2!F": 6.76}) == 5
     assert book.solve("Итоги!F", "КР2!F", 9, {}) == {"need": None, "reached": False, "max": 10.0}
     assert book.solve("Итоги!F", "КР2!F", 3, {})["need"] == 0
+    # a test not written yet: its problems are inputs, empty, under their headers; the group's number is none
+    assert [(i["cell"], i["name"], i["sheet"]) for i in book.inputs("КР2!F", {})] == [
+        ("КР2!C", "1", None), ("КР2!D", "2", None), ("КР2!E", "3", None)]
+    assert book.value("КР2", "F", {"КР2!C": 5.0, "КР2!D": 4.0}) == 6
 
 
 # --- the web app ------------------------------------------------------------------------------------------------------

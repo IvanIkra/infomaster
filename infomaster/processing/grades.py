@@ -32,7 +32,7 @@ import datetime as dt
 import hashlib
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -43,7 +43,7 @@ from ..llm.budget import BudgetExceeded
 from ..llm.client import BadAnswer, Haiku, LLMError
 from ..settings import SPECS, Settings, SettingsError
 from ..store import Store
-from .calc import Book, constants, split, written_cells
+from .calc import Book, constants, referenced, split, written_cells
 from .formulas import col_index
 
 log = logging.getLogger(__name__)
@@ -176,10 +176,11 @@ def number(value) -> float | None:
         return None
 
 
-def columns(view: TabView, header_rows: list[int]) -> list[dict]:
-    """The own row's cells left to right, each under its header."""
+def columns(view: TabView, header_rows: list[int], wanted: Iterable[str] = ()) -> list[dict]:
+    """The own row's cells left to right, each under its header; a formula showing nothing and an empty cell a
+    formula reads (`wanted`) have their place too."""
     rows = header_rows or [row for row, _ in view.rows][:HEADER_GUESS]
-    cols = sorted(set(view.mine) | set(view.formulas), key=col_index)  # a formula showing nothing has its place too
+    cols = sorted(set(view.mine) | set(view.formulas) | set(wanted), key=col_index)
     return [{"column": col, "header": view.column_header(col, rows), "value": text(view.mine.get(col))}
             for col in cols]
 
@@ -199,10 +200,10 @@ def works(items: list[dict], cells: list[dict], graded: dict[str, float] | None 
     return listed
 
 
-def describe(view: TabView, spec: dict) -> dict:
+def describe(view: TabView, spec: dict, wanted: Iterable[str] = ()) -> dict:
     """A tab as the web app shows it."""
     header_rows = spec.get("header_rows") or []
-    cells = columns(view, header_rows)
+    cells = columns(view, header_rows, wanted)
     return {"tab": view.tab, "own_row": view.own_row, "name_col": view.name_col, "skip": bool(spec.get("skip")),
             "reason": spec.get("reason"),
             "by": "you" if spec.get("by") == "you" else "failed" if spec.get("failed") else "haiku",
@@ -262,12 +263,13 @@ class Grades:
         with a name the settings no longer have, records nothing either."""
         items: list[Item] = []
         unread, tabs = [], []
+        wanted = referenced(sheet.views)
         for view in sheet.views:
             spec = await self.layout(sheet.id, view, budget(sheet.course))
             if spec.get("failed"):
                 unread.append(view.tab)
             items += extract(sheet.id, sheet.course, view, spec, len(items))
-            tabs.append(describe(view, spec))
+            tabs.append(describe(view, spec, wanted.get(view.tab, ())))
         if not self._current(sheet):
             return Read(False, 0)
         kept = {"course": sheet.course, "tabs": tabs, "constants": constants(sheet.views)}
