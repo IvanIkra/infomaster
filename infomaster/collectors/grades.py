@@ -48,6 +48,9 @@ EXPORT_URL = "https://docs.google.com/spreadsheets/d/{id}/export?format=xlsx"
 TITLE_URL = "https://docs.google.com/spreadsheets/d/{id}/htmlview"
 POLL_EVERY = 30 * 60        # seconds (Tablo's poll_minutes)
 TIMEOUT = 120               # seconds
+XLSX_MAX = 20 * 2**20       # bytes of a downloaded sheet (D79: the container has 256 MB)
+UNZIPPED_MAX = 120 * 2**20  # bytes of its parts unpacked, all together: a small file may unpack to gigabytes
+ROWS_MAX, COLUMNS_MAX = 5000, 400  # of a tab read: a gradebook is far smaller; one cell far away pads every row
 STALE_AFTER = dt.timedelta(hours=12)
 TOP_ROWS = 15               # rows of a tab above the own row the model sees: the header is somewhere among them
 COURSE_FROM_TITLE = 8       # characters of the sheet's title that name the course when its label is not set
@@ -180,6 +183,7 @@ def read_views(data: bytes, student: str) -> list[TabView]:
     from openpyxl import load_workbook
 
     target = norm(student).split()
+    check_zip(data)
     try:
         wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     except Exception as e:  # a login page or a broken file: zipfile, openpyxl and XML errors alike
@@ -189,7 +193,12 @@ def read_views(data: bytes, student: str) -> list[TabView]:
         for ws in wb.worksheets:
             if ws.sheet_state != "visible":
                 continue
-            rows = [list(r) for r in ws.iter_rows(values_only=True)]
+            ws.reset_dimensions()  # the file's own <dimension> would pad every row to it
+            rows = []
+            for cells in ws.iter_rows(values_only=True):
+                if len(rows) >= ROWS_MAX:
+                    break
+                rows.append(list(cells[:COLUMNS_MAX]))
             own = next(((i, j) for i, r in enumerate(rows) for j, c in enumerate(r) if matches(c, target)), None)
             if own is None:
                 continue
@@ -221,6 +230,17 @@ def read_views(data: bytes, student: str) -> list[TabView]:
 NOTE_CHARS = 1_000
 
 
+def check_zip(data: bytes) -> None:
+    """ValueError for a workbook whose parts unpack to more than UNZIPPED_MAX (a zip bomb), or that is no zip."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            unpacked = sum(info.file_size for info in z.infolist())
+    except zipfile.BadZipFile:
+        raise ValueError("not a workbook, is the sheet open to anyone with the link? (BadZipFile)") from None
+    if unpacked > UNZIPPED_MAX:
+        raise ValueError(f"the workbook unpacks to {unpacked >> 20} MB: too big to read")
+
+
 def own_formulas(data: bytes, own_rows: dict[str, int]) -> dict[str, dict[str, str]]:
     """The formulas of the own row of each tab: tab -> column letter -> "=...". A formula's text only, no values."""
     from openpyxl import load_workbook
@@ -232,8 +252,9 @@ def own_formulas(data: bytes, own_rows: dict[str, int]) -> dict[str, dict[str, s
             row = own_rows.get(ws.title)
             if row is None:
                 continue
+            ws.reset_dimensions()
             for cells in ws.iter_rows(min_row=row, max_row=row, values_only=True):
-                found[ws.title] = {column(j): c for j, c in enumerate(cells)
+                found[ws.title] = {column(j): c for j, c in enumerate(cells[:COLUMNS_MAX])
                                    if isinstance(c, str) and c.startswith("=")}
     finally:
         wb.close()
@@ -386,7 +407,14 @@ class GradeSheets:
                 st.title = st.title or file_title(dropbox_file(sheet["url"])[1])
             async with session.get(download_url(sheet["url"])) as response:  # redirects are followed
                 response.raise_for_status()
-                data = await response.read()
+                if (response.content_length or 0) > XLSX_MAX:
+                    raise ValueError(f"the sheet is over {XLSX_MAX >> 20} MB")
+                data = bytearray()
+                async for chunk in response.content.iter_chunked(1 << 16):
+                    data += chunk
+                    if len(data) > XLSX_MAX:
+                        raise ValueError(f"the sheet is over {XLSX_MAX >> 20} MB")
+                data = bytes(data)
                 disposition = response.content_disposition
             if is_dropbox(sid):
                 if disposition is not None and (named := disposition.filename):  # the file may have been renamed

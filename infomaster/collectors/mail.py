@@ -207,6 +207,11 @@ def parse(raw: bytes, uid: int = 0, fallback_date: dt.datetime | None = None) ->
 # --- IMAP -----------------------------------------------------------------------
 
 
+LETTER_BYTES = 15 * 2**20  # a bigger letter is read by its headers only (D79)
+POLL_BYTES = 40 * 2**20    # letters held at once; the rest wait for the next poll
+TOO_BIG = "(The letter is {mb:.0f} MB: too big to read; open it in the mailbox.)"
+
+
 def _imap_date(day: dt.date) -> str:
     return f"{day.day:02d}-{MONTHS[day.month - 1]}-{day.year}"
 
@@ -232,13 +237,31 @@ def fetch(host: str, port: int, user: str, password: str, folder: str, uidvalidi
         uids = sorted(int(u) for u in (data[0] or b"").split())
         if current == uidvalidity and last is not None:
             uids = [u for u in uids if u > last]  # "n:*" always matches the newest letter
-        letters = []
-        for uid in uids:
-            typ, data = imap.uid("FETCH", str(uid), "(BODY.PEEK[])")
-            raw = next((d[1] for d in data if isinstance(d, tuple)), None)
+        letters, total = [], 0
+        for n, uid in enumerate(uids):
+            if total > POLL_BYTES:  # the rest at the next poll: the state moves only past what was read
+                return current, uids[n - 1], letters
+            size = _size(imap, uid)
+            if size > LETTER_BYTES:  # its headers only, and a line why: anyone may send a letter of any size
+                typ, data = imap.uid("FETCH", str(uid), "(BODY.PEEK[HEADER])")
+                header = next((d[1] for d in data if isinstance(d, tuple)), None)
+                raw = header.rstrip(b"\r\n") + b"\r\n\r\n" + TOO_BIG.format(mb=size / 2**20).encode() \
+                    if typ == "OK" and header else None
+            else:
+                typ, data = imap.uid("FETCH", str(uid), "(BODY.PEEK[])")
+                raw = next((d[1] for d in data if isinstance(d, tuple)), None)
             if typ == "OK" and raw:
                 letters.append((uid, raw))
+                total += len(raw)
         return current, max([top] + uids), letters
+
+
+def _size(imap: imaplib.IMAP4, uid: int) -> int:
+    """A letter's size by the server, before it is downloaded; 0 when the server does not say."""
+    typ, data = imap.uid("FETCH", str(uid), "(RFC822.SIZE)")
+    found = re.search(rb"RFC822\.SIZE (\d+)", b" ".join(d if isinstance(d, bytes) else d[0] for d in data or []
+                                                       if d)) if typ == "OK" else None
+    return int(found[1]) if found else 0
 
 
 # --- the source ---------------------------------------------------------------------

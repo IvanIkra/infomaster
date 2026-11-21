@@ -135,6 +135,29 @@ def test_read_views_keeps_the_top_rows_and_the_own_row():
         assert "Иванов" not in g.layout_prompt(view)  # the own name is not sent
 
 
+def test_a_crafted_workbook_stays_small():
+    """D79: a far cell pads no row, a sheet past ROWS_MAX is cut, and a zip bomb is refused before it unpacks."""
+    import zipfile
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Студент", "Балл"])
+    ws.append(["Иванов Иван Сергеевич", 7])
+    ws["XFD1048576"] = "far away"
+    out = io.BytesIO()
+    wb.save(out)
+    [view] = collector.read_views(out.getvalue(), "Иванов Иван Сергеевич")
+    assert view.own_row == 2 and view.mine == {"B": 7}
+
+    bomb = io.BytesIO()
+    with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("xl/sharedStrings.xml", b"0" * (collector.UNZIPPED_MAX + 1))
+    with pytest.raises(ValueError, match="unpacks"):
+        collector.read_views(bomb.getvalue(), "Иванов")
+    with pytest.raises(ValueError, match="not a workbook"):
+        collector.read_views(b"<html>login</html>", "Иванов")
+
+
 def test_name_matching_handles_case_and_yo():
     assert collector.matches("ИВАНОВ  Иван Сергеевич", ["иванов", "иван"])
     assert collector.matches("Иванов Иван", ["иванов", "иван"])
