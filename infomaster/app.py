@@ -24,7 +24,7 @@ from .connector import Connector
 from .i18n import Phrase
 from .library import Library
 from .library import links as library_links
-from .library.feed import ChatMaterials, from_bot
+from .library.feed import ChatMaterials
 from .llm.budget import Budget
 from .llm.client import Haiku
 from .llm.journal import Journal
@@ -35,6 +35,7 @@ from .outputs.ical_feed import CalendarFeed
 from .outputs.reminders import DeadlineReminders
 from .outputs.sheets import SheetPublisher
 from .processing.batches import Batches, Changes
+from .processing.bot_sheets import BotSheets
 from .processing.deadlines import Deadlines
 from .processing.events import Events
 from .processing.grades import Grades
@@ -124,7 +125,9 @@ class Service:
         self.library_feed.download = self.twin.download
         self.batches.materials = self.library_feed
         self.sheets.library = self.library
-        self.bot.on_material = lambda message, download: from_bot(self.library, message, download)
+        # A PDF sent to the bot that is a sheet goes to the sheets with its caption (D73), the rest to the inbox.
+        self.bot_sheets = BotSheets(self.sheet_publisher, self.library)
+        self.bot.on_material = self.bot_sheets.take
         # The MCP connector for claude.ai (§8.5, D57): its sign-in code comes from the bot to the owner's chat.
         self.connector = Connector(env, self.store, self.news, send_code=self._to_owner,
                                    lang=lambda: self.settings.get("language"))
@@ -134,6 +137,8 @@ class Service:
                           data=Data(self.schedule, self.merged, self.library, self.grades, self.library_links,
                                     language, self.news, lambda: self.settings.get("news_ttl_hours")), llm=self.llm)
         self.web.connector = self.connector  # the owner's changes are the connector's tools, journaled with undo
+        self.bot_sheets.journal = self.connector.journal
+        self.bot_sheets.can_undo = lambda op: op in self.connector.registry.ops
         # Web Push (§8.6): the only notifications (D69).
         self.web.notifier.settings = self.settings  # the kinds pushed and the quiet hours («Machine», D65)
         self.deadline_watch.notify = self.web.notifier.deadline

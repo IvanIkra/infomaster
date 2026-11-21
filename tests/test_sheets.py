@@ -20,6 +20,7 @@ from infomaster.outputs.deadlines import DeadlineWatch
 from infomaster.outputs.sheets import SheetPublisher
 from infomaster.processing import pdf
 from infomaster.processing.batches import Batches, Changes, check
+from infomaster.processing.bot_sheets import BotSheets
 from infomaster.processing.news import News
 from infomaster.processing.sheets import Sheets, number_key
 from infomaster.settings import ChatSettings, Settings
@@ -33,6 +34,8 @@ SCAN = make_pdf(["", ""])
 
 class FakeLLM:
     """The batch answers in order; the readings of sheets ("pdf") too, from their own list."""
+
+    available = True
 
     def __init__(self):
         self.answers, self.readings, self.calls = [], [], []
@@ -702,3 +705,72 @@ async def test_sheets_go_to_the_library(batches, llm, sheets, topic, schedule, s
     newer = next(i for i in library.items(kind="sheet") if i["id"] != item["id"])
     assert (newer["title"], newer["course"], newer["class_uid"]) == ("Sheet", None, None)
     assert library.path(newer).read_bytes() == SHEET3_FIXED and library.inbox_count() == 1
+
+
+# --- a PDF sent to the bot (D73) -----------------------------------------------------------------------
+
+OWNER = 4242
+
+
+def to_bot(msg_id, data: bytes, name="hw5.pdf", text=""):
+    """The owner's private message to the bot with a PDF, and its download."""
+    message = {"chat_id": OWNER, "msg_id": msg_id, "at": clock.now_utc(), "text": text, "forward": None,
+               "files": [{"kind": "pdf", "name": name, "mime": "application/pdf", "size": len(data)}]}
+    downloads = []
+
+    async def download(path):
+        downloads.append(path)
+        path.write_bytes(data)
+        return True
+
+    return message, download, downloads
+
+
+@pytest.fixture
+def bot_sheets(store, tmp_path, topic):
+    topic.sheets.library = Library(store, tmp_path / "library")  # as the app links them
+    taken = BotSheets(topic, topic.sheets.library)
+    taken.journaled = []
+    taken.journal = lambda tool, arguments, summary, undo: taken.journaled.append((tool, arguments, undo))
+    taken.can_undo = lambda op: op == "_remove_own_sheet"
+    return taken
+
+
+async def test_a_sheet_sent_to_the_bot_is_a_sheet_with_its_caption(bot_sheets, llm, sheets):
+    caption = "ДЗ 5 по матану, сдать до пятницы"
+    message, download, downloads = to_bot(1, SHEET3, text=caption)
+    llm.readings = [{"sheet": True, "course": "Математический анализ", "number": "5", "due": "2026-10-30"}]
+    assert await bot_sheets.take(message, download) == "sheet"
+    [call] = llm.calls
+    assert call.task == "pdf" and caption in call.prompt and "Calculus. Sheet 3" in call.prompt and not call.documents
+    [listed] = sheets.listing()
+    assert (listed["own"], listed["course"], listed["number"], listed["due"], listed["caption"], listed["status"]) == (
+        True, "Математический анализ", "5", "2026-10-30", caption, "posted")
+    assert f"The owner's caption: {caption}" in sheets._context(sheets.get(listed["id"]))
+    assert bot_sheets.journaled == [("add_sheet", {"sheet_id": listed["id"]},
+                                     [{"tool": "_remove_own_sheet", "arguments": {"sheet_id": listed["id"]}}])]
+    assert len(downloads) == 1 and not downloads[0].exists()  # downloaded once, the part removed
+    # In the library as a sheet, not as an item of the inbox too.
+    assert bot_sheets.library.items(inbox=True) == [] and len(bot_sheets.library.items(kind="sheet")) == 1
+
+    again, download, _ = to_bot(2, SHEET3, name="copy.pdf")
+    assert await bot_sheets.take(again, download) == "known" and len(llm.calls) == 1 and len(sheets.listing()) == 1
+
+
+async def test_a_pdf_that_is_no_sheet_goes_to_the_inbox(bot_sheets, llm, sheets):
+    slides, download, downloads = to_bot(1, make_pdf(["Lecture 4. Series"]), name="lec4.pdf", text="slides")
+    llm.readings = [{"sheet": False, "course": "", "number": "", "due": ""}]
+    assert await bot_sheets.take(slides, download) == "inbox"
+    [item] = bot_sheets.library.items(inbox=True)
+    assert item["name"] == "lec4.pdf" and bot_sheets.library.path(item).read_bytes() == make_pdf(["Lecture 4. Series"])
+    assert len(downloads) == 1 and sheets.listing() == [] and bot_sheets.journaled == []
+
+    # No answer from the model: the inbox as before; a scan goes to it as its first page.
+    scan, download, _ = to_bot(2, SCAN, name="scan.pdf")
+    llm.readings = [BudgetExceeded("the limit")]
+    assert await bot_sheets.take(scan, download) == "inbox"
+    assert len(llm.calls[-1].documents) == 1 and len(bot_sheets.library.items(inbox=True)) == 2
+
+    # Not a PDF: no model at all.
+    note = {"chat_id": OWNER, "msg_id": 3, "at": clock.now_utc(), "text": "a note", "forward": None, "files": []}
+    assert await bot_sheets.take(note, download) == "inbox" and len(llm.calls) == 2

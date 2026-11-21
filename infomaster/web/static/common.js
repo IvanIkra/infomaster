@@ -44,7 +44,28 @@ export const ICONS = {
   file: '<path d="M6 3h8l4 4v14H6zM14 3v4h4"/>',
   note: '<path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5"/>',
   shelf: '<path d="M5 4h4v16H5zM11 4h4v16h-4zM17.5 5l3 .8-3.2 14-3-.8z"/>',
+  sheet: '<path d="M6 3h8l4 4v14H6zM14 3v4h4M9 14l2 2 4-4"/>',
+  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>',
+  slides: '<rect x="3" y="4" width="18" height="12" rx="1"/><path d="M12 16v4M8 20h8"/>',
 };
+
+// The mark of an item's kind in a row (D73): a class by its type, a deadline, a library item by its kind.
+const KIND_ICONS = {
+  Lecture: '<path d="M3 4h18M5 4v10h14V4M12 14v3M8 21l4-4 4 4"/>',
+  Seminar: '<circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3 20c0-3 2-5 5-5s5 2 5 5M11 20c0-3 2-5 5-5s5 2 5 5"/>',
+  Lab: '<path d="M9 3h6M10 3v6l-6 10a1.5 1.5 0 0 0 1.3 2h13.4a1.5 1.5 0 0 0 1.3-2L14 9V3M7 15h10"/>',
+  Class: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>',
+  "Interim assessment": '<path d="M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M9 14l2 2 4-4"/>',
+  Exam: '<path d="M2 9l10-5 10 5-10 5zM6 11v5c3 2 9 2 12 0v-5M22 9v6"/>',
+  Consultation: '<path d="M4 5h16v11H9l-5 4z"/>',
+  Event: '<path d="M5 21V4h12l-2 4 2 4H5"/>',
+  Talk: ICONS.mic,
+  Deadline: '<path d="M7 3h10M7 21h10M8 3v3l4 6 4-6V3M8 21v-3l4-6 4 6v3"/>',
+  photo: ICONS.camera, audio: ICONS.mic, video: ICONS.video, notes: ICONS.note, slides: ICONS.slides,
+  sheet: ICONS.sheet, link: ICONS.link, text: ICONS.note, transcript: ICONS.note, file: ICONS.file,
+};
+export const mark = (kind, size = 16) => html`<span class=${"k ki" + (kind === "Deadline" ? " due" : "")}>
+  ${icon(KIND_ICONS[kind] || KIND_ICONS.Class, size)}</span>`;
 
 // #/path?query: the screen and its parameters
 export function route() {

@@ -143,6 +143,9 @@ img.logo { display: block; background: none; box-shadow: 0 0 0 1px var(--line); 
 .k { width: 8px; height: 8px; flex-shrink: 0; }
 .kc { border-radius: 4px; background: var(--cls); }
 .kd { background: var(--duek); transform: rotate(45deg); }
+.k.ki { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: var(--cls); }
+.k.ki.due { color: var(--duek); }
+.k.ki .ic { stroke-width: 1.8; }
 .ttl { flex: 1; min-width: 0; font-size: 15px; }
 .ttl b { font-weight: 800; }
 .ttl small { display: block; font-size: 12px; color: var(--mut); overflow: hidden; text-overflow: ellipsis; }

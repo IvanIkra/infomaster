@@ -500,7 +500,11 @@ on their own:
 - *The bot.* A private message of the owner to the bot that is no command goes to the inbox (source `bot`): a photo,
   a document, audio, a voice message or a video is downloaded by the bot itself; a text becomes a link (its first URL)
   or a text. A forward's origin is the author, the caption the title. Each message of an album is its own item; the
-  bot answers once, quietly, in the app's language. Anyone else's messages are ignored.
+  bot answers once, quietly, in the app's language. Anyone else's messages are ignored. A PDF is first read as a
+  sheet (D73, `processing/bot_sheets.py`): Haiku (task `pdf`) sees its name, its first page and the caption and says
+  whether it is a sheet, with its course, number and due date. A sheet becomes an own sheet with the caption kept
+  (`sheets.caption`), published at once and journaled with an undo, and reaches the library as kind `sheet`; the bot
+  says so for each one. Anything else, or no answer from the model, goes to the inbox as above.
 
 ## 7. LLM: the journal and the daily limit
 
@@ -915,6 +919,11 @@ then the grades added by hand, and `books` with each gradebook's summary tabs; t
 screen closes when pulled down from its top (`app.js`), and the «Machine» dot is grey while infomaster does not answer
 (`MachineDot`).
 
+**Icons of kinds** (stage 17.4, D73). A row's mark says what it is: a class by its type (lecture, seminar, lab,
+class, interim assessment, exam, consultation, event, talk), a deadline by an hourglass, an item of the library by
+its kind (photo, audio, video, notes, slides, sheet, link, text, file). `mark(kind)` in `common.js` draws them as line
+icons in the colours the dot and the diamond had. A sheet's card shows the caption it came to the bot with.
+
 ## 9. Storage (SQLite)
 
 Times are local Moscow time without a zone, except `llm_runs.at` (UTC), as in Tablo (§9).
@@ -1063,7 +1072,9 @@ own; Claude is an optional door, not the brain (D53).
     - 17.3 grades (done, D71): every work of the course's gradebooks with its points, bonus and the points of its
       parts, a zero real once half the group is graded (D72), «not graded yet» or «being graded» otherwise and
       outside the average, the summary tabs, the gradebooks' state and actions on the course's grades;
-    - 17.4 own icons for the kinds of items; a sheet sent to the bot read as a sheet, with its caption.
+    - 17.4 own icons and a sheet from the bot (done, D73): an icon for each kind of class, a deadline and each
+      kind of the library's items; a PDF sent to the bot that Haiku reads as a sheet is an own sheet with its
+      caption, the rest goes to the inbox.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

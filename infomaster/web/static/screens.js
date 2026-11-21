@@ -1,7 +1,7 @@
 // The screens (stages 16.2, 16.3): the feed with its lenses and the «Check» questions, a course's lens, the week, an
 // item's card with its actions, and the «Check» queue one question at a time.
 import { useEffect, useRef, useState } from "preact/hooks";
-import { ApiError, CHANGED, ICONS, act, api, changed, go, html, icon, toast } from "./common.js";
+import { ApiError, CHANGED, ICONS, act, api, changed, go, html, icon, mark, toast } from "./common.js";
 import { day, kind, t, today } from "./i18n.js";
 import { EntryFix } from "./fixes.js";
 
@@ -63,13 +63,13 @@ function Row({ item, todayIso }) {
                    item.due.length && `${t("handIn")}: ${item.due.map((d) => d.title).join(", ")}`].filter(Boolean);
     const title = `${item.title} · ${kind(item.type)}`;
     return html`<button class=${"it" + (item.past ? " past" : "")} onClick=${() => openItem(item)}>
-      <span class="t">${item.all_day ? "—" : hm(item.start)}</span><span class="k kc"></span>
+      <span class="t">${item.all_day ? "—" : hm(item.start)}</span>${mark(item.type)}
       <span class="ttl">${item.cancelled ? html`<s>${title}</s>` : title}<small>${small.join(" · ")}</small></span>
     </button>`;
   }
   const small = [item.course_title, item.from].filter(Boolean);
   return html`<button class="it" onClick=${() => openItem(item)}>
-    <span class="t due">${item.at_class ? hm(item.at_class.start) : ""}</span><span class="k kd"></span>
+    <span class="t due">${item.at_class ? hm(item.at_class.start) : ""}</span>${mark("Deadline")}
     <span class="ttl"><b>${item.title}</b><small>${small.join(" · ")}</small></span>
     ${item.assumed && html`<span class="chip">${t("assumed")}</span>`}
     ${!item.at_class && todayIso && html`<span class="mut small">${dueWhen(item.due, todayIso)}</span>`}
@@ -386,7 +386,7 @@ function DeadlineActions({ d, onClose }) {
       <div class="note">${t("twinOf")}</div>
       ${d.twins.length ? d.twins.map((x) => html`<button key=${x.uid} class="it" disabled=${busy}
           onClick=${() => doIt("merge", "merged", { keep: x.uid })}>
-          <span class="k kd"></span><span class="ttl"><b>${x.title}</b><small>${[shortDay(x.due), x.course_title,
+          ${mark("Deadline")}<span class="ttl"><b>${x.title}</b><small>${[shortDay(x.due), x.course_title,
             x.from].filter(Boolean).join(" · ")}</small></span>${icon(ICONS.merge, 18)}</button>`)
         : html`<div class="note">${t("noTwins")}</div>`}
       <button class="sec wide" onClick=${() => setMode(null)}>${t("cancel")}</button>
@@ -434,7 +434,7 @@ function DeadlineCard({ d, onClose }) {
   return html`
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
       <span class="lab" style="color:var(--due);display:flex;align-items:center;gap:8px">
-        <span class="k kd"></span>${t("deadline")}</span>
+        ${mark("Deadline")}${t("deadline")}</span>
       <${CourseLink} course=${d.course} title=${d.course_title} />
     </div>
     <div>
@@ -460,7 +460,7 @@ function ClassCard({ c, onClose }) {
     : `${capital(day(c.start, { weekday: "short", day: "numeric", month: "long" }))}, ${hm(c.start)}–${hm(c.end)}`;
   return html`
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
-      <span class="lab">${kind(c.type)}${c.cancelled ? " · " + t("cancelledClass") : ""}</span>
+      <span class="lab" style="display:flex;align-items:center;gap:8px">${mark(c.type)}${kind(c.type)}${c.cancelled ? " · " + t("cancelledClass") : ""}</span>
       <${CourseLink} course=${c.course} title=${c.course_title} />
     </div>
     <div>
@@ -472,7 +472,7 @@ function ClassCard({ c, onClose }) {
     ${c.notes.length > 0 && html`<div class="note">${c.notes.join(" · ")}</div>`}
     ${c.due.length > 0 && html`<div class="stack" style="gap:4px"><span class="lab">${t("handedHere")}</span>
       ${c.due.map((d) => html`<button key=${d.uid} class="it" onClick=${() => go("/d", { uid: d.uid })}>
-        <span class="k kd"></span><span class="ttl"><b>${d.title}</b></span></button>`)}</div>`}
+        ${mark("Deadline")}<span class="ttl"><b>${d.title}</b></span></button>`)}</div>`}
     <${Quote} quote=${c.quote} link=${c.link} from=${c.origin} />
     ${c.materials > 0 && html`<div class="note">${t("materialsN", { n: c.materials })}</div>`}
     <${EntryFix} c=${c} onClose=${onClose} />`;

@@ -2,8 +2,9 @@
 
 - it sends the owner's login codes of the web app and the connector to the owner's private chat (`send`);
 - it takes material for the library (D58): a private message of the owner that is no command (a forward, a photo, a
-  file, a recording, a link, a note) goes to the library's inbox (`on_material`), and the bot says so, quietly. Its
-  file is downloaded by the bot itself, straight to disk.
+  file, a recording, a link, a note) goes to the library's inbox (`on_material`), and the bot says so, quietly; a PDF
+  that is a sheet goes to the sheets with its caption instead (D73, processing/bot_sheets.py). Its file is downloaded
+  by the bot itself, straight to disk.
 
 /start answers with the web app's address, for an old link of the forum or the calendar too. Anyone else's messages
 are ignored. The twin never writes (D15).
@@ -28,9 +29,9 @@ class Bot:
     def __init__(self, env: Env, session: Path, lang: Callable[[], str]):
         self.env, self.session, self.lang = env, session, lang
         self.client = TelegramClient(str(session), env.api_id, env.api_hash)
-        # The library's intake of the owner's private messages (library/feed.py, from_bot): the message as the twin's
-        # rows have it and a download of its file into a path; the new item's id, or None for nothing to keep.
-        self.on_material: Callable[[dict, Callable[[Path], Awaitable[int | None]]], Awaitable[int | None]] | None = None
+        # The intake of the owner's private messages (processing/bot_sheets.py): the message as the twin's rows have
+        # it and a download of its file into a path; where it went ("sheet", "known", "inbox"), or None for nothing.
+        self.on_material: Callable[[dict, Callable[[Path], Awaitable[bool]]], Awaitable[str | None]] | None = None
         self._album: int | None = None  # the album answered last: one answer for all its messages
         self._tasks: set[asyncio.Task] = set()
 
@@ -108,9 +109,12 @@ class Bot:
             answer = self.tr("Not saved: something went wrong, see the log.",
                              "Не сохранено: что-то пошло не так, подробности в журнале.")
         else:
-            if saved is None or not first:
+            if saved is None or (saved not in ("sheet", "known") and not first):
                 return
-            answer = self.tr("Saved to the inbox.", "Сохранено во входящие.")
+            answer = {"sheet": self.tr("Saved as a sheet: it is on the Sheets shelf.",
+                                       "Сохранено как листочек: он на полке «Листочки»."),
+                      "known": self.tr("This sheet is on the shelf already.", "Этот листочек уже на полке.")
+                      }.get(saved) or self.tr("Saved to the inbox.", "Сохранено во входящие.")
         await event.respond(answer, silent=True)
 
     def _task_done(self, task: asyncio.Task) -> None:

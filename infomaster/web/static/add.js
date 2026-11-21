@@ -1,7 +1,7 @@
 // «+» (stage 16.5): material for the class in progress, one line read by the model and confirmed, and a deadline,
 // an event or a grade by hand. Android's «Share» opens it with the shared files (sw.js keeps them in SHARE_CACHE).
 import { useEffect, useRef, useState } from "preact/hooks";
-import { ApiError, ICONS, api, changed, html, icon, toast } from "./common.js";
+import { ApiError, ICONS, api, changed, html, icon, mark, toast } from "./common.js";
 import { day, kind, t } from "./i18n.js";
 import { useAct, useLoad } from "./screens.js";
 
@@ -68,11 +68,11 @@ function Place({ data, place, setPlace }) {
     ${picking && html`<div class="stack" style="gap:0">
       ${data.classes.map((c) => html`<button key=${c.uid} class="it" onClick=${() => {
         setPlace({ class_uid: c.uid }); setPicking(false);
-      }}><span class="t">${hm(c.start)}</span><span class="k kc"></span>
+      }}><span class="t">${hm(c.start)}</span>${mark(c.type)}
         <span class="ttl">${classLabel(c)}<small>${capital(day(c.start, { weekday: "short", day: "numeric",
           month: "short" }))}</small></span></button>`)}
       <button class="it" onClick=${() => { setPlace({}); setPicking(false); }}>
-        <span class="t"></span><span class="k kd"></span><span class="ttl">${t("inboxChoice")}</span></button>
+        <span class="t"></span><span class="k ki">${icon(ICONS.shelf, 16)}</span><span class="ttl">${t("inboxChoice")}</span></button>
     </div>`}
   </div>`;
 }

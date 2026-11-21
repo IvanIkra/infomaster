@@ -182,14 +182,21 @@ class Sheets:
              clock.local_iso(at)))
         return cursor.lastrowid
 
-    def add_own(self, file: dict, course: str | None, number: str, due: str | None, at: dt.datetime) -> int:
-        """An own sheet of an uploaded PDF (`file`: its files row); it waits to be published as a chat's."""
+    def add_own(self, file: dict, course: str | None, number: str, due: str | None, at: dt.datetime,
+                caption: str | None = None) -> int:
+        """An own sheet of an uploaded PDF (`file`: its files row), or of one sent to the bot with its `caption`
+        (D73); it waits to be published as a chat's."""
         with self.db:
             return self.db.execute(
                 "insert into sheets(chat_id, msg_id, name, sha256, course, number, due, due_assumed, sent_at, "
-                "status, created_at) values(?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)",
+                "caption, status, created_at) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new', ?)",
                 (OWN_CHAT, file["msg_id"], file["name"] or "sheet.pdf", file["sha256"], course or None, number, due,
-                 int(not due), clock.local_iso(at), clock.local_iso(at))).lastrowid
+                 int(not due), clock.local_iso(at), caption or None, clock.local_iso(at))).lastrowid
+
+    def known(self, sha256: str) -> bool:
+        """The file is a sheet already (not a failed one): the same PDF again is no new sheet."""
+        return self.db.execute("select 1 from sheets where sha256 = ? and status != 'failed'",
+                               (sha256,)).fetchone() is not None
 
     def edit(self, sheet_id: int, fields: dict) -> dict | None:
         """The owner's change: course, number and due date of the sheet as it is now (its newest version), the
@@ -548,7 +555,8 @@ class Sheets:
                 f"Chat: {where}",
                 f"File: {sheet['name']}",
                 f"Course: {sheet['course'] or '(none)'}" + (f", abbreviation {abbr}" if abbr else ""),
-                f"Number: {sheet['number'] or '(none)'}"]
+                f"Number: {sheet['number'] or '(none)'}"] + \
+            ([f"The owner's caption: {sheet['caption']}"] if sheet.get("caption") else [])
 
     async def _read(self, sheet: dict, path, extract: pdf.Extract) -> tuple[str | None, list[dict]]:
         """The model reads the sheet within the limits: its summary and deadlines; nothing when it cannot."""
@@ -648,7 +656,7 @@ class Sheets:
                 "number": latest["number"], "name": latest["name"], "due": latest["due"],
                 "due_assumed": bool(latest["due_assumed"]), "due_at": latest["due_at"],
                 "chat": chat["title"] if chat else None, "own": first["chat_id"] == OWN_CHAT,
-                "created_at": first["created_at"],
+                "created_at": first["created_at"], "caption": first["caption"],
                 "updated_at": latest["created_at"], "summary": first["summary"],
                 "file": self.files.by_hash(latest["sha256"]) is not None,
             })

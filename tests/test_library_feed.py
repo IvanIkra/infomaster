@@ -296,3 +296,14 @@ async def test_start_answers_with_the_web_app(bot):
         [button] = event.respond.await_args.kwargs["buttons"]
         assert text == "infomaster is a web app: https://example.test/web/"
         assert button.type.url == "https://example.test/web/"
+
+
+async def test_bot_says_where_a_sheet_went(bot):
+    """D73: a PDF read as a sheet is answered as one, every time; the same sheet again too."""
+    for saved, answer in (("sheet", "Saved as a sheet: it is on the Sheets shelf."),
+                          ("known", "This sheet is on the shelf already.")):
+        bot.on_material = AsyncMock(return_value=saved)
+        event = private(20, "ДЗ 5", document("application/pdf", "hw5.pdf"), data=b"%PDF", grouped_id=77)
+        await bot._on_private(event)
+        await bot._on_private(event)  # a second message of the album is answered too
+        assert event.respond.await_args_list[-1].args == (answer,) and event.respond.await_count == 2

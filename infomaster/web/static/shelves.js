@@ -2,7 +2,7 @@
 // and the sorting of its inbox. A sheet and an item have a card over the screen, as news have. Every change is the
 // connector's tool behind the API: the toast offers the undo, but for a sheet joined or deleted, which has none.
 import { useEffect, useState } from "preact/hooks";
-import { ApiError, ICONS, api, changed, go, html, icon, toast } from "./common.js";
+import { ApiError, ICONS, api, changed, go, html, icon, mark, toast } from "./common.js";
 import { day, getLang, t } from "./i18n.js";
 import { getDecimal, useAct, useLoad } from "./screens.js";
 import { GradeRow } from "./fixes.js";
@@ -31,6 +31,7 @@ const TEXTS = {
   fileGone: ["file gone", "файла нет"],
   versions: ["Versions", "Версии"],
   summary: ["What it asks", "О чём"],
+  caption: ["Your caption", "Ваша подпись"],
   editSheet: ["Edit", "Изменить"],
   course: ["Course", "Курс"],
   noCourse: ["No course", "Без курса"],
@@ -127,8 +128,8 @@ function Screen({ title, sub, back, error, children }) {
   </main>`;
 }
 
-const Row = ({ onClick, href, title, sub, aside }) => {
-  const body = html`<div><b>${title}</b>${sub && html`<div class="mut small">${sub}</div>`}</div>${aside}`;
+const Row = ({ onClick, href, title, sub, aside, lead }) => {
+  const body = html`${lead}<div><b>${title}</b>${sub && html`<div class="mut small">${sub}</div>`}</div>${aside}`;
   return href ? html`<a class="row" href=${href}>${body}</a>`
     : html`<button class="row plain" onClick=${onClick}>${body}</button>`;
 };
@@ -231,7 +232,7 @@ function byCourse(sheets, courses) {
 }
 
 const SheetRows = ({ sheets }) => html`<div class="box list">${sheets.map((e) => html`<${Row} key=${e.first}
-  onClick=${() => go("/s", { id: e.id })} title=${sheetName(e)}
+  onClick=${() => go("/s", { id: e.id })} lead=${mark("sheet")} title=${sheetName(e)}
   sub=${[dueText(e), e.versions > 1 && s("versionsN", { n: e.versions }), e.own ? s("yours") : e.chat]
     .filter(Boolean).join(" · ")}
   aside=${e.status !== "posted" && html`<span class="chip plain">${e.status === "failed" ? s("notRead")
@@ -384,6 +385,8 @@ export function SheetCard({ id, onClose, onOut }) {
         ${data.status === "failed" && html`<div class="err">${s("notRead")}${data.error ? ": " + data.error : ""}</div>`}
         ${data.summary && html`<div class="stack" style="gap:4px"><span class="lab">${s("summary")}</span>
           <div>${data.summary}</div></div>`}
+        ${data.caption && html`<div class="stack" style="gap:4px"><span class="lab">${s("caption")}</span>
+          <div style="white-space:pre-line">${data.caption}</div></div>`}
         <div class="stack" style="gap:0"><span class="lab">${s("versions")}</span>
           ${data.versions_list.map((v) => html`<div class="doc" key=${v.id}>
             <span><b>${v.name}</b><div class="mut small">${[v.version > 1 && "v" + v.version,
@@ -419,7 +422,7 @@ export function SheetCard({ id, onClose, onOut }) {
 // --- raw material and the inbox ---------------------------------------------------------------------------------
 
 const ItemRow = ({ item, aside, onClick }) => html`<${Row} onClick=${onClick || (() => go("/i", { id: item.id }))}
-  title=${item.title || item.name || item.url || kindOf(item.kind)}
+  lead=${mark(item.kind)} title=${item.title || item.name || item.url || kindOf(item.kind)}
   sub=${[kindOf(item.kind), item.day && day(item.day, { day: "numeric", month: "short" }),
     item.course_title].filter(Boolean).join(" · ")}
   aside=${aside || (item.status === "new" && html`<span class="chip plain">${s("statusNew")}</span>`)} />`;
@@ -492,6 +495,7 @@ export function Inbox({ onOut }) {
       <div class="box list">${data.items.length ? data.items.map((item) => html`<div class="row" key=${item.id}>
         <input type="checkbox" checked=${chosen.includes(item.id)} aria-label=${item.title || item.name || ""}
                onChange=${() => toggle(item.id)} style="width:22px;height:22px;flex:0 0 auto" />
+        ${mark(item.kind)}
         <button style="flex:1;min-width:0;text-align:left;border:0;background:none;padding:0;font:inherit"
                 onClick=${() => go("/i", { id: item.id })}>
           <b>${item.title || item.name || item.url || kindOf(item.kind)}</b>

@@ -460,6 +460,20 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   none it is a placeholder, «not graded yet». In between, a large stream graded group by group, it is «being graded»
   and counts in no average until most are graded.
 
+- **D73. Icons for the kinds, and a sheet sent to the bot, 21.11.2026.** Stage 17.4 of §11.1. On the phone every
+  class was the same dot and every deadline the same diamond, so a lecture and an exam looked alike until read: a
+  row's mark is now a line icon of its kind, a class by its type, a deadline by an hourglass, a library item by its
+  kind, in the colours the marks had (`mark` in `common.js`). Deadlines get one icon: they carry no kind, and a guess
+  from the title would mislead. The owner sends the bot sheets the twin cannot see (forwarded from a chat it is not
+  in, from a letter), and the bot put them in the library's inbox, where the sheets' rules never reached them. Every
+  PDF the bot takes is now read as the batch reads a chat's (the file's name and first page, a scan as the page
+  itself), with the owner's caption in place of the message, by one Haiku call (task `pdf`): a sheet becomes an own
+  sheet with its course, number and due date, the caption kept with it (`sheets.caption`), shown on its card and given
+  to the model that reads the sheet; it is published at once, journaled with an undo, and comes to the library as kind
+  `sheet`, not to the inbox as well. Not every PDF is a sheet (slides, notes), so anything the model does not call
+  one, and any PDF it could not be asked about (no key, the limit spent, a failure), goes to the inbox as before; the
+  file is downloaded once either way. The same file as a sheet already is no new one, and the bot says so.
+
 ## Open questions
 
 Collected in [architecture.md](architecture.md), §12.

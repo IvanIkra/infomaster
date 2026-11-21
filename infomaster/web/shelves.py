@@ -154,7 +154,7 @@ def _entry(request: web.Request, row: dict) -> dict:
             "error": row["error"], "course": key, "course_title": data.title(key), "number": row["number"],
             "name": row["name"], "due": row["due"], "due_assumed": row["due_assumed"], "chat": row["chat"],
             "own": row["own"], "created_at": row["created_at"], "updated_at": row["updated_at"],
-            "summary": row["summary"], "file": row["file"]}
+            "summary": row["summary"], "caption": row["caption"], "file": row["file"]}
 
 
 def _file_url(request: web.Request, version: dict) -> str | None:

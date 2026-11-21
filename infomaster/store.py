@@ -195,6 +195,7 @@ create table if not exists sheets (     -- листочки (§6.3, D14): kept f
     due_assumed integer not null default 0,  -- none was given: `due` is the next seminar's, if any (§6.3)
     due_at text,                -- of an assumed date: the start of that seminar
     sent_at text,               -- the message's time (an own sheet's upload): the next seminar comes after it
+    caption text,               -- of a PDF sent to the bot: the owner's words with it (D73)
     status text not null,       -- new: waits to be published; posted (published); failed (the file was lost)
     error text,
     text text,                  -- its pages read locally, for the diff of a newer version; null until prepared
@@ -269,6 +270,7 @@ UPGRADES = (
     ("hidden_deadlines", "reason", "text"),  # why the owner hid it (the web app, §8.6)
     ("own_deadlines", "course", "text"),  # the course of an own deadline added in the web app (§8.6)
     ("hidden_deadlines", "kept", "text"),
+    ("sheets", "caption", "text"),  # the caption of a sheet sent to the bot (D73)
 )
 
 
