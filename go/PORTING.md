@@ -13,7 +13,15 @@ release. Until then both trees live in `main`, and CI checks both.
   hash formulas, stored credential formats). Anything stored or compared as text must look exactly as Python writes
   it.
 - **Foundation packages** (use them, do not duplicate them):
-  - `internal/store`: `store.Open(path)`, `s.DB` (`*sql.DB`, one connection), `GetJSON/PutJSON/DeleteJSON` for `kv`.
+  - `internal/store`: `store.Open(path)`, `s.DB` (`*sql.DB`, one connection), `GetJSON/PutJSON/DeleteJSON` for `kv`,
+    `store.Querier` (`*sql.DB` or `*sql.Tx`) and `s.InTx(fn)`. **One connection:** a method bound to `s.DB` called
+    while a transaction is open deadlocks. Repositories (inbox, deadlines, news, todo, events, subjects) have
+    `With(q)` views for use inside a caller's transaction; what Python does inside `with store.db` is
+    `s.InTx(func(tx) { repo.With(tx)... })` in Go. Methods that open their own transaction (Schedule `EditEvent`,
+    `CorrectClass`, `RemoveOwn`, `SetHidden`, `AfterPoll`, `SyncMidterms`, `SyncDeadlines`; Ruz `Sync`, `Poll`;
+    Library `Draft`, `Publish`, `Unpublish`, `Prune`; `Subjects.Restore`, `Resolve`, `TryResolve`) are called
+    outside any transaction. Dates passed as `today`/`since` are read in their own location: pass
+    `clock.LocalDay(now)`, never a raw UTC time.
   - `internal/clock`: `Now` (replaceable in tests), `NowUTC`, `LocalDay`, `DayStartUTC`, `UTCISO`, `LocalISO`,
     `ParseLocal`, `ParseUTC`, layouts. Moscow local time without a zone everywhere except `llm_runs.at` (UTC).
   - `internal/pyjson`: `Dumps` (= `json.dumps(ensure_ascii=False)`, with `", "` and `": "`), `DumpsASCII`

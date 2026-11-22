@@ -107,3 +107,25 @@ func (s *Store) DeleteJSON(key string) error {
 
 // Close closes the database.
 func (s *Store) Close() error { return s.DB.Close() }
+
+// Querier is what both *sql.DB and *sql.Tx give: a repository bound to either runs inside or outside a caller's
+// transaction ("with store.db" in the Python service).
+type Querier interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Query(query string, args ...any) (*sql.Rows, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+// InTx runs fn in one transaction: committed when fn returns nil, rolled back otherwise. The store has one
+// connection, so nothing may use s.DB while fn runs: bind repositories to tx with their With(tx).
+func (s *Store) InTx(fn func(tx *sql.Tx) error) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
