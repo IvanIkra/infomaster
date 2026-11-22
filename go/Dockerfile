@@ -9,7 +9,8 @@ COPY go/go.mod go/go.sum ./
 RUN go mod download
 COPY go/ ./
 # No cgo: SQLite is modernc's pure Go, so the binary runs on any base image.
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/infomaster ./cmd/infomaster
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/infomaster ./cmd/infomaster \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/compare ./cmd/compare
 
 FROM alpine:3.22
 # tzdata: Moscow's zone for the logs and any library that asks the system (the binary embeds it too);
@@ -17,7 +18,7 @@ FROM alpine:3.22
 RUN apk add --no-cache tzdata ca-certificates
 WORKDIR /app
 COPY infomaster/web/static infomaster/web/static
-COPY --from=build /out/infomaster /usr/local/bin/infomaster
+COPY --from=build /out/infomaster /out/compare /usr/local/bin/
 ENV WEB_STATIC=/app/infomaster/web/static
 
 # The service runs as a plain user (D79): a flaw in a parser does not run as root over the data directory. APP_UID

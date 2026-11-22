@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -608,5 +609,65 @@ func TestPorts(t *testing.T) {
 	}
 	if _, err := net.DialTimeout("tcp", public.Addr().String(), time.Second); err == nil {
 		t.Fatal("the public port still listens")
+	}
+}
+
+// TestShadow: the shadow mode serves both ports on the database as it is, and starts nothing else: neither the bot
+// nor the twin connects, no loop runs, nothing is pushed, and a stop is clean.
+func TestShadow(t *testing.T) {
+	s := must(New(env(), t.TempDir(), Options{Shadow: true}))
+	if _, ok := s.Notifier.(silent); !ok {
+		t.Fatalf("the shadow's notifier is %T", s.Notifier)
+	}
+	r := &recorder{}
+	s.Notifier = r // to see that nothing would be pushed
+	s.Bot.Connect = func(context.Context, string, func(context.Context, bot.Event)) (bot.API, error) {
+		t.Error("the bot connects in the shadow mode")
+		return nil, errors.New("no")
+	}
+	s.Twin.Connect = func(context.Context, string, telegram.Handler) (telegram.Client, error) {
+		t.Error("the twin connects in the shadow mode")
+		return nil, errors.New("no")
+	}
+	s.PublishSheets = func(context.Context) error {
+		t.Error("a loop runs in the shadow mode")
+		return nil
+	}
+	public, internal := must(net.Listen("tcp", "127.0.0.1:0")), must(net.Listen("tcp", "127.0.0.1:0"))
+	ctx, cancel := context.WithCancel(context.Background())
+	served := make(chan error, 1)
+	go func() { served <- s.Serve(ctx, public, internal) }()
+
+	get := func(listener net.Listener, path string, auth bool) (int, string) {
+		t.Helper()
+		req := must(http.NewRequest(http.MethodGet, "http://"+listener.Addr().String()+path, nil))
+		if auth {
+			req.Header.Set("Authorization", "Bearer tok")
+		}
+		resp := must((&http.Client{Timeout: 10 * time.Second}).Do(req))
+		defer resp.Body.Close()
+		return resp.StatusCode, string(must(io.ReadAll(resp.Body)))
+	}
+	if code, body := get(public, "/web/", false); code != http.StatusOK || !strings.Contains(body, "<html") {
+		t.Fatalf("GET /web/: %d", code)
+	}
+	if code, body := get(internal, "/api/status", true); code != http.StatusOK || !strings.Contains(body, `"telegram": {`) {
+		t.Fatalf("GET /api/status: %d %s", code, body)
+	}
+	time.Sleep(200 * time.Millisecond) // a loop or a client would have started by now
+	cancel()
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the shadow does not stop")
+	}
+	if told := r.all(); len(told) != 0 {
+		t.Fatalf("pushed in the shadow mode: %v", told)
+	}
+	if _, err := os.Stat(filepath.Join(s.DataDir, "bot.gotd.json")); err == nil {
+		t.Fatal("the bot made a session in the shadow mode")
 	}
 }

@@ -47,7 +47,9 @@ func (s *Service) Run(ctx context.Context) error {
 func (s *Service) Serve(ctx context.Context, public, internal net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	if err := s.Bot.Start(ctx); err != nil {
+	if s.Shadow {
+		slog.Warn("shadow mode: no Telegram, no loops, no push, no LLM; both ports serve the database as it is")
+	} else if err := s.Bot.Start(ctx); err != nil {
 		public.Close()
 		internal.Close()
 		s.Bot.Stop()
@@ -79,6 +81,10 @@ func (s *Service) serve(ctx context.Context, loops *sync.WaitGroup, public, inte
 	}
 	if s.Env.CalendarPublicSecret == "" {
 		slog.Info("CALENDAR_PUBLIC_SECRET is not set: no iCal feeds behind Funnel")
+	}
+	if s.Shadow {
+		<-ctx.Done()
+		return nil
 	}
 	if _, err := s.Twin.Start(ctx); err != nil { // without a login the service runs on, and the twin says so
 		return fmt.Errorf("the twin: %w", err)
@@ -121,8 +127,10 @@ func (s *Service) stop(loops *sync.WaitGroup, servers []*http.Server) {
 		}
 	}
 	cancel()
-	s.Twin.Stop()
-	s.Bot.Stop()
+	if !s.Shadow { // never started in the shadow mode
+		s.Twin.Stop()
+		s.Bot.Stop()
+	}
 	wait(func() {
 		s.Settle()
 		s.Watch.Settle()

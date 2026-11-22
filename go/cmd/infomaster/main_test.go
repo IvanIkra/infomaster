@@ -26,6 +26,13 @@ func TestParse(t *testing.T) {
 			t.Fatalf("%v: %+v", tc.argv, args)
 		}
 	}
+	if args, err := parse([]string{"--shadow", "--data", "copy"}, io.Discard); err != nil || !args.shadow ||
+		args.command != "run" || args.data != "copy" {
+		t.Fatalf("--shadow: %+v %v", args, err)
+	}
+	if args, _ := parse(nil, io.Discard); args.shadow {
+		t.Fatal("the shadow mode is on by default")
+	}
 	for _, argv := range [][]string{{"serve"}, {"login", "run"}, {"--nope"}} {
 		if _, err := parse(argv, io.Discard); err == nil {
 			t.Fatalf("%v parsed", argv)

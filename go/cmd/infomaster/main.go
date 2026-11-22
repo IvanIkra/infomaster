@@ -37,6 +37,7 @@ type arguments struct {
 	logLevel string
 	tabloDB  string
 	static   string
+	shadow   bool
 }
 
 func main() {
@@ -64,6 +65,8 @@ func parse(argv []string, output io.Writer) (arguments, error) {
 	fs.StringVar(&args.data, "data", "data", "directory for the database and sessions")
 	fs.StringVar(&args.logLevel, "log-level", "INFO", "DEBUG, INFO, WARNING or ERROR")
 	fs.StringVar(&args.tabloDB, "tablo-db", "", "import-tablo: a copy of Tablo's tablo.db")
+	fs.BoolVar(&args.shadow, "shadow", false,
+		"serve both ports only: no Telegram, no loops, no push, no LLM (a copy of the database beside the live one)")
 	fs.StringVar(&args.static, "static", "", "the web client's directory (WEB_STATIC; default "+StaticDir+")")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "usage: infomaster [%s] [flags]\n", strings.Join(commands, "|"))
@@ -122,7 +125,11 @@ func run(args arguments) error {
 		}
 		return telegram.Login(ctx, env, telegram.SessionPath(args.data), os.Stdin, os.Stdout, telegram.DialGotd)
 	}
-	service, err := app.New(env, args.data, app.Options{Static: staticDir(args.static)})
+	if args.shadow { // the model is unavailable: nothing is read or answered on the copy's behalf
+		os.Unsetenv("ANTHROPIC_API_KEY")
+		os.Unsetenv("ANTHROPIC_AUTH_TOKEN")
+	}
+	service, err := app.New(env, args.data, app.Options{Static: staticDir(args.static), Shadow: args.shadow})
 	if err != nil {
 		return err
 	}

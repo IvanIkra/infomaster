@@ -79,15 +79,27 @@ type Notifier interface {
 	System(text i18n.Phrase, login string)
 }
 
+// silent is the notifier of the shadow mode: nothing is pushed.
+type silent struct{}
+
+func (silent) Deadline(todo.Deadline, string)   {}
+func (silent) Reminder(string, []todo.Deadline) {}
+func (silent) Budget(llm.Notice)                {}
+func (silent) System(i18n.Phrase, string)       {}
+
 // Options are what the command line gives besides the environment.
 type Options struct {
 	Static string // the web client's directory; "" finds infomaster/web/static of the repository
+	// Shadow serves both ports and nothing else (18.5, D81): no bot, no twin, no background loops and no pushes, so
+	// the service can run on a copy of the live database beside the running one and be compared with it.
+	Shadow bool
 }
 
 // Service is every part of the service, wired.
 type Service struct {
 	Env     config.Env
 	DataDir string
+	Shadow  bool
 
 	Store           *store.Store
 	Settings        *settings.Settings
@@ -151,10 +163,13 @@ func New(env config.Env, dataDir string, options Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Service{Env: env, DataDir: dataDir, Store: st}
+	s := &Service{Env: env, DataDir: dataDir, Store: st, Shadow: options.Shadow}
 	if err := s.build(options); err != nil {
 		st.Close()
 		return nil, err
+	}
+	if s.Shadow {
+		s.Notifier = silent{} // the copy's push subscriptions are the owner's real devices
 	}
 	return s, nil
 }
