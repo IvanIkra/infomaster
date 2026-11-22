@@ -51,8 +51,8 @@ const MaxTokens = 2000
 // TokensPerLabel: {"id": …, "label": …} of a long id; a semester of done ones must not cut the answer.
 const TokensPerLabel = 60
 
-// LabelChars is processing/batches.py's LABEL_CHARS (the budget of a deadline's label), copied here until the
-// batches are ported: the cache keys hash it, so both must stay 15.
+// LabelChars is LABEL_CHARS of processing/batches.py (the budget of a deadline's label), the one definition: the
+// batches and the sheets alias it, and the cache keys hash it.
 const LabelChars = 15
 
 // System is Tablo's prompt, word for word.
