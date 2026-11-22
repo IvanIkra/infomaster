@@ -1,0 +1,47 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//infomaster//timetable//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Study: optional
+REFRESH-INTERVAL;VALUE=DURATION:PT1H
+X-PUBLISHED-TTL:PT1H
+BEGIN:VEVENT
+SUMMARY:Career fair
+DTSTART:20261024T090000Z
+DTEND:20261024T130000Z
+DTSTAMP:20261020T090005Z
+UID:tg-x\,y\;z@infomaster
+DESCRIPTION:Event\nFrom: tg https://t.me/c/1/2\;x\,y\nEdit: https://x.exam
+ ple.net/web/#/c?uid=tg-x%2Cy%3Bz%40infomaster
+LOCATION:https://events.example.org/fair
+STATUS:CONFIRMED
+X-INFOMASTER-LINK:https://t.me/c/1/2;x,y
+X-INFOMASTER-SOURCE:tg
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:Own
+DTSTART:20261027T100000Z
+DTEND:20261027T112000Z
+DTSTAMP:20261020T090005Z
+UID:own-1@infomaster
+DESCRIPTION:Class\nFrom: you\nEdit: https://x.example.net/web/#/c?uid=own-
+ 1%40infomaster
+STATUS:CONFIRMED
+X-INFOMASTER-SOURCE:own
+END:VEVENT
+BEGIN:VEVENT
+SUMMARY:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ xxxxxx\\abcyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+ yyyyyy^zЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖЖ
+ ЖЖЖЖЖЖЖ\nliteral
+DTSTART:20261028T100000Z
+DTSTAMP:20261020T090005Z
+UID:tg-fold@infomaster
+DESCRIPTION:Talk\na\nb\nc\nd\neeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ eeeeeeeeeeeeeeeeeeeeeeeeeeeee\\\nFrom: Letter: subj\nEdit: https://x.examp
+ le.net/web/#/c?uid=tg-fold%40infomaster
+STATUS:CANCELLED
+X-INFOMASTER-SOURCE:pdf
+END:VEVENT
+END:VCALENDAR
