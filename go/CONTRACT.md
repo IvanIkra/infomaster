@@ -1170,6 +1170,7 @@ readers (Python or the static client) only parse it.
 | Library link key | kv `library_link_secret` | 64 hex characters |
 | Mail credentials | environment only (`MAIL_USER`, `MAIL_PASSWORD`) | never stored; replaced by `***` in error texts |
 | Telethon sessions | `data/twin.session` (the account) and `data/bot.session` (the bot), chmod 600; `data/` is 700 | Telethon 1.45 `SQLiteSession` files, schema version 8 |
+| gotd sessions (Go) | `data/twin.gotd.json` (the account, removed on logout) and `data/bot.gotd.json` (the bot, made from its token), chmod 600 | gotd `session.FileStorage` JSON; secret. The Telethon files are never read: the twin logs in again at the switch (D81) |
 
 The Telethon session schema (from the installed package, `telethon/sessions/sqlite.py`):
 
@@ -1391,3 +1392,4 @@ Other vectors:
   `actions.py` state builders. Compare the outputs side by side before the switch.
 - Losing `web.vapid` forces every device to subscribe to push again. Losing `library_link_secret` invalidates every
   link already given out (24 h at most). Losing the `connector_*` rows forces claude.ai to reconnect.
+- Back up `data/twin.gotd.json` and `data/bot.gotd.json` with the database once Go runs; the Telethon session files can go after the switch.
