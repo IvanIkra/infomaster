@@ -1,0 +1,191 @@
+[
+ {
+  "raw": "RnJvbTogPT91dGYtOD9iPzBKalFzdEN3MEwzUXZ0Q3lJTkNmMFpIUmd0R0E/PSA8aXZhbm92QGhzZS5ydT4KU3ViamVjdDogPT91dGYtOD9iPzBKVFFseUF6SU5DLzBMNGcwTERRdTlDejBMWFFzZEdBMExVPT89CkRhdGU6IFR1ZSwgMjAgT2N0IDIwMjYgMDk6MDA6MDAgKzAwMDAKTUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSI9PT09PT09PT09PT09PT03Mzg3OTk0NzkyOTg5OTIxMTUyPT0iCgotLT09PT09PT09PT09PT09PTczODc5OTQ3OTI5ODk5MjExNTI9PQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW47IGNoYXJzZXQ9InV0Zi04IgpDb250ZW50LVRyYW5zZmVyLUVuY29kaW5nOiA4Yml0CgrQlNC+0LHRgNGL0Lkg0LTQtdC90YwhCtCa0KAg0L/QtdGA0LXQvdC+0YHQuNGC0YHRjyDQvdCwIDUg0L3QvtGP0LHRgNGPLgo+INGB0YLQsNGA0LDRjyDRhtC40YLQsNGC0LAKLS0gCtCY0LLQsNC90L7QsiDQny4KMTguMTAuMjAyNiwgMTI6MDAsICLQodGC0YPQtNC10L3RgiIgPHNAZWR1LmhzZS5ydT46CtCy0L7Qv9GA0L7RgQoKLS09PT09PT09PT09PT09PT03Mzg3OTk0NzkyOTg5OTIxMTUyPT0KQ29udGVudC1UeXBlOiBhcHBsaWNhdGlvbi9wZGYKQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogYmFzZTY0CkNvbnRlbnQtRGlzcG9zaXRpb246IGF0dGFjaG1lbnQ7IGZpbGVuYW1lPSJ0YXNrLnBkZiIKTUlNRS1WZXJzaW9uOiAxLjAKCkpWQkVSaTB4TGpRPQoKLS09PT09PT09PT09PT09PT03Mzg3OTk0NzkyOTg5OTIxMTUyPT0tLQo=",
+  "uid": 1,
+  "sender": "Иванов Пётр",
+  "address": "ivanov@hse.ru",
+  "subject": "ДЗ 3 по алгебре",
+  "date": "2026-10-20T09:00:00+00:00",
+  "text": "Добрый день!\nКР переносится на 5 ноября.",
+  "files": [
+   "task.pdf"
+  ],
+  "pdf_name": "task.pdf",
+  "pdf_data": "JVBERi0xLjQ=",
+  "fields_sender": "Иванов Пётр <ivanov@hse.ru>"
+ },
+ {
+  "raw": "RnJvbTogPT91dGYtOD9iPzBKalFzdEN3MEwzUXZ0Q3lJTkNmMFpIUmd0R0E/PSA8aXZhbm92QGhzZS5ydT4KU3ViamVjdDogPT91dGYtOD9iPzBKVFFseUF6SU5DLzBMNGcwTERRdTlDejBMWFFzZEdBMExVPT89CkRhdGU6IFR1ZSwgMjAgT2N0IDIwMjYgMDk6MDA6MDAgKzAwMDAKTUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvYWx0ZXJuYXRpdmU7CiBib3VuZGFyeT0iPT09PT09PT09PT09PT09MTI4MjcxNTQzMzk3ODc1MzE2Nj09IgoKLS09PT09PT09PT09PT09PT0xMjgyNzE1NDMzOTc4NzUzMTY2PT0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PSJ1dGYtOCIKQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogN2JpdAoKIAoKLS09PT09PT09PT09PT09PT0xMjgyNzE1NDMzOTc4NzUzMTY2PT0KQ29udGVudC1UeXBlOiB0ZXh0L2h0bWw7IGNoYXJzZXQ9InV0Zi04IgpDb250ZW50LVRyYW5zZmVyLUVuY29kaW5nOiBiYXNlNjQKTUlNRS1WZXJzaW9uOiAxLjAKClBIQSswSnJRdnRDOTBZSFJnOUM3MFl6Umd0Q3cwWWJRdU5HUFBDOXdQanh3UHRDeUlOR0IwWURRdGRDMDBZTWcwTElnTVRnNk1UQXMKSUZJME1EVThMM0ErUEhOMGVXeGxQbkI3ZlR3dmMzUjViR1UrQ2c9PQoKLS09PT09PT09PT09PT09PT0xMjgyNzE1NDMzOTc4NzUzMTY2PT0tLQo=",
+  "uid": 2,
+  "sender": "Иванов Пётр",
+  "address": "ivanov@hse.ru",
+  "subject": "ДЗ 3 по алгебре",
+  "date": "2026-10-20T09:00:00+00:00",
+  "text": "Консультация\n\nв среду в 18:10, R405",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "Иванов Пётр <ivanov@hse.ru>"
+ },
+ {
+  "raw": "ACBicm9rZW4=",
+  "uid": 3,
+  "sender": "",
+  "address": "",
+  "subject": "",
+  "date": "2026-10-20T09:00:00+00:00",
+  "text": "\u0000 broken",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "?"
+ },
+ {
+  "raw": "RnJvbTogPT91dGYtOD9iPzBKL1F0ZEdDMFlEUXZ0Q3lJTkNZMExMUXNOQzk/PSA8cGV0cm92QGhzZS5ydT4KU3ViamVjdDogPT91dGYtOD9iPzBKdlF1TkdCMFlMUXZ0QzY/PSAzCkRhdGU6IFR1ZSwgMjAgT2N0IDIwMjYgMDk6MDA6MDAgKzAwMDAKTUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSI9PT09PT09PT09PT09PT0yMDI0Nzc5Mzg3NDMwNTMxMTM3PT0iCgotLT09PT09PT09PT09PT09PTIwMjQ3NzkzODc0MzA1MzExMzc9PQpDb250ZW50LVR5cGU6IHRleHQvcGxhaW47IGNoYXJzZXQ9InV0Zi04IgpDb250ZW50LVRyYW5zZmVyLUVuY29kaW5nOiA4Yml0CgrQlNC+0LHRgNGL0Lkg0LTQtdC90YwhINCd0L7QstGL0Lkg0LvQuNGB0YLQvtC6INCy0L4g0LLQu9C+0LbQtdC90LjQuC4KCi0tPT09PT09PT09PT09PT09MjAyNDc3OTM4NzQzMDUzMTEzNz09CkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IGJhc2U2NApDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZT0ibGlzdDMucGRmIgpNSU1FLVZlcnNpb246IDEuMAoKSlZCRVJpMHhMalFnWm1GclpTQnphR1ZsZENWUVJFWXRNUzQwSUdaaGEyVWdjMmhsWlhRbFVFUkdMVEV1TkNCbVlXdGxJSE5vWldWMApKVkJFUmkweExqUWdabUZyWlNCemFHVmxkQ1ZRUkVZdE1TNDBJR1poYTJVZ2MyaGxaWFFsVUVSR0xURXVOQ0JtWVd0bElITm9aV1YwCkpWQkVSaTB4TGpRZ1ptRnJaU0J6YUdWbGRDVlFSRVl0TVM0MElHWmhhMlVnYzJobFpYUWxVRVJHTFRFdU5DQm1ZV3RsSUhOb1pXVjAKSlZCRVJpMHhMalFnWm1GclpTQnphR1ZsZENWUVJFWXRNUzQwSUdaaGEyVWdjMmhsWlhRbFVFUkdMVEV1TkNCbVlXdGxJSE5vWldWMApKVkJFUmkweExqUWdabUZyWlNCemFHVmxkQ1ZRUkVZdE1TNDBJR1poYTJVZ2MyaGxaWFFsVUVSR0xURXVOQ0JtWVd0bElITm9aV1YwCkpWQkVSaTB4TGpRZ1ptRnJaU0J6YUdWbGRDVlFSRVl0TVM0MElHWmhhMlVnYzJobFpYUWxVRVJHTFRFdU5DQm1ZV3RsSUhOb1pXVjAKSlZCRVJpMHhMalFnWm1GclpTQnphR1ZsZENWUVJFWXRNUzQwSUdaaGEyVWdjMmhsWlhRbFVFUkdMVEV1TkNCbVlXdGxJSE5vWldWMApKVkJFUmkweExqUWdabUZyWlNCemFHVmxkQ1ZRUkVZdE1TNDBJR1poYTJVZ2MyaGxaWFFsVUVSR0xURXVOQ0JtWVd0bElITm9aV1YwCkpWQkVSaTB4TGpRZ1ptRnJaU0J6YUdWbGRDVlFSRVl0TVM0MElHWmhhMlVnYzJobFpYUWxVRVJHTFRFdU5DQm1ZV3RsSUhOb1pXVjAKSlZCRVJpMHhMalFnWm1GclpTQnphR1ZsZENWUVJFWXRNUzQwSUdaaGEyVWdjMmhsWlhRbFVFUkdMVEV1TkNCbVlXdGxJSE5vWldWMApKVkJFUmkweExqUWdabUZyWlNCemFHVmxkQ1ZRUkVZdE1TNDBJR1poYTJVZ2MyaGxaWFFsVUVSR0xURXVOQ0JtWVd0bElITm9aV1YwCkpWQkVSaTB4TGpRZ1ptRnJaU0J6YUdWbGRDVlFSRVl0TVM0MElHWmhhMlVnYzJobFpYUWxVRVJHTFRFdU5DQm1ZV3RsSUhOb1pXVjAKSlZCRVJpMHhMalFnWm1GclpTQnphR1ZsZENWUVJFWXRNUzQwSUdaaGEyVWdjMmhsWlhRbFVFUkdMVEV1TkNCbVlXdGxJSE5vWldWMApKVkJFUmkweExqUWdabUZyWlNCemFHVmxkQ1ZRUkVZdE1TNDBJR1poYTJVZ2MyaGxaWFFsVUVSR0xURXVOQ0JtWVd0bElITm9aV1YwCkpWQkVSaTB4TGpRZ1ptRnJaU0J6YUdWbGRDVlFSRVl0TVM0MElHWmhhMlVnYzJobFpYUWxVRVJHTFRFdU5DQm1ZV3RsSUhOb1pXVjAKSlZCRVJpMHhMalFnWm1GclpTQnphR1ZsZENWUVJFWXRNUzQwSUdaaGEyVWdjMmhsWlhRbFVFUkdMVEV1TkNCbVlXdGxJSE5vWldWMApKVkJFUmkweExqUWdabUZyWlNCemFHVmxkQ1ZRUkVZdE1TNDBJR1poYTJVZ2MyaGxaWFE9CgotLT09PT09PT09PT09PT09PTIwMjQ3NzkzODc0MzA1MzExMzc9PS0tCg==",
+  "uid": 4,
+  "sender": "Петров Иван",
+  "address": "petrov@hse.ru",
+  "subject": "Листок 3",
+  "date": "2026-10-20T09:00:00+00:00",
+  "text": "Добрый день! Новый листок во вложении.",
+  "files": [
+   "list3.pdf"
+  ],
+  "pdf_name": "list3.pdf",
+  "pdf_data": "JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQlUERGLTEuNCBmYWtlIHNoZWV0JVBERi0xLjQgZmFrZSBzaGVldCVQREYtMS40IGZha2Ugc2hlZXQ=",
+  "fields_sender": "Петров Иван <petrov@hse.ru>"
+ },
+ {
+  "raw": "RnJvbTogcGxhaW5AZXhhbXBsZS5vcmcKU3ViamVjdDogQSB2ZXJ5IGxvbmcgc3ViamVjdCBsaW5lIHRoYXQgZ29lcyBvbiBhbmQgb24sIHdpdGggPT91dGYtOD9xPz1EMD05QT89CiA9P3V0Zi04P2I/MExqUmdOQzQwTHZRdTlDNDBZYlFzQT09Pz0gaW5zaWRlIGl0IHRvIGZvbGQgdGhlIGhlYWRlciB3ZWxsIHBhc3QKIHRoZSBsaW1pdApEYXRlOiBUdWUsIDIwIE9jdCAyMDI2IDA5OjAwOjAwICswMDAwCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsgY2hhcnNldD0idXRmLTgiCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IDhiaXQKTUlNRS1WZXJzaW9uOiAxLjAKCkxpbmUgb25lCgoKCkxpbmUgdHdvwqB3aXRo4oCLIG5ic3AKCk9uIE1vbiwgMTkgT2N0IDIwMjYgc29tZW9uZSB3cm90ZToKPiBxdW90ZWQK",
+  "uid": 5,
+  "sender": "plain@example.org",
+  "address": "plain@example.org",
+  "subject": "A very long subject line that goes on and on, with Кириллица inside it to fold the header well past the limit",
+  "date": "2026-10-20T09:00:00+00:00",
+  "text": "Line one\n\nLine two with nbsp",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "plain@example.org"
+ },
+ {
+  "raw": "RnJvbTogPT9rb2k4LXI/Qj85ZDdGd3M3WnlpRFB4c25UPz0gPG9mZmljZUBleGFtcGxlLm9yZz4NClN1YmplY3Q6ID0/d2luZG93cy0xMjUxP1E/PUNGPUU1PUYwPUU1PUVEPUVFPUYxXz1FRj1FMD1GMD1GQj89DQpEYXRlOiBUdWUsIDIwIE9jdCAyMDI2IDA4OjE1OjAwICswMzAwDQpNSU1FLVZlcnNpb246IDEuMA0KQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSJYWCINCg0KcHJlYW1ibGUNCi0tWFgNCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsgY2hhcnNldD1rb2k4LXINCkNvbnRlbnQtVHJhbnNmZXItRW5jb2Rpbmc6IHF1b3RlZC1wcmludGFibGUNCg0KPUYyPUMxPUQzPUQwPUM5PUQzPUMxPUNFPUM5PUM1ID1DRT1DMSA9REE9QzE9RDc9RDQ9RDI9QzE6ID1EMD1DMT1EMj1DMSA9RDcgPQo5OjMwID1DRj1END1DRD1DNT1DRT1DNT1DRT1DMS4NCi0tWFgNCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtDQpDb250ZW50LURpc3Bvc2l0aW9uOiBhdHRhY2htZW50OyBmaWxlbmFtZSo9VVRGLTgnJyVEMCU5QiVEMCVCOCVEMSU4MSVEMSU4MiVEMCVCRSVEMCVCQSUyMDQucGRmDQpDb250ZW50LVRyYW5zZmVyLUVuY29kaW5nOiBiYXNlNjQNCg0KSlZCRVJpMHhMalVnYzJWamIyNWsKDQotLVhYDQpDb250ZW50LVR5cGU6IGFwcGxpY2F0aW9uL3ZuZC5tcy1leGNlbDsgbmFtZT0iPT91dGYtOD9CPzBKN1JodEMxMEwzUXV0QzRMbmhzY3c9PT89Ig0KQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudA0KQ29udGVudC1UcmFuc2Zlci1FbmNvZGluZzogYmFzZTY0DQoNCkFBQUENCi0tWFgtLQ0KZXBpbG9ndWUNCg==",
+  "uid": 6,
+  "sender": "Учебный офис",
+  "address": "office@example.org",
+  "subject": "Перенос пары",
+  "date": "2026-10-20T08:15:00+03:00",
+  "text": "Расписание на завтра: пара в 9:30 отменена.",
+  "files": [
+   "Листок 4.pdf",
+   "Оценки.xls"
+  ],
+  "pdf_name": "Листок 4.pdf",
+  "pdf_data": "JVBERi0xLjUgc2Vjb25k",
+  "fields_sender": "Учебный офис <office@example.org>"
+ },
+ {
+  "raw": "RnJvbTogVGVhY2hlciA8dEBleGFtcGxlLm9yZz4NClN1YmplY3Q6IGh0bWwgb25seQ0KRGF0ZTogZ2FyYmFnZQ0KQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvYWx0ZXJuYXRpdmU7IGJvdW5kYXJ5PWIxDQoNCi0tYjENCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsgY2hhcnNldD11dGYtOA0KDQpzaG9ydA0KLS1iMQ0KQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvcmVsYXRlZDsgYm91bmRhcnk9YjINCg0KLS1iMg0KQ29udGVudC1UeXBlOiB0ZXh0L2h0bWw7IGNoYXJzZXQ9Y3AxMjUxDQpDb250ZW50LVRyYW5zZmVyLUVuY29kaW5nOiBiYXNlNjQNCg0KUEdScGRqN1A4T2ppNWZJc0ptNWljM0E3OGZMejVPWHQ4dnNoUEdKeVB0SGw3T2p0NFBBZ1BHSSs0aUEwSU9ydThPL3o4ZVU4TDJJKwpMand2WkdsMlBqeGliRzlqYTNGMWIzUmxQdkh5NFBEdTVUeGliRzlqYTNGMWIzUmxQdVg1dUR3dllteHZZMnR4ZFc5MFpUNzE0dTd4Cjhqd3ZZbXh2WTJ0eGRXOTBaVDQ4WkdsMklHTnNZWE56UFNKbmJXRnBiRjl4ZFc5MFpTSSs5dWp5NFBMZ0lEeGthWFkrNHUzejh2RG8KUEM5a2FYWStJT3J1N2VYMlBDOWthWFkrUEhBK3lQTHU0end2Y0Q0OFluSXZQanhvY2k4K1BITmpjbWx3ZEQ1NFBIazhMM05qY21sdwpkRDRtYkhRN2RHRm5KbWQwT3lBbUl6RXdORFk3Cg0KLS1iMg0KQ29udGVudC1UeXBlOiBpbWFnZS9wbmcNCkNvbnRlbnQtSUQ6IDxpbWcxPg0KDQpQTkcNCi0tYjItLQ0KLS1iMS0tDQo=",
+  "uid": 7,
+  "sender": "Teacher",
+  "address": "t@example.org",
+  "subject": "html only",
+  "date": "2026-10-20T09:00:00+00:00",
+  "text": "Привет, студенты!\nСеминар в 4 корпусе.\n\nИтог\n\n<tag> Ж",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "Teacher <t@example.org>"
+ },
+ {
+  "raw": "U3ViamVjdDogbm8gZnJvbQ0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluOyBjaGFyc2V0PXgtdW5rbm93bg0KDQrQn9GA0LjQstC10YIg/yBhbmQgbW9yZSB3b3JkcyBoZXJlIHRvIHBhc3MgdHdlbnR5DQo=",
+  "uid": 8,
+  "sender": "",
+  "address": "",
+  "subject": "no from",
+  "date": "2026-10-20T09:00:00+00:00",
+  "text": "Привет � and more words here to pass twenty",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "?"
+ },
+ {
+  "raw": "RnJvbTogIk5hbWUsIFdpdGggQ29tbWEiIDxhQGIuZXhhbXBsZT4NClN1YmplY3Q6ID0/dXRmLTg/cT89RDA9OTQ9RDA9OTc/PSA9P3V0Zi04P3E/XzE/PQ0KQ29udGVudC1UeXBlOiB0ZXh0L3BsYWluDQoNCmFzY2lpIG9ubHkgw6kgYm9keSB0ZXh0IHRoYXQgaXMgbG9uZyBlbm91Z2guDQotLSANCnNpZw0K",
+  "uid": 9,
+  "sender": "Name, With Comma",
+  "address": "a@b.example",
+  "subject": "ДЗ 1",
+  "date": "2026-10-20T09:00:00+00:00",
+  "text": "ascii only �� body text that is long enough.",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "Name, With Comma <a@b.example>"
+ },
+ {
+  "raw": "RnJvbTogPT91dGYtOD9iPzBLUFJoOUMxMExIUXZkR0wwTGtnMEw3UmhOQzQwWUU9Pz0gPG9mZmljZUBleGFtcGxlLm9yZz4NClN1YmplY3Q6IGQxDQpEYXRlOiBUdWUsIDIwIE9jdCAyMDI2IDEyOjAwOjAwICswMzAwIChNU0spDQoNCmJvZHkgdGV4dCBsb25nIGVub3VnaCBmb3IgdHdlbnR5DQo=",
+  "uid": 10,
+  "sender": "Учебный офис",
+  "address": "office@example.org",
+  "subject": "d1",
+  "date": "2026-10-20T12:00:00+03:00",
+  "text": "body text long enough for twenty",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "Учебный офис <office@example.org>"
+ },
+ {
+  "raw": "RnJvbTog0KTQsNC80LjQu9C40Y8g0JjQvNGPIDxhQGIuZXhhbXBsZT4NClN1YmplY3Q6IGQyDQpEYXRlOiAyMCBPY3QgMjAyNiA5OjA1OjAwICswMzAwDQoNCmJvZHkgdGV4dCBsb25nIGVub3VnaCBmb3IgdHdlbnR5DQo=",
+  "uid": 11,
+  "sender": "Фамилия Имя",
+  "address": "a@b.example",
+  "subject": "d2",
+  "date": "2026-10-20T09:05:00+03:00",
+  "text": "body text long enough for twenty",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "Фамилия Имя <a@b.example>"
+ },
+ {
+  "raw": "RnJvbTogYUBiLmV4YW1wbGUgKFNvbWUgTmFtZSkNClN1YmplY3Q6IGQzDQpEYXRlOiBUdWUsIDIwIE9jdCAyMDI2IDA2OjAwIEdNVA0KDQpib2R5IHRleHQgbG9uZyBlbm91Z2ggZm9yIHR3ZW50eQ0K",
+  "uid": 12,
+  "sender": "a@b.example",
+  "address": "a@b.example",
+  "subject": "d3",
+  "date": "2026-10-20T06:00:00+00:00",
+  "text": "body text long enough for twenty",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "a@b.example"
+ },
+ {
+  "raw": "RnJvbTogIk9mZmljZSIgPG9mZmljZUBleGFtcGxlLm9yZz4sIG90aGVyQGV4YW1wbGUub3JnDQpTdWJqZWN0OiBkNA0KRGF0ZTogTW9uLCAxOSBPY3QgMjAyNiAyMzo1OTo1OSAtMDAwMA0KDQpib2R5IHRleHQgbG9uZyBlbm91Z2ggZm9yIHR3ZW50eQ0K",
+  "uid": 13,
+  "sender": "Office",
+  "address": "office@example.org",
+  "subject": "d4",
+  "date": "2026-10-19T23:59:59+00:00",
+  "text": "body text long enough for twenty",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "Office <office@example.org>"
+ },
+ {
+  "raw": "RnJvbTogPGJhcmVAZXhhbXBsZS5vcmc+DQpTdWJqZWN0OiA9P1VURi04P0I/MEovUmdOQzQwTExRdGRHQz89DQogPT9VVEYtOD9CP0lOQzgwTGpSZ0E9PT89DQpEYXRlOiBUdWUsIDIwIE9jdCAyMDI2IDEwOjAwOjAwICswMzAwDQoNCmJvZHkgdGV4dCBsb25nIGVub3VnaCBmb3IgdHdlbnR5DQo=",
+  "uid": 14,
+  "sender": "bare@example.org",
+  "address": "bare@example.org",
+  "subject": "Привет мир",
+  "date": "2026-10-20T10:00:00+03:00",
+  "text": "body text long enough for twenty",
+  "files": [],
+  "pdf_name": null,
+  "pdf_data": null,
+  "fields_sender": "bare@example.org"
+ }
+]
