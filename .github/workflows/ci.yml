@@ -21,6 +21,21 @@ jobs:
       - run: uv run ruff check .
       - run: uv run pytest -q
 
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test ./...
+
   docker:
     runs-on: ubuntu-latest
     steps:

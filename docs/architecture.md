@@ -61,6 +61,9 @@ settings ◄──────────────────────�
 | External access | Tailscale Funnel | a permanent HTTPS address without a domain (D16) |
 | Deployment | Docker Compose on Tablo's server | like Tablo (D26) |
 
+The service is being ported to Go in `go/` (D81): until the switch the table above describes the running Python
+service.
+
 **Docker:**
 
 - `data/` (SQLite, the twin's session, HSE App X tokens) is a volume and never gets into the image.
@@ -1117,6 +1120,11 @@ own; Claude is an optional door, not the brain (D53).
     - 17.10 a security review (done, D79): library files never run on the app's origin and the app has a CSP, fewer
       guesses of the bot's codes, small bodies before anyone is known, fetches to public addresses only, memory bounds
       for PDFs, letters, grade sheets and formulas, only trusted study sources move what others told.
+- Stage 18 (D81): the port to Go in `go/`, Python running until the switch.
+    - 18.1 the foundation (done): store with the same schema, clock, JSON and text as Python writes them, config,
+      settings, the LLM client with its budget and journal, the contract the port keeps (`go/CONTRACT.md`);
+    - 18.2 processing and the library; 18.3 collectors and outputs; 18.4 the web app and the connector;
+    - 18.5 the switch: the image, the twin's new login, the Python package removed.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

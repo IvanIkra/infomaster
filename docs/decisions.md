@@ -631,3 +631,13 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   or above it, and the share is counted over the other students of the own group. Without such a column, or with no
   one else in the group, the whole tab counts as before. The zeros already shown keep their shares on the real
   gradebooks; a zero that now counts arrives as a new grade, as D72 says. gradebot takes the same rule.
+
+- **D81. The service moves to Go, 22.11.2026.** One static binary instead of a Python image, with lower memory under
+  the container's 256 MB. The port grows in `go/` (module `github.com/IvanIkra/infomaster/go`) next to the Python
+  package, layer by layer: the foundation (store, clock, JSON and text as Python writes them, settings, the LLM
+  client), then processing and the library, the collectors and outputs, the web app and the connector. Python stays
+  the running service until Go matches it; then Go takes over the same `data/`, the same database and the same
+  clients in one release, and the Python package goes. `go/CONTRACT.md` lists what must stay byte for byte (the
+  schema, kv keys, routes and their JSON, uids and hashes, stored credentials); each module's pytest cases are ported
+  as Go tests. Libraries: modernc SQLite (no cgo), anthropic-sdk-go, gotd for MTProto. The twin logs in again at the
+  switch: gotd does not read Telethon's session; the bot gets a new session from its token.
