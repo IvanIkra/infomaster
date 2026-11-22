@@ -169,6 +169,14 @@ func (r *Registry) Op(name string, run Run) {
 	r.ops[name] = run
 }
 
+// HasOp tells whether an undo op is registered: `op in registry.ops` of the Python service.
+func (r *Registry) HasOp(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.ops[name]
+	return ok
+}
+
 // Tool is a registered tool, nil for none.
 func (r *Registry) Tool(name string) *Tool {
 	r.mu.RLock()
