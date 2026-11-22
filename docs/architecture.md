@@ -1123,8 +1123,11 @@ own; Claude is an optional door, not the brain (D53).
 - Stage 18 (D81): the port to Go in `go/`, Python running until the switch.
     - 18.1 the foundation (done): store with the same schema, clock, JSON and text as Python writes them, config,
       settings, the LLM client with its budget and journal, the contract the port keeps (`go/CONTRACT.md`);
-    - 18.2 processing and the library; 18.3 collectors and outputs; 18.4 the web app and the connector;
-    - 18.5 the switch: the image, the twin's new login, the Python package removed.
+    - 18.2 processing and the library (done); 18.3 collectors and outputs, the twin and the bot on gotd (done);
+      18.4 the web app, the actions and the connector (done); the wiring in `go/internal/app` and
+      `go/cmd/infomaster`, and the image `go/Dockerfile` (done, not run against Telegram yet);
+    - 18.5 the switch: run the Go image beside a copy of `data/`, compare its answers with Python's, the twin's
+      new login, then the root Dockerfile and compose move to Go and the Python package goes.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

@@ -3,7 +3,4 @@
 // credentials it kept (base64url ids, COSE public keys, sign counts) keep working.
 //
 // The challenges, the rows and the rules of the ceremonies are internal/web's Auth; Verifier is what it calls.
-//
-// Until go.mod requires github.com/go-webauthn/webauthn, the verifier is built only with the tag `webauthn`; without
-// it Verifier refuses every passkey (logins by the bot's code still work).
 package passkey
