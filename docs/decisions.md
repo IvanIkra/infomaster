@@ -672,4 +672,6 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   takes seconds, but unpacking TeX (~700 MB) once ran a CPU at full load and the owner felt the heat; so TeX is
   installed by `scripts/tex-image.sh` in a container held to one CPU at the lowest priority, once, and
   `scripts/deploy.sh` never rebuilds that image. CMU Serif is not in Alpine's TeX short of the 1 GB font
-  collection: the four faces the guide uses are copied in. The source is one `.tex` file.
+  collection: the four faces the guide uses are copied in. The source is one `.tex` file. Besides the LaTeX
+  collections the builder has `mathscience` (`siunitx`, `physics`); `ADD=` installs another collection on top the
+  same way, in a minute or two. `minted` does not work: it needs shell escape.
