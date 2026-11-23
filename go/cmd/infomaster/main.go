@@ -27,7 +27,7 @@ import (
 )
 
 // StaticDir is the web client's directory relative to the working directory: the repository's, or the image's.
-const StaticDir = "infomaster/web/static"
+const StaticDir = "web/static"
 
 var commands = []string{"run", "login", "import-tablo"}
 
@@ -151,7 +151,7 @@ func logLevel(name string) (slog.Level, error) {
 	return 0, fmt.Errorf("unknown level: '%s'", name)
 }
 
-// staticDir is the web client's directory: the flag, else WEB_STATIC, else infomaster/web/static under the
+// staticDir is the web client's directory: the flag, else WEB_STATIC, else web/static under the
 // working directory, else the repository's (looked for upwards).
 func staticDir(flagValue string) string {
 	if flagValue != "" {

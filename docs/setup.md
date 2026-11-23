@@ -14,19 +14,20 @@ uses the Russian names.
    address `https://infomaster.<tailnet>.ts.net` in `PUBLIC_URL` and restart.
 3. **RUZ and calendars** (optional). Put the link to your RUZ feed (`https://api.hseapp.ru/v3/ruz/cal/<uuid>`) in
    `RUZ_ICAL_URL`. The secret of the internal feeds goes in `CALENDAR_SECRET`
-   (`python3 -c "import secrets; print(secrets.token_urlsafe(24))"`); the feeds for your own calendar need a
+   (`openssl rand -base64 24 | tr '+/' '-_' | tr -d =`); the feeds for your own calendar need a
    different secret in `CALENDAR_PUBLIC_SECRET`. Without the link the timetable holds only events from chats;
    without a secret its feeds are off.
 4. Fill in the rest of `.env` following `.env.example`, with `APP_UID` set to your user's id on the host (`id -u`):
    the service runs as that user, not as root, so `./data` must be that user's (`mkdir -p data`). Run
-   `docker compose up -d --build`.
+   `docker compose up -d --build`. Compiling takes about 2 GB of memory: on a smaller host run `scripts/deploy.sh` on
+   your own machine instead (it needs Go; set `DEPLOY_HOST` and, if the host is not x86-64, `DEPLOY_ARCH` in `.env`).
 5. Send `/start` to the bot: it answers with the web app's address. Open it and log in (see [Web app](#web-app)).
 6. **Twin.** A separate Telegram account (neither your main one nor a bot). Log it in from the web app under
    **Machine → Twin and chats**: phone, code (it comes to the twin's Telegram or by SMS; do not forward it in
    Telegram, or it stops working) and the cloud password if there is one. Chats are read at once, with no restart;
-   the session is kept in `data/twin.session`. **Log out** on the same screen closes the session in Telegram too;
+   the session is kept in `data/twin.gotd.json`. **Log out** on the same screen closes the session in Telegram too;
    the chats and their settings stay. The fallback is the terminal:
-   `docker compose run --rm infomaster python -m infomaster login`, then `docker compose restart infomaster`.
+   `docker compose run --rm infomaster infomaster login`, then `docker compose restart infomaster`.
 7. Under **Machine → Twin and chats** turn on the chats you need and mark the study ones. New chats appear turned
    off.
 8. **HSE App X** (optional). If Tablo polls HSE App X itself, turn that off first (`hseapp.enabled: false` in its
@@ -143,7 +144,7 @@ hint. The secret is the only protection, so do not share the link. If it leaks, 
 the server and take the link from `grep ^CALENDAR_PUBLIC_SECRET= ~/infomaster/.env`:
 
 ```bash
-cd ~/infomaster && printf "\nCALENDAR_PUBLIC_SECRET=%s\n" "$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" >> .env && docker compose up -d --build
+cd ~/infomaster && printf "\nCALENDAR_PUBLIC_SECRET=%s\n" "$(openssl rand -base64 24 | tr '+/' '-_' | tr -d =)" >> .env && docker compose up -d
 ```
 
 **LLM spending** is under **Machine → LLM spending**: today, the week and the month by task and chat, the daily limit and a
@@ -222,7 +223,7 @@ read-only):
 ```sh
 docker compose stop infomaster
 cp ~/tablo/data/tablo.db data/tablo.db
-docker compose run --rm infomaster python -m infomaster import-tablo --tablo-db data/tablo.db
+docker compose run --rm infomaster infomaster import-tablo --tablo-db data/tablo.db
 rm data/tablo.db && docker compose start infomaster
 ```
 

@@ -47,22 +47,22 @@ settings ◄──────────────────────�
 
 | What | With | Why |
 |---|---|---|
-| Language | Python 3.12+, one asyncio process | Telethon exists only for Python; Tablo is built the same way (§1) |
-| Twin | Telethon (MTProto, a user account) | the only maintained userbot library for Python |
-| Bot | Telethon with a bot token | one library for both clients; the bot sends login codes and takes files for the library |
-| HTTP | aiohttp | the web app, the connector, the API, the HSE App X callback |
-| Storage | SQLite | as in Tablo, one file is enough |
-| LLM | `anthropic`, model `claude-haiku-5-5` | as in Tablo (§2.1) |
-| PDF | pypdf (text), page rendered to an image for scans | MIT licence; PyMuPDF is AGPL |
-| Spreadsheets | openpyxl | as in Tablo (§3.3) |
-| Calendar | icalendar | reading RUZ and publishing our own feed |
-| Text width | Pillow + the same Inter file as Tablo | line budgets (§2.1) |
-| Web app | Preact + htm as vendored ES modules, no build; `webauthn` for passkeys; Web Push on `cryptography` | a home-screen app, the only interface besides Claude (§8.6, D61, D63, D69); no Node in the image |
+| Language | Go 1.26, one process | one static binary, a small image and little memory under the container's 256 MB (D81); first written in Python |
+| Twin | gotd (MTProto, a user account) | a maintained MTProto client for Go; its session is `data/twin.gotd.json` |
+| Bot | gotd with a bot token | one library for both clients; the bot sends login codes and takes files for the library |
+| HTTP | `net/http` | the web app, the connector, the API, the HSE App X callback |
+| Storage | SQLite, modernc (pure Go, no cgo) | as in Tablo, one file is enough; the schema the Python service made, unchanged |
+| LLM | `anthropic-sdk-go`, model `claude-haiku-5-5` | as in Tablo (§2.1) |
+| PDF | ledongthuc/pdf (text), pdfcpu (pages) | permissive licences |
+| Spreadsheets | xlsx read from its XML in the standard library | as in Tablo (§3.3) |
+| Calendar | RFC 5545 read and written in the service | reading RUZ and publishing our own feed |
+| Web app | Preact + htm as vendored ES modules, no build (`go/web/static`); go-webauthn for passkeys; Web Push | a home-screen app, the only interface besides Claude (§8.6, D61, D63, D69); no Node in the image |
 | External access | Tailscale Funnel | a permanent HTTPS address without a domain (D16) |
-| Deployment | Docker Compose on Tablo's server | like Tablo (D26) |
+| Deployment | Docker Compose on Tablo's server; `scripts/deploy.sh` compiles elsewhere | like Tablo (D26); compiling needs ~2 GB, more than the host spares (D82) |
 
-The service is being ported to Go in `go/` (D81): until the switch the table above describes the running Python
-service.
+The sections below name modules by the Python service's files (`collectors/wiki.py`, `web/auth.py`): each lives on
+as the Go package of the same place under `go/internal/` (`collectors/wiki`, `web`), and `go/CONTRACT.md` lists what
+was kept byte for byte. The Python files are in the history before D82.
 
 **Docker:**
 
@@ -80,17 +80,20 @@ service.
 ## 4. Modules
 
 ```
-collectors/   telegram, mail, hseapp, ruz, grades       — collection only, store raw data
-processing/   batches, pdf, subjects, deadlines, grades,
-              schedule, images                           — everything that computes
-llm/          client, budget, journal                    — the single entry to Haiku: limit + journal
-outputs/      bot, deadlines (news to push), reminders, sheets (publishing), api, ical_feed
-actions.py    the owner's actions as handlers           — what the connector and the web app call
-connector/    oauth, mcp, tools, catalog, changes       — the MCP connector for claude.ai (§8.5)
-web/          the web app: server and static client     — §8.6
-library/      raw material and the knowledge base       — §6.8
-settings/     storing and validating settings
-net.py        HTTP to public addresses only             — every fetch of a link others chose (D79)
+go/internal/
+  collectors/   telegram, mail, hseapp, ruz, grades, wiki, files, links  — collection only, store raw data
+  processing/   batches, pdf, subjects, deadlines, grades,
+                schedule, images, sheets, merge, formulas               — everything that computes
+  llm/          client, budget, journal                    — the single entry to Haiku: limit + journal
+  outputs/      bot, deadlines (news to push), reminders, sheets (publishing), api, icalfeed
+  actions/      the owner's actions as handlers           — what the connector and the web app call
+  connector/    oauth, mcp, tools, changes                — the MCP connector for claude.ai (§8.5)
+  web/          the web app's server                      — §8.6; its client is go/web/static
+  library/      raw material and the knowledge base       — §6.8
+  settings/     storing and validating settings
+  net/          HTTP to public addresses only             — every fetch of a link others chose (D79)
+  store/, app/  SQLite; the wiring
+go/cmd/         infomaster (the service, login, import-tablo, --shadow), compare
 ```
 
 The rule: collectors never call the LLM, and processing never goes to the network except through `llm/`.
@@ -588,7 +591,7 @@ The API serves the full current state, with no cursors (D10). There is no "refre
   the web app and by Claude. infomaster is not connected to HA (D34): no to-do lists, no
   `tablo_changed` events, and the internal port is not published on the host. Only Tablo reads it, by service name
   on the `infomaster` network.
-- **The move from Tablo** is the command `python -m infomaster import-tablo --tablo-db <tablo.db>`
+- **The move from Tablo** is the command `infomaster import-tablo --tablo-db <tablo.db>`
   (`infomaster/tablo.py`), run once at the switch. From a read-only copy of Tablo's database it takes own deadlines
   (except those already present with the same title, date and list), hidden ones (by `uid`, which is computed the same
   way; they have no `ref`, so hiding is by title and date, as in Tablo) and the manual dictionary entries (a manual
@@ -1120,14 +1123,15 @@ own; Claude is an optional door, not the brain (D53).
     - 17.10 a security review (done, D79): library files never run on the app's origin and the app has a CSP, fewer
       guesses of the bot's codes, small bodies before anyone is known, fetches to public addresses only, memory bounds
       for PDFs, letters, grade sheets and formulas, only trusted study sources move what others told.
-- Stage 18 (D81): the port to Go in `go/`, Python running until the switch.
+- Stage 18 (D81, D82): the port to Go in `go/`, Python running until the switch (done 23.11.2026).
     - 18.1 the foundation (done): store with the same schema, clock, JSON and text as Python writes them, config,
       settings, the LLM client with its budget and journal, the contract the port keeps (`go/CONTRACT.md`);
     - 18.2 processing and the library (done); 18.3 collectors and outputs, the twin and the bot on gotd (done);
       18.4 the web app, the actions and the connector (done); the wiring in `go/internal/app` and
       `go/cmd/infomaster`, and the image `go/Dockerfile` (done, not run against Telegram yet);
-    - 18.5 the switch: run the Go image beside a copy of `data/`, compare its answers with Python's, the twin's
-      new login, then the root Dockerfile and compose move to Go and the Python package goes.
+    - 18.5 the switch (done, D82): the Go image beside a copy of `data/` answered the same as Python on every route
+      `compare` checks, then took over the server; the twin logged in again; the root Dockerfile and compose build
+      Go, the Python package and its tests are gone, and `scripts/deploy.sh` deploys without compiling on the host.
 
 No agent runs on the server: when the code needs changing, Claude Code connects over SSH.
 

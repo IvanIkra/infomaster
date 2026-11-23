@@ -89,7 +89,7 @@ func (silent) System(i18n.Phrase, string)       {}
 
 // Options are what the command line gives besides the environment.
 type Options struct {
-	Static string // the web client's directory; "" finds infomaster/web/static of the repository
+	Static string // the web client's directory; "" finds web/static of the repository
 	// Shadow serves both ports and nothing else (18.5, D81): no bot, no twin, no background loops and no pushes, so
 	// the service can run on a copy of the live database beside the running one and be compared with it.
 	Shadow bool

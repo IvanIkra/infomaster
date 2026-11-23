@@ -1,7 +1,7 @@
 # infomaster: the external contract of the Python service
 
 What the Go port must match so it can take over the same `data/` directory, the same SQLite file
-(`data/infomaster.db`), the static web client in `infomaster/web/static` (unchanged), Tablo / Home Assistant on the
+(`data/infomaster.db`), the static web client in `web/static` (unchanged), Tablo / Home Assistant on the
 internal port and claude.ai through the MCP connector.
 
 Paths are relative to the repository root. `file:N-M` points at Python source to copy from. Every example value

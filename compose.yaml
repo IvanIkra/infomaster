@@ -1,4 +1,5 @@
-# Production run on the Tablo host: docker compose up -d --build
+# Production run on the Tablo host: scripts/deploy.sh (compiles elsewhere: building here needs ~2 GB of memory);
+# on a host with the memory, docker compose up -d --build
 # No port is published on the host (§3). The public port goes out only through the Tailscale sidecar's Funnel;
 # Tablo reaches the internal port by service name over the shared network.
 # Bridge network with explicit DNS, as Tablo: the host's routing sends container traffic into AmneziaWG.
@@ -6,7 +7,6 @@ services:
   infomaster:
     build:
       context: .
-      dockerfile: go/Dockerfile  # the Go service (D81); compiling it needs ~2 GB of memory, see docs/setup.md
       args:
         APP_UID: ${APP_UID:-1000}  # the host user that owns ./data (D79): the service runs as it, not as root
     image: infomaster:latest

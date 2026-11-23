@@ -6,21 +6,6 @@ on:
   pull_request:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v10.3.3
-        with:
-          python-version: ${{ matrix.python-version }}
-          enable-cache: true
-      - run: uv sync --locked
-      - run: uv run ruff check .
-      - run: uv run pytest -q
-
   go:
     runs-on: ubuntu-latest
     defaults:
@@ -36,9 +21,22 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
+  web-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The client is plain ES modules without a build step: a syntax error shows only on the phone otherwise
+      # (as .mjs: the app's scripts are ES modules)
+      - run: |
+          for f in go/web/static/*.js; do
+            cp "$f" "$RUNNER_TEMP/$(basename "$f" .js).mjs" && node --check "$RUNNER_TEMP/$(basename "$f" .js).mjs" || exit 1
+          done
+
   docker:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t infomaster .
-      - run: docker build -f go/Dockerfile -t infomaster:go .

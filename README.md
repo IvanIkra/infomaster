@@ -1,7 +1,7 @@
 # infomaster
 
 [![CI](https://github.com/IvanIkra/infomaster/actions/workflows/ci.yml/badge.svg)](https://github.com/IvanIkra/infomaster/actions/workflows/ci.yml)
-![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
+![Go 1.26](https://img.shields.io/badge/go-1.26-blue)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 A self-hosted study assistant for university students. infomaster reads course chats, the university
@@ -59,7 +59,7 @@ flowchart LR
     CORE --> APP & ICS & API & MCP
 ```
 
-A single asyncio process runs the collectors, the processing pipeline and two HTTP servers:
+A single Go process runs the collectors, the processing pipeline and two HTTP servers:
 
 | Port | Exposed | Serves |
 |---|---|---|
@@ -72,9 +72,9 @@ inherited is in [docs/sources-overview.md](docs/sources-overview.md) (referred t
 
 ## Tech stack
 
-Python 3.12 · asyncio · [Telethon](https://github.com/LonamiWebs/Telethon) · aiohttp · SQLite ·
-[Anthropic SDK](https://github.com/anthropics/anthropic-sdk-python) · pypdf · openpyxl · icalendar ·
-Docker Compose · Tailscale Funnel. The web app is plain ES modules with Preact and htm, vendored, with no build
+Go 1.26 · [gotd](https://github.com/gotd/td) (Telegram) · SQLite ([modernc](https://modernc.org/sqlite), no cgo) ·
+[Anthropic SDK](https://github.com/anthropics/anthropic-sdk-go) · go-imap · pdfcpu · go-webauthn ·
+Docker Compose · Tailscale Funnel. The service was first written in Python and ported to Go (D81). The web app is plain ES modules with Preact and htm, vendored, with no build
 step.
 
 ## Getting started
@@ -88,6 +88,9 @@ cd infomaster
 cp .env.example .env    # fill in the values, every variable is commented
 docker compose up -d --build
 ```
+
+Compiling the image takes about 2 GB of memory. On a smaller host, `scripts/deploy.sh` compiles on your own machine
+and builds the same image on the host from the binaries (`DEPLOY_HOST` in `.env`).
 
 Then send `/start` to the bot, open the web app at `/web/`, log in with the code the bot sends and log the twin in
 under **Machine → Twin and chats**.
@@ -114,32 +117,35 @@ Secrets live in `.env`; everything else is set in the web app's **Machine**.
 ## Development
 
 ```bash
-uv sync               # .venv on Python 3.12 from .python-version, exact versions from uv.lock
-uv run pytest -q
-uv run ruff check .
+cd go
+go test ./...
+go vet ./...
+gofmt -l .
 ```
 
-Dependencies are managed with [uv](https://docs.astral.sh/uv/): `uv add <package>` updates `pyproject.toml` and
-`uv.lock` together, and the Docker image installs the same locked versions.
-
-Run locally with `uv run python -m infomaster --data data`. Other commands: `login` logs the twin in from a
-terminal, `import-tablo --tablo-db <tablo.db>` moves own and hidden deadlines from Tablo once.
+Run locally with `go run ./cmd/infomaster --data ../data` from `go/`. Other commands: `login` logs the twin in from a
+terminal, `import-tablo --tablo-db <tablo.db>` moves own and hidden deadlines from Tablo once, `--shadow` serves both
+ports from a copy of the database without Telegram, loops, push or the LLM, and `compare` (its own binary) checks two
+running services answer the same.
 
 ```
-infomaster/
-├── collectors/   # Telegram twin, mail, RUZ, HSE App X, files, grade sheets
-├── processing/   # batches, deadlines and merge, events, schedule, sheets, grades, images
-├── outputs/      # the bot, Web Push of deadlines and reminders, sheet publishing, iCal feeds, internal API
-├── actions.py    # the owner's actions, which the connector and the web app call
-├── web/          # the home-screen web app: login by a code from the bot or a passkey, its static client
-├── connector/    # MCP connector for claude.ai: OAuth, the /mcp endpoint, tools, journal with undo
-├── library/      # raw course material and the knowledge base, signed file links, feeding from chats and the bot
-├── llm/          # client with structured output, daily budget, journal
-├── settings/     # general and per-chat settings
-├── store.py      # SQLite
-└── app.py        # wiring
-tests/            # pytest
-docs/             # architecture, decisions, setup guide, notes on Tablo
+go/
+├── cmd/infomaster/      # the service and its commands
+├── cmd/compare/         # compares the answers of two running services
+├── internal/
+│   ├── collectors/      # Telegram twin, mail, RUZ, HSE App X, files, grade sheets
+│   ├── processing/      # batches, deadlines and merge, events, schedule, sheets, grades, images
+│   ├── outputs/         # the bot, Web Push of deadlines and reminders, sheet publishing, iCal feeds, internal API
+│   ├── actions/         # the owner's actions, which the connector and the web app call
+│   ├── web/             # the home-screen web app: login by a code from the bot or a passkey
+│   ├── connector/       # MCP connector for claude.ai: OAuth, the /mcp endpoint, tools, journal with undo
+│   ├── library/         # raw course material and the knowledge base, signed file links
+│   ├── llm/             # client with structured output, daily budget, journal
+│   ├── settings/        # general and per-chat settings
+│   ├── store/           # SQLite
+│   └── app/             # wiring
+└── web/static/          # the web app's client: ES modules, Preact and htm, no build step
+docs/                    # architecture, decisions, setup guide, notes on Tablo
 ```
 
 ## Status
@@ -157,7 +163,8 @@ connector (stage 13) is connected to claude.ai; setting it up: [docs/setup.md](d
 The library (stage 14, D58) keeps raw material per course and class (from study chats, sheets, files sent to the bot
 and the web app's uploads) and the knowledge base Claude makes of it (LaTeX and PDF per class, a book and a cheat sheet per
 course, every version kept); files move by signed links. Stage 16 (D61, D69) put a home-screen web app with Web Push
-in place of the Telegram forum and Mini App, which are removed (D69).
+in place of the Telegram forum and Mini App, which are removed (D69). Stage 18 (D81) ported the service to Go; it
+answers the same as the Python one did on a copy of the live database and replaced it.
 
 Problem sheets, grades, images, the library and the connector run on live data. Not yet tried live: Web Push on a
 real device, the web app's corrections on the server, the language switch, and Tablo's "infomaster is unavailable"

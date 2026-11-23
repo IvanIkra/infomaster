@@ -1,24 +1,32 @@
-FROM python:3.12-slim
-COPY --from=ghcr.io/astral-sh/uv:0.13.7 /uv /bin/
+# The service (D81): docker build --build-arg APP_UID=$(id -u) -t infomaster .
+# Compiling modernc's SQLite takes ~2 GB of memory: on a small host build with scripts/deploy.sh instead, which
+# compiles elsewhere and puts the same runtime image together from the binaries (Dockerfile.prebuilt).
 
-# The environment lives outside /app, so a bind mount over the app directory cannot hide it.
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
-    UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=/opt/venv \
-    PATH=/opt/venv/bin:$PATH
+FROM golang:1.26 AS build
+WORKDIR /src/go
+# Modules first, so code changes don't download them again. Exact versions come from go.sum.
+COPY go/go.mod go/go.sum ./
+RUN go mod download
+COPY go/ ./
+# No cgo: SQLite is modernc's pure Go, so the binary runs on any base image.
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/infomaster ./cmd/infomaster \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/compare ./cmd/compare
+
+FROM alpine:3.22
+# tzdata: Moscow's zone for the logs and any library that asks the system (the binary embeds it too);
+# ca-certificates: HTTPS to Anthropic, RUZ, HSE App X, Google Sheets and the rest.
+RUN apk add --no-cache tzdata ca-certificates
 WORKDIR /app
-
-# Dependencies first, so code changes don't reinstall them. Exact versions come from uv.lock.
-COPY pyproject.toml uv.lock .python-version ./
-RUN uv sync --locked --no-dev --no-install-project --no-cache
-
-COPY infomaster infomaster
+COPY go/web/static web/static
+COPY --from=build /out/infomaster /out/compare /usr/local/bin/
+ENV WEB_STATIC=/app/web/static
 
 # The service runs as a plain user (D79): a flaw in a parser does not run as root over the data directory. APP_UID
 # is the owner of data/ on the host (.env), so its files stay the host user's; the code stays root's, read-only.
 ARG APP_UID=1000
-RUN useradd --uid "$APP_UID" --user-group --no-create-home --home-dir /app/data --shell /usr/sbin/nologin app
+RUN addgroup -g "$APP_UID" app && adduser -D -H -u "$APP_UID" -G app -h /app/data -s /sbin/nologin app
 USER app
 
 # 8080: public (the web app and the connector, behind Funnel); 8081: internal (API for Tablo and HA)
 EXPOSE 8080 8081
-CMD ["python", "-m", "infomaster", "--data", "data"]
+CMD ["infomaster", "--data", "data"]

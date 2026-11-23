@@ -75,7 +75,7 @@ func TestFiles(t *testing.T) {
 	if part.Code != http.StatusPartialContent || part.Body.Len() != 10 {
 		t.Fatal(part.Code, part.Body.Len())
 	}
-	for _, path := range []string{"/web/static/../web.py", "/web/static/%2e%2e/__init__.py", "/web/static/nothing.js",
+	for _, path := range []string{"/web/static/../web.go", "/web/static/%2e%2e/web.go", "/web/static/nothing.js",
 		"/web/static/fonts/"} {
 		if r := h.get(path); r.Code == 200 {
 			t.Fatal(path, r.Code)

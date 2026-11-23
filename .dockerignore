@@ -1,7 +1,5 @@
 *
-!pyproject.toml
-!uv.lock
-!.python-version
-!infomaster
-**/__pycache__
-.DS_Store
+!go
+go/**/*_test.go
+go/**/testdata
+**/.DS_Store

@@ -1,7 +1,0 @@
-*
-!go
-!infomaster/web/static
-go/**/*_test.go
-go/**/testdata
-.DS_Store
-**/.DS_Store

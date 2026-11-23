@@ -641,3 +641,16 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   schema, kv keys, routes and their JSON, uids and hashes, stored credentials); each module's pytest cases are ported
   as Go tests. Libraries: modernc SQLite (no cgo), anthropic-sdk-go, gotd for MTProto. The twin logs in again at the
   switch: gotd does not read Telethon's session; the bot gets a new session from its token.
+
+- **D82. The switch to Go, 23.11.2026.** Before the switch a copy of the live database served by the Go image in shadow
+  mode (`--shadow`: both ports, no Telegram, loops, push or LLM) answered the same as the running Python service on
+  every route `compare` reads: the internal API, the iCal feeds, the public feeds, the OAuth metadata and the web
+  page with its CSP. Then the Go image took over the same `data/`: the bot made a new session, the twin logged in
+  again, the old Telethon sessions and a copy of the database stay on the server for a week as the way back. The
+  Python package, its tests and `pyproject.toml`/`uv.lock` are removed from the repository at once (git keeps them);
+  the web client moves to `go/web/static`, the root `Dockerfile` builds Go, CI runs the Go checks, a `node --check`
+  of the client modules and the image. Compiling modernc's SQLite takes about 2 GB of memory, which the server does
+  not spare next to Home Assistant and Tablo (a build there pushed it into swap): `scripts/deploy.sh` compiles on the
+  developer's machine and builds the same runtime image on the host from the binaries (`Dockerfile.prebuilt`);
+  `docker compose up -d --build` stays for hosts with the memory. Go uses 20–30 MB against Python's ~110 MB, and its
+  image is 82 MB against 335 MB.

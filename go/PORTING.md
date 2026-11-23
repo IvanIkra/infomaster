@@ -1,5 +1,9 @@
 # Porting the service to Go
 
+> The Python service was removed at the switch (D82). References to its files (`*.py`, `tests/test_*.py`) in
+> comments and here point to the repository history before that commit.
+
+
 The Python package `infomaster/` is being rewritten in Go in this `go/` tree (D81). Python stays the running service
 until the Go port matches it; then Go takes over the same `data/` directory, SQLite database and clients in one
 release. Until then both trees live in `main`, and CI checks both.

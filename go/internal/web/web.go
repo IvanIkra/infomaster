@@ -17,7 +17,7 @@
 // News (stage 16.7), shelves (16.8, shelves.go), corrections (16.9, fixes.go), «Machine» (16.6, machine.go) and «+»
 // (16.5, quick.go) are under /web/api too.
 //
-// The client is plain ES modules, no build step, served from a directory (infomaster/web/static) unchanged.
+// The client is plain ES modules, no build step, served from a directory (web/static) unchanged.
 package web
 
 import (
@@ -48,8 +48,8 @@ import (
 	"github.com/IvanIkra/infomaster/go/internal/store"
 )
 
-// StaticPath is where the client lives in the repository.
-const StaticPath = "infomaster/web/static"
+// StaticPath is where the client lives in the Go module (go/ of the repository).
+const StaticPath = "web/static"
 
 var changing = map[string]bool{"POST": true, "PUT": true, "PATCH": true, "DELETE": true}
 
@@ -79,7 +79,7 @@ type WebApp struct {
 
 // New makes the web app's tables and services. sendCode is the bot's text to the owner (nil while there is no bot);
 // lang and seconds may be nil (English, the clock); data nil leaves the screens out; model reads «+»'s one line (nil:
-// none). static is the client's directory, "" for infomaster/web/static of the repository.
+// none). static is the client's directory, "" for web/static of the Go module.
 func New(env config.Env, s *store.Store, sendCode func(context.Context, string) error, lang func() string,
 	seconds func() float64, data *Data, model llm.Model, static string) (*WebApp, error) {
 	if lang == nil {
@@ -117,14 +117,16 @@ func New(env config.Env, s *store.Store, sendCode func(context.Context, string) 
 	return w, nil
 }
 
-// FindStatic is infomaster/web/static of the repository: looked for from the working directory up, then next to
-// this source file.
+// FindStatic is web/static of the Go module: looked for from the working directory up (in it and in its go/), then
+// next to this source file.
 func FindStatic() string {
 	if dir, err := os.Getwd(); err == nil {
 		for {
-			candidate := filepath.Join(dir, filepath.FromSlash(StaticPath))
-			if info, err := os.Stat(filepath.Join(candidate, "index.html")); err == nil && !info.IsDir() {
-				return candidate
+			for _, candidate := range []string{filepath.Join(dir, filepath.FromSlash(StaticPath)),
+				filepath.Join(dir, "go", filepath.FromSlash(StaticPath))} {
+				if info, err := os.Stat(filepath.Join(candidate, "index.html")); err == nil && !info.IsDir() {
+					return candidate
+				}
 			}
 			parent := filepath.Dir(dir)
 			if parent == dir {
@@ -134,7 +136,7 @@ func FindStatic() string {
 		}
 	}
 	if _, file, _, ok := runtime.Caller(0); ok {
-		return filepath.Join(filepath.Dir(file), "..", "..", "..", filepath.FromSlash(StaticPath))
+		return filepath.Join(filepath.Dir(file), "..", "..", filepath.FromSlash(StaticPath))
 	}
 	return filepath.FromSlash(StaticPath)
 }
