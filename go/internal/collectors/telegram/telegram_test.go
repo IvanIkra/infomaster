@@ -718,3 +718,18 @@ func TestTerminalLogin(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPhoneNumber(t *testing.T) {
+	for in, want := range map[string]string{
+		"+7 912 345-67-89": "+79123456789",
+		"8 912 345-67-89":  "+79123456789",
+		"9123456789":       "+79123456789",
+		"79123456789":      "+79123456789",
+		"+8 912 345 67 89": "+89123456789", // its own + is kept as typed
+		"+44 20 7946 0958": "+442079460958",
+	} {
+		if got := PhoneNumber(in); got != want {
+			t.Errorf("PhoneNumber(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

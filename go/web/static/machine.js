@@ -450,8 +450,30 @@ export function Journal({ onOut }) {
 
 // --- the twin and the chats --------------------------------------------------------------------------------
 
+// A Russian number however it is typed: 8 912…, 912…, +7 912… are all +7 912…
+const phoneDigits = (raw) => {
+  let d = String(raw).replace(/\D/g, "");
+  if (d.length === 11 && d[0] === "8") d = "7" + d.slice(1);
+  else if (d.length === 10 && d[0] === "9") d = "7" + d;
+  else if (d.length === 12 && d[0] === "7" && (d[1] === "7" || d[1] === "8")) d = "7" + d.slice(2); // after the +7
+  return d;
+};
+// +7 912 345-67-89 for a Russian number, +<digits> for any other
+const phoneShown = (d) => {
+  if (!d) return "+";
+  if (d[0] !== "7") return "+" + d;
+  const p = [d.slice(1, 4), d.slice(4, 7), d.slice(7, 9), d.slice(9, 11)];
+  let s = "+7";
+  if (p[0]) s += " " + p[0];
+  if (p[1]) s += " " + p[1];
+  if (p[2]) s += "-" + p[2];
+  if (p[3]) s += "-" + p[3];
+  return s + d.slice(11);
+};
+
 function TwinLogin({ twin, onTwin }) {
   const [value, setValue] = useState("");
+  const [phone, setPhone] = useState("7");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const step = twin.login ? twin.login.step : "phone";
@@ -460,7 +482,11 @@ function TwinLogin({ twin, onTwin }) {
     try { onTwin(await api("POST", path, data)); setValue(""); } catch (e) { setError(e.message); }
     finally { setBusy(false); }
   };
-  const submit = (event) => { event.preventDefault(); send("/machine/twin/login", { [step]: value }); };
+  const phoneReady = phone.length >= 11;
+  const submit = (event) => {
+    event.preventDefault();
+    send("/machine/twin/login", { [step]: step === "phone" ? "+" + phone : value });
+  };
   const out = () => { if (confirm(m("logOutTwin"))) send("/machine/twin/logout"); };
   if (twin.account) {
     return html`<${Section} title=${m("twinTitle")}>
@@ -475,12 +501,14 @@ function TwinLogin({ twin, onTwin }) {
   return html`<${Section} title=${m("twinLogin")} foot=${hint}>
     ${twin.error && html`<div class="err small" style="padding-top:10px">${twin.error}</div>`}
     <form class="acts" style="padding:10px 0" onSubmit=${submit}>
-      <input class="field" value=${value} onInput=${(e) => setValue(e.target.value)} aria-label=${m(step)}
-        placeholder=${step === "phone" ? "+7…" : step === "code" ? "12345" : m("password")}
+      <input class="field" aria-label=${m(step)}
+        value=${step === "phone" ? phoneShown(phone) : value}
+        onInput=${(e) => step === "phone" ? setPhone(phoneDigits(e.target.value)) : setValue(e.target.value)}
+        placeholder=${step === "phone" ? "+7 912 345-67-89" : step === "code" ? "12345" : m("password")}
         type=${step === "password" ? "password" : step === "phone" ? "tel" : "text"}
         inputmode=${step === "code" ? "numeric" : undefined}
         autocomplete=${step === "code" ? "one-time-code" : step === "password" ? "current-password" : "tel"} />
-      <button class="btn" type="submit" disabled=${busy || !value.trim()}>
+      <button class="btn" type="submit" disabled=${busy || (step === "phone" ? !phoneReady : !value.trim())}>
         ${step === "phone" ? m("getCode") : m("logIn")}</button>
     </form>
     ${twin.login && html`<button class="sec wide danger" style="margin-bottom:10px" disabled=${busy}

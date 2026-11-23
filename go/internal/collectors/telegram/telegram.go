@@ -270,6 +270,22 @@ func (t *Twin) needsLogin(why i18n.Phrase) bool {
 
 // --- login and logout from the web app ---------------------------------------
 
+// PhoneNumber is a number as Telegram wants it, +<digits>, with a Russian one typed the local way taken as +7:
+// «8 912 345-67-89» (eleven digits from 8) and «912 345-67-89» (ten from 9) are both +79123456789. A number typed
+// with its own + is taken as it is.
+func PhoneNumber(s string) string {
+	d := digits(s)
+	if !strings.HasPrefix(strings.TrimSpace(s), "+") {
+		switch {
+		case len(d) == 11 && d[0] == '8':
+			d = "7" + d[1:]
+		case len(d) == 10 && d[0] == '9':
+			d = "7" + d
+		}
+	}
+	return "+" + d
+}
+
 func digits(s string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsDigit(r) {
@@ -288,7 +304,7 @@ func floodSeconds(err error) (int, bool) {
 
 // SendCode asks Telegram for a login code; it comes to the account's other sessions or by SMS.
 func (t *Twin) SendCode(ctx context.Context, phone string) error {
-	phone = "+" + digits(phone)
+	phone = PhoneNumber(phone)
 	if pytext.Len(phone) < 8 {
 		return loginError("the twin's phone number is needed in the international format: +7…",
 			"нужен номер телефона твинка в международном формате: +7…")

@@ -40,6 +40,7 @@ func Login(ctx context.Context, env config.Env, sessionPath string, in io.Reader
 		if err != nil {
 			return err
 		}
+		phone = PhoneNumber(phone)
 		hash, err := client.SendCode(ctx, phone)
 		if err != nil {
 			return err
