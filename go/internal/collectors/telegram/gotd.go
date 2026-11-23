@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/gotd/td/bin"
@@ -78,7 +79,37 @@ func (g *gotdLogin) SendCode(ctx context.Context, phone string) (string, error) 
 	if !ok {
 		return "", fmt.Errorf("unexpected answer %T", sent)
 	}
+	next := ""
+	if t, ok := code.GetNextType(); ok {
+		next = codeVia(t)
+	}
+	slog.Info("twin: a login code was sent", "via", codeVia(code.Type), "next", next, "timeout", code.Timeout)
 	return code.PhoneCodeHash, nil
+}
+
+// codeVia is where Telegram sent a login code: the owner looks for it there.
+func codeVia(t interface{ TypeName() string }) string {
+	switch v := t.(type) {
+	case *tg.AuthSentCodeTypeApp:
+		return "app (the account's other sessions, the chat «Telegram»)"
+	case *tg.AuthSentCodeTypeSMS:
+		return "sms"
+	case *tg.AuthSentCodeTypeCall:
+		return "call"
+	case *tg.AuthSentCodeTypeFlashCall, *tg.AuthSentCodeTypeMissedCall:
+		return "missed call (the code is the caller's number)"
+	case *tg.AuthSentCodeTypeEmailCode:
+		return "email " + v.EmailPattern
+	case *tg.AuthSentCodeTypeSetUpEmailRequired:
+		return "email required: Telegram wants a login email set up first"
+	case *tg.AuthSentCodeTypeFragmentSMS:
+		return "fragment " + v.URL
+	case *tg.AuthSentCodeTypeFirebaseSMS:
+		return "firebase sms (official apps only)"
+	case *tg.AuthSentCodeTypeSMSWord, *tg.AuthSentCodeTypeSMSPhrase:
+		return "sms (a word or phrase)"
+	}
+	return t.TypeName()
 }
 
 func (g *gotdLogin) SignIn(ctx context.Context, phone, code, codeHash string) error {
