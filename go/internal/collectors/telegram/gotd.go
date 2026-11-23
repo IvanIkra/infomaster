@@ -83,7 +83,7 @@ func (g *gotdLogin) SendCode(ctx context.Context, phone string) (string, error) 
 	if t, ok := code.GetNextType(); ok {
 		next = codeVia(t)
 	}
-	slog.Info("twin: a login code was sent", "via", codeVia(code.Type), "next", next, "timeout", code.Timeout)
+	slog.Info("twin: a login code was sent", "phone", Masked(phone), "via", codeVia(code.Type), "next", next, "timeout", code.Timeout)
 	return code.PhoneCodeHash, nil
 }
 
