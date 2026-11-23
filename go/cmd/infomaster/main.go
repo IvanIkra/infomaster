@@ -38,6 +38,7 @@ type arguments struct {
 	tabloDB  string
 	static   string
 	shadow   bool
+	qr       bool
 }
 
 func main() {
@@ -67,6 +68,7 @@ func parse(argv []string, output io.Writer) (arguments, error) {
 	fs.StringVar(&args.tabloDB, "tablo-db", "", "import-tablo: a copy of Tablo's tablo.db")
 	fs.BoolVar(&args.shadow, "shadow", false,
 		"serve both ports only: no Telegram, no loops, no push, no LLM (a copy of the database beside the live one)")
+	fs.BoolVar(&args.qr, "qr", false, "login: by a QR code the twin's app scans, with no login code")
 	fs.StringVar(&args.static, "static", "", "the web client's directory (WEB_STATIC; default "+StaticDir+")")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "usage: infomaster [%s] [flags]\n", strings.Join(commands, "|"))
@@ -122,6 +124,9 @@ func run(args arguments) error {
 	if args.command == "login" {
 		if err := dataDir(args.data); err != nil {
 			return err
+		}
+		if args.qr {
+			return telegram.LoginQR(ctx, env, telegram.SessionPath(args.data), os.Stdin, os.Stdout)
 		}
 		return telegram.Login(ctx, env, telegram.SessionPath(args.data), os.Stdin, os.Stdout, telegram.DialGotd)
 	}
