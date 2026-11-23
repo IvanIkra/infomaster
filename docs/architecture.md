@@ -491,7 +491,12 @@ no PDF and no course (`course` is ''), is kept and versioned like any document, 
 version when the owner asks for a new rule. `get_cheatsheet` returns it with the cheat sheet, so Claude has the rules
 whenever it writes a document or helps with homework.
 A new version is a draft first: its source and its PDF are uploaded, then it is published and gets the next number.
-Every version is kept; only the newest can be taken back (an undo). The server never runs TeX: the PDF comes built.
+Every version is kept; only the newest can be taken back (an undo). The PDF comes built where Claude runs, or the
+server builds it (D84): `build_document_version` sends the draft's source to the TeX builder, a container of its own
+(`texbuild`, `internal/texbuild`) with XeLaTeX and the guide's fonts and no data, secrets or way out of its internal
+network, one CPU, 512 MB, one build at a time and under a minute. TeX's errors come back for Claude to fix the
+source; the source is one `.tex` file, with no pictures or other files. `scripts/tex-image.sh` builds its image once,
+TeX itself installed under one CPU; `scripts/deploy.sh` leaves it alone.
 
 **Links** (`library/links.py`). A file goes in or out by a signed link that names one file and one direction:
 `GET /library/<token>/<name>` (24 hours), `PUT /library/<token>` (6 hours), on the public port (the signature is the check). The key is kept in `kv`, so links survive a restart. Claude Code
@@ -692,14 +697,15 @@ client: Claude Code on the owner's Mac, which has a shell, and claude.ai on the 
 
 | Reads | Writes |
 |---|---|
-| `list_library` (courses with counts, the inbox, disk usage), `list_materials` (the inbox, a course, a class; by status or kind; no long text, a 200-character preview), `get_material` (one item: its text, a text file's or a PDF's text, in pages of 30,000 characters by default; a photo inline; `download_url`; the items on it), `list_classes` (a course's started classes with counts and their documents), `list_documents`, `get_document` (versions; a version's source inline in pages, links to its source and PDF), `get_cheatsheet` (with the guide), `get_guide` | `add_material` (a text, a link or a transcript inline; or a file: a draft and its upload link), `sort_material` (course and class of up to 100 items; destructive), `update_material` (title, kind, author, note, status, a text's words; destructive), `remove_material` (one item or up to 100 as one change; destructive), `start_document_version` (not journaled), `publish_document_version` |
+| `list_library` (courses with counts, the inbox, disk usage), `list_materials` (the inbox, a course, a class; by status or kind; no long text, a 200-character preview), `get_material` (one item: its text, a text file's or a PDF's text, in pages of 30,000 characters by default; a photo inline; `download_url`; the items on it), `list_classes` (a course's started classes with counts and their documents), `list_documents`, `get_document` (versions; a version's source inline in pages, links to its source and PDF), `get_cheatsheet` (with the guide), `get_guide` | `add_material` (a text, a link or a transcript inline; or a file: a draft and its upload link), `sort_material` (course and class of up to 100 items; destructive), `update_material` (title, kind, author, note, status, a text's words; destructive), `remove_material` (one item or up to 100 as one change; destructive), `start_document_version` (not journaled), `build_document_version` (the PDF on the server, D84; not journaled), `publish_document_version` |
 
 Files never travel inside a call (a recording is hundreds of megabytes, and a result is read by the model): a tool
 gives a signed link (§6.8) and the answer carries the exact command, `curl --fail-with-body -T <file> '<link>'` for an
 upload; `download_url` is fetched with `curl -o`. `add_material` with `file_name` makes a draft item (`uploading`)
 and returns its upload link; the item is listed once the bytes are in. `start_document_version` makes a draft
 version, takes the source inline (`source_text`: a cheat sheet, the guide, or anything from a client without a shell) and
-returns an upload link for each part still missing (the source, the PDF built locally); `publish_document_version`
+returns an upload link for each part still missing (the source, the PDF); `build_document_version` builds the PDF
+on the server instead (D84); `publish_document_version`
 makes it the newest version and marks the items it names processed. A client without a shell reads text inline
 (texts, transcripts, a PDF's text layer) and a photo as an image when it is a JPEG, PNG, GIF or WebP of at most
 3.75 MB, whose base64 stays within the 5 MB the Messages API takes of one image; a bigger photo (a camera's full
@@ -1073,9 +1079,9 @@ own; Claude is an optional door, not the brain (D53).
     a PDF and `.tex` per lecture and seminar (a seminar is its sheet's topics and new notions, the problems are not
     solved), and a cheat sheet for Claude (notation, formatting, topics covered); every version is kept. Processing
     is manual, from Claude Code on the owner's machine through the connector: it sorts the inbox, transcribes audio,
-    writes the LaTeX, builds the PDF and uploads both. The server neither transcribes nor runs TeX. Since D83 one
-    `guide` over all courses holds the rules every document is written by; `get_cheatsheet` brings it along. Its
-    content is still to be written with the owner.
+    writes the LaTeX, builds the PDF and uploads both. The server does not transcribe. Since D83 one `guide` over
+    all courses holds the rules every document is written by; `get_cheatsheet` brings it along. Since D84 the server
+    builds a PDF too (a TeX builder in its own container), so claude.ai and the phone can publish documents.
 15. **New sources** (done, D54, D60). Sheets and homework from course wiki pages; grade sheets shared as Dropbox
     links.
 16. **An app instead of the forum** (done, §8.6, D61, D69). A home-screen web app, built anew, with its own login and

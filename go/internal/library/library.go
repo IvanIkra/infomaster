@@ -8,8 +8,8 @@
 //   - knowledge: what Claude made of it, per course. A `book` (the whole course), a `lecture` or a `seminar` (one
 //     class), and a `cheatsheet` (notation, formatting, the topics covered: for Claude itself). Over all courses, one
 //     `guide`: the rules every document is written by (what goes where, the layout, the style; for Claude too). Every
-//     version is kept: a version is a source (`.tex`, or Markdown for a cheat sheet and the guide) and a PDF. The server
-//     never runs TeX: the PDF comes built.
+//     version is kept: a version is a source (`.tex`, or Markdown for a cheat sheet and the guide) and a PDF. The PDF
+//     comes built: where Claude runs, or by the TeX builder of its own container (internal/texbuild, D84).
 //
 // A file arrives in parts (an upload, a Telegram download) at a `.part` path and is moved into place once complete, so
 // a half file is never listed. Files that arrive by an upload link (library/links) wait as a draft row until their

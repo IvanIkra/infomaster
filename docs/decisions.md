@@ -272,7 +272,7 @@ the other documents refer to these decisions as D1, D2 and so on. Tablo itself i
   (notation, formatting, topics covered); every version is kept, as its source (`.tex`, Markdown for the cheat
   sheet) and a PDF. The owner reads only the knowledge base; the raw store is material for Claude. Processing is
   manual, from Claude Code on the owner's machine: it transcribes audio and builds the PDF there, because the server
-  has neither the processor time nor TeX. Files never travel inside a tool's call (a recording is hundreds of
+  has neither the processor time nor TeX (the PDF: until D84). Files never travel inside a tool's call (a recording is hundreds of
   megabytes): a tool gives a signed link that expires, and the file goes by `curl`. No backups: the owner accepted
   losing the library with the disk.
 
@@ -662,3 +662,14 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   arrive without a step of their own; the server's instructions name it. The rules sit in the database and not in the
   repository, so the owner changes them from any client of the connector without a deploy. The rules themselves are
   not written yet: the owner writes them with Claude.
+- **D84. The server builds PDFs, 24.11.2026.** Amends D58: there the server had neither the processor time nor TeX,
+  so only Claude Code on the owner's Mac could publish a document. Now `build_document_version` sends a draft's
+  LaTeX to a TeX builder on the server and keeps the PDF, so claude.ai and the phone publish too; a PDF built
+  locally is taken as before. The builder is a container of its own, the boundary: no data, no secrets, no Docker
+  socket, an internal network with only the service on it, a read-only root, no capabilities, one CPU, 512 MB, 64
+  processes; TeX runs without shell escape, reads and writes only under the build's directory, under a minute,
+  one build at a time (another is refused as busy). Measured on the host: about 2 GB of memory free and a build
+  takes seconds, but unpacking TeX (~700 MB) once ran a CPU at full load and the owner felt the heat; so TeX is
+  installed by `scripts/tex-image.sh` in a container held to one CPU at the lowest priority, once, and
+  `scripts/deploy.sh` never rebuilds that image. CMU Serif is not in Alpine's TeX short of the 1 GB font
+  collection: the four faces the guide uses are copied in. The source is one `.tex` file.

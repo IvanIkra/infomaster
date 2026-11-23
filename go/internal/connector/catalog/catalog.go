@@ -18,6 +18,7 @@ import (
 	"github.com/IvanIkra/infomaster/go/internal/connector"
 	"github.com/IvanIkra/infomaster/go/internal/connector/tools"
 	"github.com/IvanIkra/infomaster/go/internal/httpx"
+	"github.com/IvanIkra/infomaster/go/internal/texbuild"
 )
 
 // The untrusted notes of the grades' and the status's results.
@@ -62,13 +63,14 @@ var properties = func() map[string][]string {
 type Catalog struct {
 	A    *actions.Actions
 	Conn *connector.Connector
+	Tex  *texbuild.Client // the TeX builder of TEX_URL; nil without one
 }
 
 // Register registers every tool the wired parts of the app have (Python's catalog.register, then library.register
 // when the library runs) and every undo op Python's journal rows may name, in Python's order. The tools act on a's
 // services and on conn's (the news, the clock, the store).
 func Register(conn *connector.Connector, a *actions.Actions) *Catalog {
-	c := &Catalog{A: a, Conn: conn}
+	c := &Catalog{A: a, Conn: conn, Tex: texbuild.NewClient(a.Env.TexURL)}
 	runs := c.runs()
 	settings, sheets, grades := a.Settings != nil, a.Sheets != nil, a.Grades != nil
 	reminders, library := a.Reminders != nil, a.Library != nil && a.Links != nil

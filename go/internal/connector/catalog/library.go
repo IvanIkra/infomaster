@@ -6,7 +6,8 @@ package catalog
 // Two kinds of client use them. Claude Code on the owner's Mac has a shell: it downloads a recording, transcribes it,
 // writes the LaTeX and builds the PDF there, and moves every file with `curl` by a signed link (library/links).
 // claude.ai on the web or the phone has none: it reads texts, transcripts and PDFs' text inline, and a photo as an
-// image when it is small enough. Files never travel inside a call: a recording is hundreds of megabytes, and a
+// image when it is small enough; it gives a document's LaTeX inline and has the PDF built on the server
+// (build_document_version, internal/texbuild, D84). Files never travel inside a call: a recording is hundreds of megabytes, and a
 // tool's result is read by the model.
 //
 // What the journal keeps: adding, sorting, changing and removing items, and publishing a version, each with its
@@ -15,6 +16,8 @@ package catalog
 // the version back.
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +35,7 @@ import (
 	"github.com/IvanIkra/infomaster/go/internal/library/links"
 	"github.com/IvanIkra/infomaster/go/internal/processing/pdf"
 	"github.com/IvanIkra/infomaster/go/internal/pytext"
+	"github.com/IvanIkra/infomaster/go/internal/texbuild"
 )
 
 // UntrustedLibrary is put in front of every result that carries the materials' words: classmates' notes and what
@@ -1034,6 +1038,59 @@ func (c *Catalog) startDocumentVersion(_ *tools.Context, args map[string]any) (t
 		{Key: "title", Value: draft.Title}, {Key: "source_uploaded", Value: draft.SourcePath != nil && *draft.SourcePath != ""},
 		{Key: "missing", Value: missing}, {Key: "expires_in_hours", Value: links.PutTTL / 3600},
 		{Key: "next", Value: next}}), nil
+}
+
+func (c *Catalog) buildDocumentVersion(tc *tools.Context, args map[string]any) (tools.Output, error) {
+	lib, _, err := c.library()
+	if err != nil {
+		return tools.Output{}, err
+	}
+	if c.Tex == nil {
+		return tools.Output{}, refuse("this server has no TeX builder (TEX_URL): build the PDF where you run and " +
+			"upload it by the draft's link")
+	}
+	id, _ := integer(args, "draft_id")
+	draft, err := lib.GetVersion(id)
+	if err != nil {
+		return tools.Output{}, err
+	}
+	if draft == nil || draft.Version != nil {
+		return tools.Output{}, refuse("no such draft: it is published already, or it expired (start a new one)")
+	}
+	if library.TextOnly(draft.Kind) {
+		return tools.Output{}, refuse("a cheat sheet or the guide has no PDF: publish it as it is")
+	}
+	if has(args, "source_text") {
+		if draft, err = lib.PutText(draft.ID, "source", str(args, "source_text")); err != nil {
+			return tools.Output{}, libraryError(err)
+		}
+	}
+	source, err := lib.ReadSource(draft)
+	if err != nil {
+		return tools.Output{}, err
+	}
+	if source == nil {
+		return tools.Output{}, refuse("the source is not uploaded yet: give source_text, or upload it first")
+	}
+	ctx := context.Background()
+	if tc != nil && tc.Ctx != nil {
+		ctx = tc.Ctx
+	}
+	pdf, err := c.Tex.Build(ctx, []byte(*source))
+	var failed *texbuild.Failure
+	if errors.As(err, &failed) {
+		return tools.Result(httpx.Object{{Key: "draft_id", Value: draft.ID}, {Key: "built", Value: false},
+			{Key: "errors", Value: failed.Log},
+			{Key: "next", Value: "fix the source and call build_document_version again with source_text"}}), nil
+	}
+	if err != nil {
+		return tools.Output{}, &tools.ToolError{Msg: err.Error()}
+	}
+	if _, err := lib.Put(draft.ID, "pdf", bytes.NewReader(pdf)); err != nil {
+		return tools.Output{}, libraryError(err)
+	}
+	return tools.Result(httpx.Object{{Key: "draft_id", Value: draft.ID}, {Key: "built", Value: true},
+		{Key: "pdf_bytes", Value: len(pdf)}, {Key: "next", Value: "call publish_document_version with draft_id"}}), nil
 }
 
 func (c *Catalog) publishDocumentVersion(_ *tools.Context, args map[string]any) (tools.Output, error) {

@@ -21,6 +21,10 @@ uses the Russian names.
    the service runs as that user, not as root, so `./data` must be that user's (`mkdir -p data`). Run
    `docker compose up -d --build`. Compiling takes about 2 GB of memory: on a smaller host run `scripts/deploy.sh` on
    your own machine instead (it needs Go; set `DEPLOY_HOST` and, if the host is not x86-64, `DEPLOY_ARCH` in `.env`).
+   Optionally, to have the server build the knowledge base's PDFs (D84), run `scripts/tex-image.sh` once: it
+   installs TeX on the host under one CPU (~700 MB, a few minutes) and starts the `texbuild` container. It needs the
+   CMU Serif `.otf` faces on your machine (`CMU_FONTS`, `~/Library/Fonts` by default). Without it, PDFs are built
+   where Claude runs.
 5. Send `/start` to the bot: it answers with the web app's address. Open it and log in (see [Web app](#web-app)).
 6. **Twin.** A separate Telegram account (neither your main one nor a bot). Log it in from the web app under
    **Machine → Twin and chats**: phone, code (it comes to the twin's Telegram or by SMS; do not forward it in

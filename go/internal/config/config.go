@@ -57,6 +57,7 @@ type Env struct {
 	MailPassword         string
 	MailHost             string
 	MailPort             int
+	TexURL               string // optional: the TeX builder (D84); without it a PDF is built where Claude runs
 }
 
 var (
@@ -116,6 +117,12 @@ func FromEnviron(get func(string) string) (Env, error) {
 		return env, &Error{"PUBLIC_URL must be the https:// Funnel address"}
 	}
 	env.PublicURL = strings.TrimRight(env.PublicURL, "/")
+	if tex := val("TEX_URL"); tex != "" {
+		if !httpLink.MatchString(tex) {
+			return env, &Error{"TEX_URL must be an http(s):// link"}
+		}
+		env.TexURL = strings.TrimRight(tex, "/")
+	}
 	if ruz := val("RUZ_ICAL_URL"); ruz != "" {
 		if !httpLink.MatchString(ruz) {
 			return env, &Error{"RUZ_ICAL_URL must be an http(s):// link"}

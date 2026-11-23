@@ -936,6 +936,7 @@ not journaled (nj).
 | tool | kind |
 |---|---|
 | list_library, list_materials, get_material, list_classes, list_documents, get_cheatsheet, get_guide, get_document | read (order in the source: list_library, list_materials, get_material, list_classes, list_documents, get_document, get_cheatsheet, get_guide; get_guide is Go's own, D83) |
+| build_document_version | W, not journaled (Go's own, D84: the PDF by the TeX builder of TEX_URL) |
 | add_material | W |
 | sort_material | W d i |
 | update_material | W d i |

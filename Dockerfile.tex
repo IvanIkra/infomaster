@@ -1,0 +1,12 @@
+# The TeX builder of the knowledge base (D84), from scripts/tex-image.sh: it puts texbuild, the four CMU Serif faces
+# and this file together. The TeX base (infomaster-tex-base) is installed by the script under one CPU, once: building
+# it here would unpack ~700 MB at full speed on the small host.
+FROM infomaster-tex-base
+COPY fonts/ /usr/share/fonts/cmu/
+RUN fc-cache -f
+COPY texbuild /usr/local/bin/
+RUN adduser -D -H -u 10001 -s /sbin/nologin tex
+USER tex
+ENV TMPDIR=/work
+EXPOSE 8090
+CMD ["texbuild"]

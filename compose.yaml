@@ -19,9 +19,10 @@ services:
     environment:
       TZ: Europe/Moscow
       TS_AUTHKEY: ""  # the sidecar's key to the tailnet: not this service's to hold
+      TEX_URL: http://texbuild:8090  # the TeX builder below (D84); a tool says so while it is not running
     volumes:
       - ./data:/app/data
-    networks: [uni]
+    networks: [uni, tex]
     mem_limit: 256m
     logging:
       driver: json-file
@@ -64,7 +65,32 @@ services:
         max-size: 5m
         max-file: "3"
 
+  # The TeX builder of the knowledge base (D84): scripts/tex-image.sh builds its image and starts it, deploy.sh does
+  # not. It holds nothing: no data, no secrets, no way out of its internal network, a read-only root, one CPU.
+  texbuild:
+    image: infomaster-tex:latest
+    pull_policy: never
+    container_name: infomaster-texbuild
+    restart: unless-stopped
+    networks: [tex]
+    read_only: true
+    tmpfs:
+      - /work:size=256m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "2"
+
 networks:
+  tex:
+    name: infomaster-tex
+    internal: true  # the builder and the service only, no way out
   uni:
     name: infomaster  # Tablo joins it as an external network when it switches to us (stage 10)
     ipam:

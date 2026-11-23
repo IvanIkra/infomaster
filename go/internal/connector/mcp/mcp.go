@@ -58,8 +58,9 @@ const Instructions = "infomaster collects a university student's study chats, ma
 	"material (photos, recordings, notes, sheets; unsorted items wait in the inbox) and the knowledge base made of " +
 	"it (a book, a document per lecture and seminar, a cheat sheet for Claude), all written by one guide " +
 	"(get_guide: what goes where, the layout, the style): to process a class, sort the inbox, read the " +
-	"class's items and the cheat sheet (the guide comes with it), add transcripts of recordings, write the LaTeX, build the PDF locally, then " +
-	"start, upload and publish a document version. Files move by signed links with curl, never inside a call."
+	"class's items and the cheat sheet (the guide comes with it), add transcripts of recordings, write the " +
+	"LaTeX, build the PDF (where you run, or on the server by build_document_version), then start, upload and " +
+	"publish a document version. Files move by signed links with curl, never inside a call."
 
 // AllowedOrigins may call the endpoint from a browser, besides the public origin.
 var AllowedOrigins = []string{"https://claude.ai", "https://claude.com"}

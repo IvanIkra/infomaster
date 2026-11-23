@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
@@ -25,6 +26,11 @@ func addClass(t *testing.T, f *fixture, uid, subject, start, kind string) {
 }
 
 func libraryFixture(t *testing.T) (*fixture, *library.Library) {
+	return libraryFixtureWith(t, nil)
+}
+
+// libraryFixtureWith is libraryFixture with a change to the services before the tools are registered.
+func libraryFixtureWith(t *testing.T, change func(*fixture)) (*fixture, *library.Library) {
 	f := setup(t)
 	addClass(t, f, "calc-1", "Calculus", "2026-10-19T09:30:00", "Лекция")
 	addClass(t, f, "calc-2", "Calculus", "2026-10-20T11:10:00", "Семинар")
@@ -36,6 +42,9 @@ func libraryFixture(t *testing.T) (*fixture, *library.Library) {
 	ln := must(links.New(f.store, lib, publicURL))
 	ln.Seconds = func() float64 { return 1_800_000_000 }
 	f.services.Links = ln
+	if change != nil {
+		change(f)
+	}
 	return f.register(), lib
 }
 
@@ -224,6 +233,55 @@ func TestLibraryGuide(t *testing.T) {
 	equal(t, obj(f.data("get_guide", nil)["guide"])["text"], "# Rules v2")
 	f.undoLast()
 	equal(t, obj(f.data("get_guide", nil)["guide"])["text"], "# Rules\n- Russian")
+}
+
+// A draft's PDF is built by the TeX builder of TEX_URL: TeX's errors come back, a fixed source builds, the PDF is
+// the draft's.
+func TestLibraryBuildOnServer(t *testing.T) {
+	builds := 0
+	tex := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		builds++
+		source := string(must(io.ReadAll(r.Body)))
+		if strings.Contains(source, "BROKEN") {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			io.WriteString(w, "! Undefined control sequence.\nl.3 BROKEN")
+			return
+		}
+		io.WriteString(w, "%PDF-1.7 built from "+source)
+	}))
+	defer tex.Close()
+
+	plain, _ := libraryFixture(t)
+	draft := plain.data("start_document_version", map[string]any{"course": "Algebra", "kind": "book",
+		"source_text": "x"})
+	check(t, strings.Contains(plain.refused("build_document_version", map[string]any{"draft_id": draft["draft_id"]}),
+		"no TeX builder"), "no builder")
+
+	f, _ := libraryFixtureWith(t, func(f *fixture) { f.services.Env.TexURL = tex.URL })
+	sheet := f.data("start_document_version", map[string]any{"course": "Algebra", "kind": "cheatsheet",
+		"source_text": "# x"})
+	check(t, strings.Contains(f.refused("build_document_version", map[string]any{"draft_id": sheet["draft_id"]}),
+		"no PDF"), "a cheat sheet")
+	empty := f.data("start_document_version", map[string]any{"course": "Algebra", "kind": "book"})
+	check(t, strings.Contains(f.refused("build_document_version", map[string]any{"draft_id": empty["draft_id"]}),
+		"not uploaded"), "no source")
+	equal(t, builds, 0)
+
+	failed := f.data("build_document_version", map[string]any{"draft_id": empty["draft_id"],
+		"source_text": "BROKEN"})
+	check(t, failed["built"] == false && strings.Contains(failed["errors"].(string), "Undefined control"),
+		"failed %v", failed)
+	check(t, strings.Contains(f.refused("publish_document_version", map[string]any{"draft_id": empty["draft_id"]}),
+		"PDF"), "no PDF yet")
+	built := f.data("build_document_version", map[string]any{"draft_id": empty["draft_id"],
+		"source_text": `\section{Rings}`})
+	equal(t, []any{built["built"], built["next"]}, []any{true, "call publish_document_version with draft_id"})
+	published := f.data("publish_document_version", map[string]any{"draft_id": empty["draft_id"]})
+	_, pdf := f.transfer("GET", published["pdf_url"].(string), nil)
+	equal(t, string(pdf), "%PDF-1.7 built from \\section{Rings}")
+	equal(t, builds, 2)
+	check(t, strings.Contains(f.refused("build_document_version", map[string]any{"draft_id": empty["draft_id"]}),
+		"published already"), "after publishing")
 }
 
 func TestLibraryUndoSortRemoveUpdate(t *testing.T) {

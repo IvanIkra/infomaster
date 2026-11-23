@@ -1,0 +1,44 @@
+% The preamble of the knowledge base guide (D83), as a document must build with it on the builder (D84).
+\documentclass[12pt,a4paper]{article}
+\usepackage[margin=2cm,headheight=15pt]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{fontspec}
+\setmainfont{CMU Serif}
+\usepackage{polyglossia}
+\setdefaultlanguage{russian}
+\setotherlanguage{english}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.4em}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Курс}
+\fancyhead[R]{\textit{Математический анализ, 2026/27}}
+\fancyfoot[C]{\thepage}
+\setlist[enumerate,1]{label=(\alph*)}
+
+\providecommand{\tg}{\operatorname{tg}}
+\providecommand{\arctg}{\operatorname{arctg}}
+\newcommand{\task}[1]{\par\vspace{1.5em}\textbf{#1.}\ }
+\newcommand{\sol}{\par\textbf{Решение.}\ }
+
+\newtheorem{theorem}{Теорема}
+
+\begin{document}
+\begin{center}\textbf{\Large Семинар 1. Домашнее задание}\end{center}
+
+\task{1} Найдите предел.
+\begin{enumerate}
+\item $\lim_{x\to0}\frac{\tg 3x}{x}$
+\end{enumerate}
+\sol
+\begin{enumerate}
+\item $\lim_{x\to0}\frac{\tg 3x}{x}=\lim_{x\to0}\frac{3x}{x}=3$.
+\end{enumerate}
+
+\begin{theorem}\label{t}Пример теоремы, \textit{курсив} и \textbf{\textit{жирный курсив}}.\end{theorem}
+По теореме~\ref{t}.
+\end{document}
