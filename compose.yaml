@@ -6,6 +6,7 @@ services:
   infomaster:
     build:
       context: .
+      dockerfile: go/Dockerfile  # the Go service (D81); compiling it needs ~2 GB of memory, see docs/setup.md
       args:
         APP_UID: ${APP_UID:-1000}  # the host user that owns ./data (D79): the service runs as it, not as root
     image: infomaster:latest
