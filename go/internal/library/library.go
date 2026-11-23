@@ -6,9 +6,10 @@
 //     (`class_uid`), or neither: then it waits in the inbox. Each is `new` until Claude has made it into the knowledge
 //     base (`processed`). An item may hang on another one (`parent`): a transcript of a recording.
 //   - knowledge: what Claude made of it, per course. A `book` (the whole course), a `lecture` or a `seminar` (one
-//     class), and a `cheatsheet` (notation, formatting, the topics covered: for Claude itself). Every version is kept:
-//     a version is a source (`.tex`, or Markdown for a cheat sheet) and a PDF. The server never runs TeX: the PDF comes
-//     built.
+//     class), and a `cheatsheet` (notation, formatting, the topics covered: for Claude itself). Over all courses, one
+//     `guide`: the rules every document is written by (what goes where, the layout, the style; for Claude too). Every
+//     version is kept: a version is a source (`.tex`, or Markdown for a cheat sheet and the guide) and a PDF. The server
+//     never runs TeX: the PDF comes built.
 //
 // A file arrives in parts (an upload, a Telegram download) at a `.part` path and is moved into place once complete, so
 // a half file is never listed. Files that arrive by an upload link (library/links) wait as a draft row until their
@@ -73,8 +74,8 @@ create index if not exists materials_origin on materials(source, chat_id, msg_id
 create index if not exists materials_sha256 on materials(sha256);
 create table if not exists knowledge (  -- the knowledge base (D58): one document per course and class
     id integer primary key,
-    course text not null,
-    kind text not null,         -- book, lecture, seminar, cheatsheet
+    course text not null,       -- '' for the guide, which is of no course
+    kind text not null,         -- book, lecture, seminar, cheatsheet, guide
     class_uid text,             -- a lecture's or a seminar's RUZ class
     day text,                   -- YYYY-MM-DD of that class
     title text not null,
@@ -99,11 +100,17 @@ create index if not exists knowledge_doc on knowledge_versions(doc_id, version);
 var (
 	Kinds     = []string{"photo", "audio", "video", "notes", "slides", "sheet", "link", "text", "transcript", "file"}
 	Sources   = []string{"chat", "bot", "miniapp", "connector", "sheet", "web"}
-	DocKinds  = []string{"book", "lecture", "seminar", "cheatsheet"}
+	DocKinds  = []string{"book", "lecture", "seminar", "cheatsheet", "guide"}
 	ClassDocs = []string{"lecture", "seminar"} // a document of one class
 )
 
-// Parts are a version's files and their suffixes; a cheat sheet's source is .md.
+// Guide is the kind of the one document over all courses: the rules the knowledge base is written by.
+const Guide = "guide"
+
+// TextOnly says a document of this kind is Markdown for Claude with no PDF: a cheat sheet, the guide.
+func TextOnly(kind string) bool { return kind == "cheatsheet" || kind == Guide }
+
+// Parts are a version's files and their suffixes; the source of a cheat sheet and of the guide is .md.
 var Parts = map[string]string{"source": ".tex", "pdf": ".pdf"}
 
 var partNames = []string{"source", "pdf"}
@@ -436,7 +443,7 @@ func (l *Library) Courses() ([]CourseInfo, error) {
 	}
 	for _, query := range []string{
 		"select distinct course from materials where course is not null and removed_at is null",
-		"select distinct course from knowledge"} {
+		"select distinct course from knowledge where course != ''"} {
 		more, err := strs(l.db, query)
 		if err != nil {
 			return nil, err
@@ -1285,15 +1292,20 @@ func (l *Library) GetDocument(docID int64) (*DocumentVersions, error) {
 	return &d, rows.Err()
 }
 
-// FindDocument is a course's book or cheat sheet, or a class's lecture or seminar; nil for none.
+// FindDocument is a course's book or cheat sheet, a class's lecture or seminar, or the guide (its course is
+// ignored); nil for none.
 func (l *Library) FindDocument(course, kind, classUID string) (*DocumentVersions, error) {
 	name, err := l.Course(course)
 	if err != nil {
 		return nil, err
 	}
+	of := null(name)
+	if kind == Guide {
+		of = ""
+	}
 	var id int64
 	err = l.db.QueryRow("select id from knowledge where course = ? and kind = ? and coalesce(class_uid, '') = ?",
-		null(name), kind, classUID).Scan(&id)
+		of, kind, classUID).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -1328,7 +1340,10 @@ func (l *Library) Draft(course, kind, classUID, title, note string, materials []
 	if err != nil {
 		return nil, err
 	}
-	if course == "" {
+	if kind == Guide && course != "" {
+		return nil, refuse("the guide is of the whole knowledge base: no course")
+	}
+	if course == "" && kind != Guide {
 		return nil, refuse("a document needs its course")
 	}
 	var day *string
@@ -1370,7 +1385,8 @@ func (l *Library) Draft(course, kind, classUID, title, note string, materials []
 	var docID int64
 	title = pytext.Strip(title)
 	if found == nil {
-		fallback := map[string]string{"book": course, "cheatsheet": course + ": notes for Claude"}[kind]
+		fallback := map[string]string{"book": course, "cheatsheet": course + ": notes for Claude",
+			Guide: "Knowledge base guide"}[kind]
 		if fallback == "" {
 			fallback = fmt.Sprintf("%s: %s %s", course, kind, deref(day))
 		}
@@ -1407,7 +1423,7 @@ func (l *Library) Draft(course, kind, classUID, title, note string, materials []
 
 func (l *Library) partTarget(v *Version, part string) string {
 	ext := Parts[part]
-	if part == "source" && v.Kind == "cheatsheet" {
+	if part == "source" && TextOnly(v.Kind) {
 		ext = ".md"
 	}
 	return filepath.Join(l.Root, "knowledge", fmt.Sprint(v.DocID), fmt.Sprintf("%d%s", v.ID, ext))
@@ -1466,7 +1482,7 @@ func (l *Library) PutText(versionID int64, part, text string) (*Version, error) 
 }
 
 // Publish makes a draft the document's newest version. A lecture, a seminar and a book need the source and the PDF;
-// a cheat sheet its source. The materials it was made from become processed.
+// a cheat sheet and the guide their source. The materials it was made from become processed.
 func (l *Library) Publish(versionID int64) (*Version, error) {
 	v, err := l.GetVersion(versionID)
 	if err != nil {
@@ -1478,7 +1494,7 @@ func (l *Library) Publish(versionID int64) (*Version, error) {
 	if v.SourcePath == nil || *v.SourcePath == "" {
 		return nil, refuse("the source is not uploaded yet")
 	}
-	if v.Kind != "cheatsheet" && (v.PdfPath == nil || *v.PdfPath == "") {
+	if !TextOnly(v.Kind) && (v.PdfPath == nil || *v.PdfPath == "") {
 		return nil, refuse("the PDF is not uploaded yet")
 	}
 	now := clock.LocalISO(l.Now())

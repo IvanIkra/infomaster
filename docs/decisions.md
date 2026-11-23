@@ -654,3 +654,11 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   developer's machine and builds the same runtime image on the host from the binaries (`Dockerfile.prebuilt`);
   `docker compose up -d --build` stays for hosts with the memory. Go uses 20–30 MB against Python's ~110 MB, and its
   image is 82 MB against 335 MB.
+- **D83. One guide for the knowledge base, 23.11.2026.** Amends D58 and §6.8. The rules of the knowledge base (what goes
+  into the book, a class's document and a cheat sheet; the LaTeX layout; the language and the style) were written
+  nowhere, and the cheat sheets held only each course's notation. They now live in one document of kind `guide`, of no
+  course: Markdown for Claude and the owner, versioned like the others, with an undo. The connector gives it by
+  `get_guide` and also with every `get_cheatsheet`, which Claude already reads before writing a document, so the rules
+  arrive without a step of their own; the server's instructions name it. The rules sit in the database and not in the
+  repository, so the owner changes them from any client of the connector without a deploy. The rules themselves are
+  not written yet: the owner writes them with Claude.

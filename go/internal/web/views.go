@@ -1219,7 +1219,7 @@ func (d *Data) documents(names []string) ([]httpx.Object, error) {
 			continue
 		}
 		part := "pdf"
-		if summary.Kind == "cheatsheet" {
+		if library.TextOnly(summary.Kind) {
 			part = "source"
 		}
 		full, err := d.Library.GetDocument(summary.ID)

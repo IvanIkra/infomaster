@@ -58,7 +58,7 @@ func (c *Catalog) runs() map[string]tools.Run {
 		"change_grade": c.changeGrade, "delete_grade": c.deleteGrade,
 		"list_library": c.listLibrary, "list_materials": c.listMaterials, "get_material": c.getMaterial,
 		"list_classes": c.listClasses, "list_documents": c.listDocuments, "get_document": c.getDocument,
-		"get_cheatsheet": c.getCheatsheet, "add_material": c.addMaterial, "sort_material": c.sortMaterial,
+		"get_cheatsheet": c.getCheatsheet, "get_guide": c.getGuide, "add_material": c.addMaterial, "sort_material": c.sortMaterial,
 		"update_material": c.updateMaterial, "remove_material": c.removeMaterial,
 		"start_document_version": c.startDocumentVersion, "publish_document_version": c.publishDocumentVersion,
 	}

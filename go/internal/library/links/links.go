@@ -194,7 +194,7 @@ func FileName(v *library.Version, part string) string {
 	ext := ".tex"
 	if part == "pdf" {
 		ext = ".pdf"
-	} else if v.Kind == "cheatsheet" {
+	} else if library.TextOnly(v.Kind) {
 		ext = ".md"
 	}
 	title := v.Title

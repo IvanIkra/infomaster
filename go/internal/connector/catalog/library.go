@@ -560,10 +560,12 @@ func (c *Catalog) findDocument(lib *library.Library, args map[string]any) (*libr
 	case has(args, "doc_id"):
 		id, _ := integer(args, "doc_id")
 		doc, err = lib.GetDocument(id)
+	case str(args, "kind") == library.Guide:
+		doc, err = lib.FindDocument("", library.Guide, "")
 	case truthy(args, "course") && truthy(args, "kind"):
 		doc, err = lib.FindDocument(str(args, "course"), str(args, "kind"), str(args, "class_uid"))
 	default:
-		return nil, refuse("give doc_id, or course and kind (and class_uid for a lecture or a seminar)")
+		return nil, refuse("give doc_id, or course and kind (and class_uid for a lecture or a seminar), or kind guide")
 	}
 	if err != nil {
 		return nil, libraryError(err)
@@ -630,6 +632,37 @@ func (c *Catalog) getDocument(_ *tools.Context, args map[string]any) (tools.Outp
 		{Key: "source", Value: text}}), nil
 }
 
+// newestText is the newest published version of a text-only document (a cheat sheet, the guide) with its Markdown;
+// nil for none.
+func newestText(lib *library.Library, course, kind string) (*library.DocumentVersions, *library.Version, *string,
+	error) {
+	doc, err := lib.FindDocument(course, kind, "")
+	if err != nil || doc == nil || len(doc.Versions) == 0 {
+		return nil, nil, nil, err
+	}
+	newest, err := lib.GetVersion(doc.Versions[0].ID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	source, err := lib.ReadSource(newest)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return doc, newest, source, nil
+}
+
+const guideHint = "no guide yet: the owner and Claude write it together (Markdown) and save it with " +
+	"start_document_version, kind guide, source_text, then publish_document_version"
+
+// guideField is the guide's text, its first page, to go with a cheat sheet: the rules come along with it.
+func guideField(lib *library.Library) (httpx.Field, error) {
+	_, _, source, err := newestText(lib, "", library.Guide)
+	if err != nil || source == nil {
+		return httpx.Field{Key: "guide", Value: nil}, err
+	}
+	return httpx.Field{Key: "guide", Value: page(*source, 0, TextCharsMax)}, nil
+}
+
 func (c *Catalog) getCheatsheet(_ *tools.Context, args map[string]any) (tools.Output, error) {
 	lib, _, err := c.library()
 	if err != nil {
@@ -639,27 +672,41 @@ func (c *Catalog) getCheatsheet(_ *tools.Context, args map[string]any) (tools.Ou
 	if err != nil {
 		return tools.Output{}, libraryError(err)
 	}
-	doc, err := lib.FindDocument(course, "cheatsheet", "")
+	doc, newest, source, err := newestText(lib, course, "cheatsheet")
 	if err != nil {
 		return tools.Output{}, libraryError(err)
 	}
-	if doc == nil || len(doc.Versions) == 0 {
+	guide, err := guideField(lib)
+	if err != nil {
+		return tools.Output{}, libraryError(err)
+	}
+	if doc == nil {
 		return tools.Result(httpx.Object{{Key: "course", Value: course}, {Key: "cheatsheet", Value: nil},
 			{Key: "hint", Value: "none yet: write one (Markdown) and save it with start_document_version, kind " +
-				"cheatsheet, source_text, then publish_document_version"}}), nil
-	}
-	newest, err := lib.GetVersion(doc.Versions[0].ID)
-	if err != nil {
-		return tools.Output{}, err
-	}
-	source, err := lib.ReadSource(newest)
-	if err != nil {
-		return tools.Output{}, err
+				"cheatsheet, source_text, then publish_document_version"}, guide}), nil
 	}
 	offset, _ := integer(args, "offset")
 	return tools.Result(httpx.Object{{Key: "course", Value: course}, {Key: "doc_id", Value: doc.ID},
 		{Key: "version", Value: newest.Version}, {Key: "published_at", Value: newest.PublishedAt},
-		{Key: "cheatsheet", Value: page(deref(source), offset, TextCharsMax)}}), nil
+		{Key: "cheatsheet", Value: page(deref(source), offset, TextCharsMax)}, guide}), nil
+}
+
+func (c *Catalog) getGuide(_ *tools.Context, args map[string]any) (tools.Output, error) {
+	lib, _, err := c.library()
+	if err != nil {
+		return tools.Output{}, err
+	}
+	doc, newest, source, err := newestText(lib, "", library.Guide)
+	if err != nil {
+		return tools.Output{}, libraryError(err)
+	}
+	if doc == nil {
+		return tools.Result(httpx.Object{{Key: "guide", Value: nil}, {Key: "hint", Value: guideHint}}), nil
+	}
+	offset, _ := integer(args, "offset")
+	return tools.Result(httpx.Object{{Key: "doc_id", Value: doc.ID}, {Key: "version", Value: newest.Version},
+		{Key: "published_at", Value: newest.PublishedAt},
+		{Key: "guide", Value: page(deref(source), offset, TextCharsMax)}}), nil
 }
 
 // --- writes: materials ----------------------------------------------------------------------------
@@ -945,8 +992,8 @@ func (c *Catalog) startDocumentVersion(_ *tools.Context, args map[string]any) (t
 		return tools.Output{}, err
 	}
 	kind := str(args, "kind")
-	if kind == "cheatsheet" && has(args, "pdf_file") {
-		return tools.Output{}, refuse("a cheat sheet has no PDF: its source (Markdown) is all")
+	if library.TextOnly(kind) && has(args, "pdf_file") {
+		return tools.Output{}, refuse("a cheat sheet or the guide has no PDF: its source (Markdown) is all")
 	}
 	draft, err := lib.Draft(str(args, "course"), kind, str(args, "class_uid"), str(args, "title"), str(args, "note"),
 		ids(args["materials"]))
@@ -957,8 +1004,8 @@ func (c *Catalog) startDocumentVersion(_ *tools.Context, args map[string]any) (t
 		return tools.Output{}, libraryError(err)
 	}
 	sourceName := "main.tex"
-	if draft.Kind == "cheatsheet" {
-		sourceName = "cheatsheet.md"
+	if library.TextOnly(draft.Kind) {
+		sourceName = draft.Kind + ".md"
 	}
 	or := func(key, fallback string) string {
 		if s, ok := args[key].(string); ok {
@@ -972,7 +1019,7 @@ func (c *Catalog) startDocumentVersion(_ *tools.Context, args map[string]any) (t
 		missing = append(missing, httpx.Field{Key: "source", Value: httpx.Object{{Key: "upload_url", Value: url},
 			{Key: "curl", Value: curlPut(or("source_file", sourceName), url)}}})
 	}
-	if draft.Kind != "cheatsheet" {
+	if !library.TextOnly(draft.Kind) {
 		url := ln.VersionUpload(draft.ID, "pdf", links.PutTTL)
 		missing = append(missing, httpx.Field{Key: "pdf", Value: httpx.Object{{Key: "upload_url", Value: url},
 			{Key: "curl", Value: curlPut(or("pdf_file", "main.pdf"), url)}}})

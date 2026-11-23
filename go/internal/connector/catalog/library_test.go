@@ -193,6 +193,39 @@ func TestLibraryCheatsheet(t *testing.T) {
 		"missing %v", missing)
 }
 
+// The guide is one document over all courses: Markdown, no course, no PDF, and it comes with every cheat sheet.
+func TestLibraryGuide(t *testing.T) {
+	f, lib := libraryFixture(t)
+	empty := f.data("get_guide", nil)
+	check(t, empty["guide"] == nil && strings.Contains(empty["hint"].(string), "kind guide"), "empty %v", empty)
+	equal(t, f.data("get_cheatsheet", map[string]any{"course": "Algebra"})["guide"], nil)
+	check(t, strings.Contains(f.refused("start_document_version", map[string]any{"course": "Algebra",
+		"kind": "guide", "source_text": "x"}), "no course"), "a course")
+	check(t, strings.Contains(f.refused("start_document_version", map[string]any{"kind": "guide",
+		"source_text": "x", "pdf_file": "x.pdf"}), "no PDF"), "no PDF")
+	check(t, strings.Contains(f.refused("start_document_version", map[string]any{"kind": "book"}),
+		"needs its course"), "a book needs a course")
+	started := f.data("start_document_version", map[string]any{"kind": "guide", "source_text": "# Rules\n- Russian"})
+	equal(t, []any{started["missing"], started["course"]}, []any{map[string]any{}, ""})
+	f.data("publish_document_version", map[string]any{"draft_id": started["draft_id"]})
+
+	guide := f.data("get_guide", nil)
+	equal(t, []any{guide["version"], obj(guide["guide"])["text"]}, []any{1.0, "# Rules\n- Russian"})
+	sheet := f.data("get_cheatsheet", map[string]any{"course": "Algebra"})
+	check(t, sheet["cheatsheet"] == nil && obj(sheet["guide"])["text"] == "# Rules\n- Russian", "with %v", sheet)
+	document := f.data("get_document", map[string]any{"kind": "guide"})
+	equal(t, []any{document["kind"], document["title"]}, []any{"guide", "Knowledge base guide"})
+	for _, course := range must(lib.Courses()) {
+		check(t, course.Course != "", "the guide is no course")
+	}
+
+	again := f.data("start_document_version", map[string]any{"kind": "guide", "source_text": "# Rules v2"})
+	f.data("publish_document_version", map[string]any{"draft_id": again["draft_id"]})
+	equal(t, obj(f.data("get_guide", nil)["guide"])["text"], "# Rules v2")
+	f.undoLast()
+	equal(t, obj(f.data("get_guide", nil)["guide"])["text"], "# Rules\n- Russian")
+}
+
 func TestLibraryUndoSortRemoveUpdate(t *testing.T) {
 	f, lib := libraryFixture(t)
 	id := func(data map[string]any) int64 { return int64(data["id"].(float64)) }
