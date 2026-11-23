@@ -10,6 +10,7 @@ require (
 	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
 	github.com/pdfcpu/pdfcpu v0.16.4
 	golang.org/x/net v0.63.0
+	golang.org/x/term v0.48.0
 	golang.org/x/text v0.44.0
 	modernc.org/sqlite v1.62.0
 	rsc.io/qr v0.2.0

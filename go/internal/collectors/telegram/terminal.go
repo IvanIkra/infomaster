@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotd/td/telegram/auth"
 	"github.com/gotd/td/tgerr"
+	"golang.org/x/term"
 
 	"github.com/IvanIkra/infomaster/go/internal/config"
 )
@@ -53,7 +54,7 @@ func Login(ctx context.Context, env config.Env, sessionPath string, in io.Reader
 			err = client.SignIn(ctx, phone, code, hash)
 			if errors.Is(err, auth.ErrPasswordAuthNeeded) {
 				for {
-					password, err := ask("Please enter your password: ")
+					password, err := secret(in, reader, out, "Please enter your password: ")
 					if err != nil {
 						return err
 					}
@@ -93,4 +94,20 @@ func Login(ctx context.Context, env config.Env, sessionPath string, in io.Reader
 	}
 	fmt.Fprintf(out, "The twin logged in: %s (id %d). Restart the service.\n", DisplayName(me), me.ID)
 	return nil
+}
+
+// secret reads the cloud password: without echo from a terminal, so it stays off the screen and out of its
+// scrollback; a line of in otherwise (the tests, a pipe).
+func secret(in io.Reader, reader *bufio.Reader, out io.Writer, prompt string) (string, error) {
+	fmt.Fprint(out, prompt)
+	if f, ok := in.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		b, err := term.ReadPassword(int(f.Fd()))
+		fmt.Fprintln(out)
+		return strings.TrimSpace(string(b)), err
+	}
+	line, err := reader.ReadString('\n')
+	if err != nil && (err != io.EOF || line == "") {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
 }

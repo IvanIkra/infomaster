@@ -33,12 +33,7 @@ func LoginQR(ctx context.Context, env config.Env, sessionPath string, in io.Read
 			login := qrlogin.NewQR(client.API(), int(env.APIID), env.APIHash, qrlogin.Options{
 				Migrate: client.MigrateTo,
 				Password: func(context.Context) (string, error) {
-					fmt.Fprint(out, "Please enter your password: ")
-					line, err := reader.ReadString('\n')
-					if err != nil && (err != io.EOF || line == "") {
-						return "", err
-					}
-					return strings.TrimSpace(line), nil
+					return secret(in, reader, out, "Please enter your password: ")
 				},
 			})
 			_, err := login.Auth(ctx, loggedIn, func(_ context.Context, token qrlogin.Token) error {
