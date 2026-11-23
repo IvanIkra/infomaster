@@ -25,7 +25,7 @@ ssh "$host" "cd $dir && set -e
   if [ -n '${REBASE:-}' ] || ! docker image inspect infomaster-tex-base >/dev/null 2>&1; then
     docker rm -f infomaster-tex-install >/dev/null 2>&1 || true
     docker run --name infomaster-tex-install --cpus=1 alpine:3.22 nice -n 19 apk add -q --no-cache $packages
-    docker commit -q infomaster-tex-install infomaster-tex-base
+    docker commit infomaster-tex-install infomaster-tex-base >/dev/null
     docker rm infomaster-tex-install >/dev/null
   fi
   docker build -q -t infomaster-tex:latest .tex-image
