@@ -607,6 +607,40 @@ func (s *Sheets) Posted(sheetID int64) error {
 	return err
 }
 
+// Reread reads again the text of every sheet whose file is still kept, and says how many texts changed. A sheet's
+// text is read once and then kept; this brings a better reader to it (D86): to what get_sheet gives, and to what a
+// newer version is compared with. A file that gives no text now leaves the kept one.
+func (s *Sheets) Reread() (int, error) {
+	read, err := list(s.db, "select "+columns+" from sheets where text is not null")
+	if err != nil {
+		return 0, err
+	}
+	changed := 0
+	for _, sheet := range read {
+		path := s.Files.ByHash(sheet.Sha256)
+		if path == "" {
+			continue
+		}
+		extract, err := pdf.ExtractText(path, TextPages)
+		var broken *pdf.PdfError
+		if errors.As(err, &broken) {
+			continue
+		}
+		if err != nil {
+			return changed, err
+		}
+		now := pytext.Cut(extract.Text(), TextChars)
+		if pytext.Strip(now) == "" || now == *sheet.Text {
+			continue
+		}
+		if _, err := s.db.Exec("update sheets set text = ? where id = ?", now, sheet.ID); err != nil {
+			return changed, err
+		}
+		changed++
+	}
+	return changed, nil
+}
+
 // FileGone is the reason a sheet failed when its file is gone, for the web app: kept in the row, so in its language
 // of now.
 func (s *Sheets) FileGone() string {

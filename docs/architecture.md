@@ -53,7 +53,7 @@ settings ◄──────────────────────�
 | HTTP | `net/http` | the web app, the connector, the API, the HSE App X callback |
 | Storage | SQLite, modernc (pure Go, no cgo) | as in Tablo, one file is enough; the schema the Python service made, unchanged |
 | LLM | `anthropic-sdk-go`, model `claude-haiku-5-5` | as in Tablo (§2.1) |
-| PDF | ledongthuc/pdf (text), pdfcpu (pages) | permissive licences |
+| PDF | ledongthuc/pdf (parsing and fonts; the page walk is own, D86), pdfcpu (pages) | permissive licences |
 | Spreadsheets | xlsx read from its XML in the standard library | as in Tablo (§3.3) |
 | Calendar | RFC 5545 read and written in the service | reading RUZ and publishing our own feed |
 | Web app | Preact + htm as vendored ES modules, no build (`go/web/static`); go-webauthn for passkeys; Web Push | a home-screen app, the only interface besides Claude (§8.6, D61, D63, D69); no Node in the image |
@@ -236,7 +236,8 @@ for a translation; a manual entry or the course disappearing from the source cle
 5. The sheet is published (status `posted`, D69): the web app's shelves show it with its course, number, due date,
    source and PDF (§8.6).
 6. **A new version** is detected by the rules of D14 and chained to the older one, with a short description of the
-   changes. For that the difference of the texts is computed locally, and only it goes to the model.
+   changes. For that the difference of the texts is computed locally, and only it goes to the model. A sheet's text
+   is kept in its row; while the file is kept it is read again at every start, so a better reader reaches it (D86).
 
 **Sheets that are no PDF of a chat (D59).** A study chat's message or a letter without a PDF of its own may link to
 one: the first such link (at most three are tried) is downloaded before the batch (`collectors/links.py`) and its

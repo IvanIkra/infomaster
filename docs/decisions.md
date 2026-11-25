@@ -684,3 +684,14 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   course. The field is there only when the course has a published cheat sheet. It is a pointer and not the text:
   the cheat sheet brings the whole guide with it, too much for every read of a sheet. The guide's rule that a
   seminar's problems are not solved stays a rule of documents, and the description says so.
+- **D86. The text of a PDF is walked by the service itself, 25.11.2026.** A calculus sheet's Russian came out as
+  garbage, and every TeX sheet came out without word spaces and with an Ω or a ⊗ after each piece of a formula.
+  ledongthuc/pdf still parses the file and decodes its fonts, but the walk over a page's operators is now in
+  `processing/pdf` (`text.go`), on the library's exported API: its own walk puts a "\n" through the current font
+  after every TJ and ignores the gaps TeX writes for spaces. Glyphs are joined by where they stand (a gap over
+  0.18 of the size is a space, a baseline moved over half the size is a line), with widths scaled for Type3 fonts
+  and read from `W`/`DW` for Identity composites; where a font gives no widths, a TJ move of 200 or more is the
+  space. pdfTeX's bitmap Cyrillic fonts carry no map to Unicode and name a glyph by its code: one with more codes
+  from 192 on than ASCII letters is read as T2A, otherwise it is left alone (T1). Not covered: TeX's math fonts
+  that come without a map to Unicode still give wrong signs (Δ, ∈, a minus). A sheet's kept text is read again at
+  every start while its file is kept (14 days). The check was every PDF the server kept, old walk against new.

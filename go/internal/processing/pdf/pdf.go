@@ -3,15 +3,14 @@
 // model as a PDF of its first pages, which the model reads as page images.
 //
 // pdfcpu (Apache-2.0) reads the structure, cuts the first pages and holds every stream to StreamMax when inflated
-// (D79: the container has 256 MB); ledongthuc/pdf (BSD) reads the text, only after every stream it inflates has
-// passed that limit. Everything here is synchronous and may take a while on a big file.
+// (D79: the container has 256 MB); ledongthuc/pdf (BSD) parses the text and decodes its fonts (the walk over a page is
+// text.go's, D86), only after every stream it inflates has passed that limit. Everything here is synchronous and may take a while on a big file.
 package pdf
 
 import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -168,17 +167,7 @@ func pageText(r *textpdf.Reader, n int) (text string) {
 			text = "" // a page that fails to give its text gives ""
 		}
 	}()
-	var out strings.Builder
-	first, lastY := true, 0.0
-	for _, piece := range r.Page(n).Content().Text { // a new line where the baseline moves
-		if !first && math.Abs(piece.Y-lastY) > 1 {
-			out.WriteByte('\n')
-		}
-		out.WriteString(piece.S)
-		first, lastY = false, piece.Y
-	}
-	lines := []string{out.String()}
-	return clean(strings.Join(lines, "\n"))
+	return clean(readPage(r.Page(n)))
 }
 
 // ExtractText is the text of the first pages; a page that fails to give its text gives "".

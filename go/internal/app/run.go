@@ -89,6 +89,11 @@ func (s *Service) serve(ctx context.Context, loops *sync.WaitGroup, public, inte
 	if _, err := s.Twin.Start(ctx); err != nil { // without a login the service runs on, and the twin says so
 		return fmt.Errorf("the twin: %w", err)
 	}
+	if changed, err := s.Sheets.Reread(); err != nil {
+		slog.Error("reading the kept sheets again failed", "err", err)
+	} else if changed > 0 {
+		slog.Info(fmt.Sprintf("read %d kept sheet(s) again: their text changed", changed))
+	}
 	for _, loop := range []func(context.Context){
 		s.prune,
 		s.Batches.Run,

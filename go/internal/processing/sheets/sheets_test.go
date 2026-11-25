@@ -287,6 +287,23 @@ func TestATitleInsteadOfANumber(t *testing.T) {
 	expect(t, sheets.SheetTitle("") == "Sheet", "5")
 }
 
+// D86: a kept text is read again from the kept file; without the file it stays.
+func TestRereadKeptSheets(t *testing.T) {
+	f := setup(t)
+	f.found(1, sheet3, "list3.pdf", calc(1, "3", "2026-10-29"))
+	id := f.waiting()[0].ID
+	set := func() {
+		must(f.store.DB.Exec("update sheets set text = 'garbled' where id = ?", id))
+	}
+	set()
+	expect(t, must(f.sheets.Reread()) == 1, "read again")
+	contains(t, text(f.get(id).Text), "Calculus. Sheet 3. Series")
+	expect(t, must(f.sheets.Reread()) == 0, "no change")
+	set()
+	noErr(os.Remove(f.files.ByHash(f.get(id).Sha256)))
+	expect(t, must(f.sheets.Reread()) == 0 && text(f.get(id).Text) == "garbled", "the file is gone")
+}
+
 // --- the batch -------------------------------------------------------------------------------------
 
 func TestBatchReadsTheFirstPageAndFindsTheSheet(t *testing.T) {
