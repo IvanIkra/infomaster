@@ -12,8 +12,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/IvanIkra/infomaster/go/internal/collectors/files"
 	"github.com/IvanIkra/infomaster/go/internal/library"
 	"github.com/IvanIkra/infomaster/go/internal/library/links"
+	sheetspub "github.com/IvanIkra/infomaster/go/internal/outputs/sheets"
 )
 
 var png = append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
@@ -200,6 +202,47 @@ func TestLibraryCheatsheet(t *testing.T) {
 	missing := obj(lecture["missing"])
 	check(t, len(missing) == 2 && strings.Contains(obj(missing["source"])["curl"].(string), "-T main.tex "),
 		"missing %v", missing)
+}
+
+// A problem sheet sends the model to its course's cheat sheet, once there is one; other items do not.
+func TestLibraryBeforeSolving(t *testing.T) {
+	f, _ := libraryFixture(t)
+	add := func(kind string, course any) map[string]any {
+		args := map[string]any{"text": "Problem 1 of " + kind, "kind": kind}
+		if course != nil {
+			args["course"] = course
+		}
+		return f.data("get_material", map[string]any{"id": f.data("add_material", args)["id"]})
+	}
+	equal(t, add("sheet", "Algebra")["before_solving"], nil) // no cheat sheet yet
+
+	started := f.data("start_document_version", map[string]any{"course": "Algebra", "kind": "cheatsheet",
+		"source_text": "# Notation"})
+	equal(t, add("sheet", "Algebra")["before_solving"], nil) // a draft is not one
+	f.data("publish_document_version", map[string]any{"draft_id": started["draft_id"]})
+
+	hint, _ := add("sheet", "algebra")["before_solving"].(string)
+	check(t, strings.Contains(hint, `get_cheatsheet with course "Algebra"`), "hint %q", hint)
+	equal(t, add("notes", "Algebra")["before_solving"], nil)
+	equal(t, add("sheet", "Calculus")["before_solving"], nil)
+	equal(t, add("sheet", nil)["before_solving"], nil)
+}
+
+// A chat's or an own sheet read by get_sheet comes with the same hint.
+func TestSheetBeforeSolving(t *testing.T) {
+	var pub *sheetspub.Publisher
+	f, _ := libraryFixtureWith(t, func(f *fixture) {
+		pub = f.sheets()
+		f.services.Sheets = pub
+	})
+	id := must(pub.Sheets.AddOwn(&files.Row{MsgID: 1, Sha256: ptr("abc")}, "algebra", "3", nil, f.clock.now(), ""))
+	read := func() any { return f.data("get_sheet", map[string]any{"sheet_id": id})["before_solving"] }
+	equal(t, read(), nil)
+	started := f.data("start_document_version", map[string]any{"course": "Algebra", "kind": "cheatsheet",
+		"source_text": "# Notation"})
+	f.data("publish_document_version", map[string]any{"draft_id": started["draft_id"]})
+	hint, _ := read().(string)
+	check(t, strings.Contains(hint, `get_cheatsheet with course "Algebra"`), "hint %q", hint)
 }
 
 // The guide is one document over all courses: Markdown, no course, no PDF, and it comes with every cheat sheet.

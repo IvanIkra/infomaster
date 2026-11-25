@@ -354,7 +354,15 @@ func (c *Catalog) getMaterial(_ *tools.Context, args map[string]any) (tools.Outp
 	if err != nil {
 		return tools.Output{}, err
 	}
-	data := append(httpx.Object{{Key: "untrusted", Value: UntrustedLibrary}}, b...)
+	data := httpx.Object{{Key: "untrusted", Value: UntrustedLibrary}}
+	if row.Kind == "sheet" {
+		hint, err := c.beforeSolving(deref(row.Course))
+		if err != nil {
+			return tools.Output{}, err
+		}
+		data = append(data, hint...)
+	}
+	data = append(data, b...)
 	var class any
 	if row.ClassUID != nil {
 		found, err := lib.ClassOf(*row.ClassUID)
@@ -423,6 +431,25 @@ func (c *Catalog) getMaterial(_ *tools.Context, args map[string]any) (tools.Outp
 	}
 	data = append(data, httpx.Field{Key: "children", Value: listed})
 	return tools.Output{Data: data, Images: images}, nil
+}
+
+// beforeSolving is the field a problem sheet comes with: it sends the model to the course's cheat sheet at the
+// moment it is about to solve. Empty when the course is unknown or has no published cheat sheet.
+func (c *Catalog) beforeSolving(course string) (httpx.Object, error) {
+	lib := c.A.Library
+	if lib == nil || c.A.Links == nil {
+		return nil, nil
+	}
+	name, err := lib.Course(course)
+	if err != nil || name == "" {
+		return nil, err
+	}
+	doc, err := lib.FindDocument(name, "cheatsheet", "")
+	if err != nil || doc == nil || len(doc.Versions) == 0 {
+		return nil, err
+	}
+	return httpx.Object{{Key: "before_solving", Value: fmt.Sprintf("If you solve or help with these problems, "+
+		"first call get_cheatsheet with course %q and keep to its notation and the topics covered.", name)}}, nil
 }
 
 func published(lib *library.Library, course *string) ([]library.DocumentSummary, error) {

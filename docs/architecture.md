@@ -489,7 +489,7 @@ Over all courses there is one `guide` (D83): the rules every document is written
 class's document and a cheat sheet, the LaTeX layout and preamble, the language and the style. It is Markdown with
 no PDF and no course (`course` is ''), is kept and versioned like any document, and is changed by publishing a new
 version when the owner asks for a new rule. `get_cheatsheet` returns it with the cheat sheet, so Claude has the rules
-whenever it writes a document or helps with homework.
+whenever it writes a document or helps with homework (D85: a problem sheet's answer points there).
 A new version is a draft first: its source and its PDF are uploaded, then it is published and gets the next number.
 Every version is kept; only the newest can be taken back (an undo). The PDF comes built where Claude runs, or the
 server builds it (D84): `build_document_version` sends the draft's source to the TeX builder, a container of its own
@@ -713,7 +713,10 @@ JPEG, a HEIC) is given by its link only. Starting a version is not journaled: a 
 dropped after a day, and the change is the publish. The undos: adding removes the item, sorting puts each item back
 where it was, a change puts the old values back, removing restores the item and its transcripts (30 days), and
 publishing takes the version back, deletes its files and makes the items it marked processed new again. A seminar's
-document is its sheet's topics and new notions; the tools' descriptions say its problems are not solved.
+document is its sheet's topics and new notions; the tools' descriptions say its problems are not solved. Homework is
+another matter (D85): the instructions and `get_cheatsheet`'s description ask for the cheat sheet before any problem
+is solved, and `get_material` (kind sheet) and `get_sheet` answer with `before_solving`, naming that call, when the
+course has a published cheat sheet.
 
 **Journal and undo** (`connector/changes.py`). Every write through the connector is a row of `connector_changes`:
 the time, the connection, the tool, its arguments, one line about it, and the undo steps, which are calls of tools

@@ -675,3 +675,12 @@ The move happens in one step (D35). First stop Tablo and copy the data (`import-
   collection: the four faces the guide uses are copied in. The source is one `.tex` file. Besides the LaTeX
   collections the builder has `mathscience` (`siunitx`, `physics`); `ADD=` installs another collection on top the
   same way, in a minute or two. `minted` does not work: it needs shell escape.
+- **D85. The cheat sheet comes before homework, 25.11.2026.** Claude solved a problem sheet without the course's
+  cheat sheet: the server's instructions named it only for processing a class, a sheet's answer said nothing of it,
+  and `get_cheatsheet`'s description, which says to read it before homework, was not loaded (a client may load a
+  tool's description only when it looks for the tool). Now the instructions, near their start, ask for
+  `get_cheatsheet` before any homework or problem sheet; its description opens with when to call it; and a sheet
+  read by `get_material` (kind sheet) or `get_sheet` carries `before_solving`, which names that call with the
+  course. The field is there only when the course has a published cheat sheet. It is a pointer and not the text:
+  the cheat sheet brings the whole guide with it, too much for every read of a sheet. The guide's rule that a
+  seminar's problems are not solved stays a rule of documents, and the description says so.

@@ -479,12 +479,17 @@ func (c *Catalog) getSheet(_ *tools.Context, args map[string]any) (tools.Output,
 			{Key: "created_at", Value: v.CreatedAt}})
 	}
 	path := topic.Files.ByHash(sheet.Sha256)
-	data := httpx.Object{{Key: "untrusted", Value: tools.Untrusted}, {Key: "id", Value: sheet.ID},
+	hint, err := c.beforeSolving(deref(sheet.Course))
+	if err != nil {
+		return tools.Output{}, err
+	}
+	data := append(httpx.Object{{Key: "untrusted", Value: tools.Untrusted}}, hint...)
+	data = append(data, httpx.Object{{Key: "id", Value: sheet.ID},
 		{Key: "name", Value: sheet.Name}, {Key: "course", Value: sheet.Course}, {Key: "title", Value: title},
 		{Key: "number", Value: sheet.Number}, {Key: "due", Value: sheet.Due}, {Key: "status", Value: sheet.Status},
 		{Key: "chat", Value: chat}, {Key: "summary", Value: first.Summary}, {Key: "changes", Value: sheet.Changes},
 		{Key: "versions", Value: listed}, {Key: "text", Value: pytext.Cut(text, SheetTextChars)},
-		{Key: "text_cut", Value: pytext.Len(text) > SheetTextChars}, {Key: "file_kept", Value: path != ""}}
+		{Key: "text_cut", Value: pytext.Len(text) > SheetTextChars}, {Key: "file_kept", Value: path != ""}}...)
 	var images []tools.Image
 	if truthy(args, "first_page_image") {
 		var image []byte
